@@ -13,6 +13,26 @@ class Prefs(ctx: Context) {
     private fun bool(k: String, d: Boolean) = p.getBoolean(k, d)
     private fun putB(k: String, v: Boolean) = p.edit().putBoolean(k, v).apply()
 
+    // app updates
+    var updateRepo: String
+        get() = str("updateRepo", "flesheatingbug/mbrowser")
+        set(v) = put("updateRepo", v.trim())
+    var updateToken: String
+        get() = str("updateToken", "")
+        set(v) = put("updateToken", v.trim())
+    var updateAuto: Boolean
+        get() = bool("updateAuto", true)
+        set(v) = putB("updateAuto", v)
+    var updateLast: Long
+        get() = p.getLong("updateLast", 0L)
+        set(v) { p.edit().putLong("updateLast", v).apply() }
+    var updateSkipped: Int
+        get() = int("updateSkipped", 0)
+        set(v) = putI("updateSkipped", v)
+    var updateNotified: Int
+        get() = int("updateNotified", 0)
+        set(v) = putI("updateNotified", v)
+
     // sync
     var server: String
         get() = str("server", "")

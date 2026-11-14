@@ -35,4 +35,4 @@ jobs:
         run: |
           cp android/app/build/outputs/apk/debug/app-debug.apk mbrowser.apk
           gh release delete latest-apk --yes --cleanup-tag || true
-          gh release create latest-apk mbrowser.apk --title "mbrowser Android (latest build)" --notes "Debug build from commit ${GITHUB_SHA::7}. Install the .apk on your phone." --target "$GITHUB_SHA"
+          gh release create latest-apk mbrowser.apk --title "mbrowser Android (latest build)" --notes "Build ${GITHUB_RUN_NUMBER}. Debug build from commit ${GITHUB_SHA::7}. Install the .apk on your phone." --target "$GITHUB_SHA"

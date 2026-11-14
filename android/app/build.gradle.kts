@@ -44,4 +44,5 @@ dependencies {
     implementation("androidx.recyclerview:recyclerview:1.3.2")
     implementation("androidx.swiperefreshlayout:swiperefreshlayout:1.1.0")
     implementation("androidx.webkit:webkit:1.12.1")
+    implementation("androidx.work:work-runtime:2.9.1")
 }

@@ -223,6 +223,11 @@ class MainActivity : AppCompatActivity() {
         cleanupPrivate()   // drop private storage left over if the app was killed with private tabs open
         if (!restoreTabs()) newTab(null)
         handleIntent(intent)
+        if (Build.VERSION.SDK_INT >= 33 && prefs.firstRunDone && !sessionPrefs().getBoolean("askedNotif", false) &&
+            checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            sessionPrefs().edit().putBoolean("askedNotif", true).apply()
+            requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 8)
+        }
         if (!prefs.firstRunDone) {
             prefs.firstRunDone = true
             startActivity(Intent(this, WelcomeActivity::class.java))
@@ -238,6 +243,7 @@ class MainActivity : AppCompatActivity() {
         val data = i?.data
         if (i?.action == Intent.ACTION_VIEW && data != null) newTab(data.toString())
         if (i?.action == ACTION_CLOSE_PRIVATE) closePrivateTabs()
+        if (i?.action == Updater.ACTION_UPDATE) Updater.checkAndPrompt(this, true)
     }
 
     // ---------- search engine strip under the address bar ----------
@@ -400,6 +406,7 @@ class MainActivity : AppCompatActivity() {
         applyWebSettings()
         render()
         if (prefs.autoSync) syncNow(false)
+        if (prefs.updateAuto && prefs.firstRunDone && System.currentTimeMillis() - prefs.updateLast > 6 * 3600_000L) Updater.checkAndPrompt(this, false)
     }
 
     // ---------- remember open tabs across restarts and updates ----------
@@ -751,8 +758,9 @@ class MainActivity : AppCompatActivity() {
                     else { icon.setImageResource(R.drawable.ic_globe); icon.imageTintList = getColorStateList(R.color.muted) }
                     v.setOnClickListener { hideSwitcher(); switchTo(real) }
                     v.findViewById<View>(R.id.close).setOnClickListener {
-                        val w = tabs[real]
-                        closeTab(real); refreshSwitcher()
+                        val wasLast = tabs.size <= 1
+                        closeTab(real)
+                        if (wasLast) hideSwitcher() else refreshSwitcher()
                     }
                 }
             }

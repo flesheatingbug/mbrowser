@@ -103,7 +103,13 @@ class SettingsActivity : AppCompatActivity() {
         }
 
         header("About")
-        actionRow("mbrowser for Android", "Version 0.2.0. Syncs with your own mbrowser server.") { }
+        actionRow("mbrowser for Android", "Build ${Updater.current(this)}. Syncs with your own mbrowser server.") { }
+        actionRow("Check for updates", "Looks for a newer build now") { Updater.checkAndPrompt(this, true) }
+        switchRow("Check for updates automatically", "Notifies you when a new build is ready", { prefs.updateAuto }, { prefs.updateAuto = it })
+        actionRow("Update source", prefs.updateRepo + (if (prefs.updateToken.isEmpty()) "" else "  ·  access token set")) {
+            promptFields(this, "Update source", listOf("GitHub repository (owner/name)", "Access token (only for a private repository)"),
+                listOf(prefs.updateRepo, prefs.updateToken)) { v -> prefs.updateRepo = v[0]; prefs.updateToken = v[1]; build() }
+        }
     }
 
     private val loginLauncher = registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()) {

@@ -9,6 +9,13 @@ class App : Application() {
         Store.init(this)
         Settings.init(this)
         applyTheme(Prefs(this).themeMode)
+        try {
+            androidx.work.WorkManager.getInstance(this).enqueueUniquePeriodicWork("updates",
+                androidx.work.ExistingPeriodicWorkPolicy.KEEP,
+                androidx.work.PeriodicWorkRequestBuilder<UpdateWorker>(12, java.util.concurrent.TimeUnit.HOURS)
+                    .setConstraints(androidx.work.Constraints.Builder().setRequiredNetworkType(androidx.work.NetworkType.CONNECTED).build())
+                    .build())
+        } catch (_: Throwable) { }
     }
 
     companion object {
