@@ -52,6 +52,22 @@ class ItemsActivity : AppCompatActivity() {
             override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
             override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
         })
+        if (mode == "downloads") {
+            val clear = findViewById<TextView>(R.id.clearAll)
+            clear.visibility = View.VISIBLE
+            clear.setOnClickListener {
+                if (all.isEmpty()) return@setOnClickListener
+                AlertDialog.Builder(this).setTitle("Clear all downloads?")
+                    .setItems(arrayOf("Clear the list only", "Clear the list and delete the files")) { _, w ->
+                        val dm = getSystemService(DOWNLOAD_SERVICE) as android.app.DownloadManager
+                        for (r in all) r.dl?.let { d ->
+                            if (w == 1) dm.remove(d.id)
+                            Downloads.forget(this, d.id)
+                        }
+                        load()
+                    }.setNegativeButton("Cancel", null).show()
+            }
+        }
         load()
     }
 
