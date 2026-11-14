@@ -67,6 +67,7 @@ class SettingsActivity : AppCompatActivity() {
         }
         switchRow("Sync automatically", "When the app opens and closes", { prefs.autoSync }, { prefs.autoSync = it })
         switchRow("Sync bookmarks", null, { prefs.syncBookmarks }, { prefs.syncBookmarks = it })
+        switchRow("Sync passwords", "The encrypted vault, unlocked with your master password", { prefs.syncVault }, { prefs.syncVault = it })
         switchRow("Sync settings and speed dials", "Search engines, speed dials and other settings shared with your desktop browser", { prefs.syncSettings }, { prefs.syncSettings = it })
         switchRow("Sync history", null, { prefs.syncHistory }, { prefs.syncHistory = it })
         switchRow("Sync open tabs", "Lets your other devices see this phone's tabs", { prefs.syncTabs }, { prefs.syncTabs = it })

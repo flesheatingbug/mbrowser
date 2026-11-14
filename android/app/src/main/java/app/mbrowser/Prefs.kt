@@ -33,6 +33,20 @@ class Prefs(ctx: Context) {
         get() = int("updateNotified", 0)
         set(v) = putI("updateNotified", v)
 
+    // password vault sync
+    var syncVault: Boolean
+        get() = bool("syncVault", true)
+        set(v) = putB("syncVault", v)
+    var vaultVer: Long
+        get() = p.getLong("vaultVer", 0L)
+        set(v) { p.edit().putLong("vaultVer", v).apply() }
+    var vaultHash: String
+        get() = str("vaultHash", "")
+        set(v) = put("vaultHash", v)
+    var vaultStatus: String
+        get() = str("vaultStatus", "")
+        set(v) = put("vaultStatus", v)
+
     // sync
     var server: String
         get() = str("server", "")

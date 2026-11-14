@@ -9,6 +9,7 @@
     <application
         android:name=".App"
         android:allowBackup="false"
+        android:largeHeap="true"
         android:icon="@mipmap/ic_launcher"
         android:label="mbrowser"
         android:usesCleartextTraffic="true"
@@ -44,5 +45,6 @@
         <activity android:name=".WelcomeActivity" android:exported="false" />
         <activity android:name=".ServerLoginActivity" android:exported="false" />
         <activity android:name=".ItemsActivity" android:exported="false" />
+        <activity android:name=".PasswordsActivity" android:exported="false" android:windowSoftInputMode="adjustResize" />
     </application>
 </manifest>
