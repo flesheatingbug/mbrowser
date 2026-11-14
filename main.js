@@ -810,7 +810,6 @@ const COMMANDS = [
   { id: 'app-settings', label: 'Settings', keys: ['Ctrl+,'], run: () => openInternal('settings') },
   { id: 'app-start', label: 'Start Page', keys: [], run: () => openInternal('start') },
   { id: 'toggle-blocker', label: 'Toggle Tracker Blocking for This Site', keys: [], run: toggleSiteBlocking },
-  { id: 'toggle-vertical-tabs', label: 'Toggle Vertical Tab Bar', keys: [], run: () => applySetting('appearance.tabBar', S().appearance.tabBar === 'left' ? 'top' : 'left') },
   { id: 'panel-toggle', label: 'Show / Hide Side Panel', keys: ['F4'], run: togglePanel },
   { id: 'panel-bookmarks', label: 'Panel: Bookmarks', keys: [], run: () => setPanel(true, 'bookmarks') },
   { id: 'panel-history', label: 'Panel: History', keys: [], run: () => setPanel(true, 'history') },
@@ -1231,7 +1230,7 @@ function mainMenu() {
     item('tab-new'), item('tab-new-private'), item('window-new'), item('window-new-private'), { type: 'separator' },
     item('app-start'), item('page-add-speeddial'), { type: 'separator' },
     item('page-find'), item('page-print'), item('page-screenshot'), item('page-fullscreen'), { type: 'separator' },
-    item('app-history'), item('app-bookmarks'), item('app-downloads'), item('app-passwords'), item('app-profiles'), item('toggle-vertical-tabs'), item('app-quick-commands'), item('app-settings'), { type: 'separator' },
+    item('app-history'), item('app-bookmarks'), item('app-downloads'), item('app-passwords'), item('app-profiles'), item('app-quick-commands'), item('app-settings'), { type: 'separator' },
     { label: 'Check for updates', click: () => checkForUpdates(true) },
     { label: 'Quit', click: () => app.quit() },
   ]));
@@ -2408,6 +2407,12 @@ function handleMy(req) {
 }
 
 function setupSession(ses) {
+  // Set a plain Chrome UA for this session — strips Electron/mbrowser from navigator.userAgent
+  // and from navigator.userAgentData so Google sign-in does not refuse the browser.
+  const uaPlat = process.platform === 'win32' ? '(Windows NT 10.0; Win64; x64)' : '(X11; Linux x86_64)';
+  const chromeUA = `Mozilla/5.0 ${uaPlat} AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36`;
+  ses.setUserAgent(chromeUA);
+
   ses.protocol.handle('my', handleMy);
   ses.on('will-download', onWillDownload);
   // remember certificate details per host for the address-bar security popup (verification itself is unchanged)
@@ -2422,14 +2427,20 @@ function setupSession(ses) {
     callback(-3); // -3 = use Chromium's normal verification result
   });
   blocker.attach(ses, (wcId) => { blockedCounts.set(wcId, (blockedCounts.get(wcId) || 0) + 1); pushSoon(); });
-  // Override sec-ch-ua for Google/Gmail to avoid "browser not secure" warning
-  ses.webRequest.onBeforeSendHeaders({ urls: ['*://*.google.com/*', '*://*.gmail.com/*', '*://*.accounts.google.com/*'] }, (details, callback) => {
-    const h = details.requestHeaders;
-    h['sec-ch-ua'] = '"Google Chrome";v="131", "Chromium";v="131", "Not_A Brand";v="24"';
-    h['sec-ch-ua-mobile'] = '?0';
-    h['sec-ch-ua-platform'] = '"Linux"';
-    callback({ requestHeaders: h });
-  });
+  // Override UA + all client-hint headers for Google/Gmail so sign-in accepts the browser.
+  const uaPlatHint = process.platform === 'win32' ? '"Windows"' : '"Linux"';
+  ses.webRequest.onBeforeSendHeaders(
+    { urls: ['*://*.google.com/*', '*://*.googleapis.com/*', '*://*.gmail.com/*', '*://*.accounts.google.com/*'] },
+    (details, callback) => {
+      const h = details.requestHeaders;
+      h['user-agent'] = chromeUA;
+      h['sec-ch-ua'] = '"Chromium";v="130", "Google Chrome";v="130", "Not?A_Brand";v="99"';
+      h['sec-ch-ua-mobile'] = '?0';
+      h['sec-ch-ua-platform'] = uaPlatHint;
+      h['sec-ch-ua-full-version-list'] = '"Chromium";v="130.0.6723.117", "Google Chrome";v="130.0.6723.117", "Not?A_Brand";v="99.0.0.0"';
+      callback({ requestHeaders: h });
+    }
+  );
 }
 
 // ---------- speed dial thumbnails ----------
@@ -2670,6 +2681,16 @@ function createWindow(opts = {}) {
 
 function onWindowClosed(w) {
   windows.delete(w);
+  // Save all non-private tabs to recently-closed before tearing down
+  for (const id of w.order) {
+    const t = w.tabs.get(id);
+    if (!t || t.private) continue;
+    const u = t.wc.getURL();
+    if (u && u !== 'about:blank' && !u.startsWith('my://')) {
+      closedTabs.push({ url: u, title: t.wc.getTitle() || u, pinned: t.pinned });
+      if (closedTabs.length > 50) closedTabs.shift();
+    }
+  }
   for (const t of [...w.tabs.values()]) {
     const id = t.wc.id;
     tabByWc.delete(id); tabById.delete(t.id); blockedCounts.delete(id);
