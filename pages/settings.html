@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Settings</title>
+<link rel="stylesheet" id="themecss" href="my://assets/theme.css">
+<link rel="stylesheet" href="my://assets/common.css">
+<style>
+  .layout { display:flex; min-height:100vh; }
+  nav { width:210px; padding:24px 10px; border-right:1px solid var(--line); position:sticky; top:0; height:100vh; flex:none; }
+  nav h1 { font-size:18px; padding:0 12px; margin-bottom:12px; }
+  nav button { display:block; width:100%; text-align:left; border:0; background:none; padding:9px 12px; border-radius:8px; }
+  nav button:hover { background:var(--tab); }
+  nav button.on { background:var(--accent); color:var(--onaccent); }
+  main { flex:1; max-width:760px; padding:28px 32px 80px; }
+  .row { display:flex; align-items:center; justify-content:space-between; gap:20px; padding:12px 0; border-bottom:1px solid var(--line); }
+  .row.col { flex-direction:column; align-items:stretch; }
+  .row label { flex:1; }
+  .row .help { display:block; color:var(--muted); font-size:12px; margin-top:2px; }
+  .row input[type=text], .row input[type=password], .row input[type=number], .row select { width:280px; }
+  .row textarea { width:100%; min-height:90px; font-family:ui-monospace, monospace; font-size:13px; }
+  table { width:100%; border-collapse:collapse; }
+  td, th { padding:6px 4px; text-align:left; border-bottom:1px solid var(--line); font-weight:normal; }
+  th { color:var(--muted); font-size:12px; }
+  td input[type=text] { width:100%; }
+  kbd { background:var(--tab); border:1px solid var(--line); border-radius:5px; padding:2px 7px; font-size:12px; }
+  .btn-row { display:flex; gap:8px; flex-wrap:wrap; margin:12px 0; }
+  .msg { color:var(--muted); font-size:13px; min-height:20px; }
+  .themes { display:grid; grid-template-columns:repeat(auto-fill, 128px); gap:12px; margin:10px 0 18px; }
+  .tcard { border:2px solid var(--line); border-radius:12px; padding:8px; cursor:pointer; background:var(--tab); }
+  .tcard:hover { border-color:var(--muted); }
+  .tcard.on { border-color:var(--accent); }
+  .tprev { height:54px; border-radius:8px; position:relative; overflow:hidden; border:1px solid rgba(128,128,128,.25); }
+  .tprev i { position:absolute; left:6px; top:6px; width:46px; height:9px; border-radius:4px; }
+  .tprev b { position:absolute; left:6px; right:6px; bottom:6px; height:16px; border-radius:8px; }
+  .tprev u { position:absolute; right:8px; top:6px; width:9px; height:9px; border-radius:50%; }
+  .tname { margin-top:6px; font-size:12px; text-align:center; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+  .editor { display:grid; grid-template-columns:140px 1fr; gap:8px 12px; align-items:center; padding:12px; border:1px solid var(--line); border-radius:12px; margin-bottom:14px; }
+</style>
+</head>
+<body>
+<div class="layout">
+  <nav id="nav"><h1>Settings</h1></nav>
+  <main id="main"></main>
+</div>
+<script>
+  const CATS = [
+    ['general', 'General'], ['appearance', 'Appearance'], ['startpage', 'Start Page'], ['panel', 'Side Panel'], ['tabs', 'Tabs'], ['search', 'Search'],
+    ['privacy', 'Privacy'], ['passwords', 'Passwords'], ['downloads', 'Downloads'], ['mouse', 'Mouse'], ['keyboard', 'Keyboard'],
+    ['sync', 'Sync'], ['import', 'Import'], ['profiles', 'Profiles'], ['about', 'About'],
+  ];
+  const FIELDS = {
+    general: [
+      { path: 'general.startup', label: 'On startup', type: 'select', options: [['start', 'Open the start page'], ['home', 'Open the homepage'], ['restore', 'Restore the last session']] },
+      { path: 'general.homepage', label: 'Homepage', type: 'text' },
+      { path: 'general.newTab', label: 'New tab page', type: 'select', options: [['start', 'Start page'], ['home', 'Homepage'], ['blank', 'Blank page']] },
+      { path: 'pages.defaultZoom', label: 'Default page zoom (%)', type: 'number', min: 30, max: 300, help: 'Applies to newly opened tabs.' },
+    ],
+    appearance: [
+      { path: 'appearance.nativeTitleBar', label: 'Use the system title bar', type: 'toggle', help: 'Takes effect for new windows after a restart. Off = no title bar, the tab strip carries the window buttons.' },
+      { path: 'appearance.statusBar', label: 'Show the status bar', type: 'toggle', help: 'Loading progress, link addresses, zoom level and blocked trackers along the bottom.' },
+      { path: 'appearance.tabBar', label: 'Tab bar position', type: 'select', options: [['top', 'Top'], ['left', 'Left (vertical tabs)']] },
+    ],
+    startpage: [
+      { path: 'startPage.tileSize', label: 'Speed dial size (px)', type: 'number', min: 90, max: 260, help: 'Width of each speed dial tile.' },
+      { path: 'startPage.thumbnails', label: 'Show page thumbnails', type: 'toggle', help: 'Thumbnails are captured automatically when you visit a speed dial site.' },
+      { path: 'startPage.showSearch', label: 'Show the search box', type: 'toggle' },
+    ],
+    panel: [
+      { path: 'panel.side', label: 'Panel position', type: 'select', options: [['left', 'Left'], ['right', 'Right']] },
+      { path: 'panel.width', label: 'Panel width (px)', type: 'number', min: 240, max: 600 },
+    ],
+    tabs: [
+      { path: 'tabs.newTabFocus', label: 'When opening a new tab, focus the', type: 'select', options: [['address', 'Address bar'], ['page', 'Page (search box on the start page)']] },
+      { path: 'tabs.newTabPosition', label: 'Open new tabs', type: 'select', options: [['end', 'At the end of the tab bar'], ['afterCurrent', 'Next to the current tab']] },
+    ],
+    privacy: [
+      { path: 'privacy.blockTrackers', label: 'Block ads and trackers', type: 'toggle', help: 'Blocks third-party requests to a built-in list of known ad and tracking domains. Click the shield in the toolbar to allow a single site.' },
+      { path: 'privacy.doNotTrack', label: 'Send “Do Not Track” and Global Privacy Control', type: 'toggle' },
+      { path: 'privacy.customBlocklist', label: 'Extra domains to block', type: 'textarea', help: 'One domain per line. Subdomains are included.' },
+      { path: 'privacy.allowSites', label: 'Sites where blocking is off', type: 'lines', help: 'One hostname per line.' },
+      { path: 'privacy.certExceptions', label: 'Sites with accepted certificate errors', type: 'lines', help: 'Hostnames you chose to open despite an untrusted (e.g. self-signed) certificate. One per line; delete a line to stop trusting it.' },
+      { path: 'privacy.clearOnExit.history', label: 'Clear history when the browser closes', type: 'toggle' },
+      { path: 'privacy.clearOnExit.cookies', label: 'Clear cookies and site data when the browser closes', type: 'toggle' },
+      { path: 'privacy.clearOnExit.cache', label: 'Clear the cache when the browser closes', type: 'toggle' },
+    ],
+    passwords: [
+      { path: 'passwords.enabled', label: 'Offer to save and fill passwords', type: 'toggle', help: 'Passwords are encrypted with your master password and stored only on this computer.' },
+      { path: 'passwords.sync', label: 'Sync the password vault to your server', type: 'toggle', help: 'Only the encrypted vault is uploaded; the server cannot read it. Your master password never leaves this computer.' },
+      { path: 'passwords.autoLockMinutes', label: 'Lock the password vault after (minutes)', type: 'number', min: 0, max: 600, help: '0 = stay unlocked until the browser closes.' },
+      { path: 'passwords.neverSave', label: 'Sites where saving is switched off', type: 'lines', help: 'One address per line, for example https://example.com' },
+    ],
+    downloads: [
+      { path: 'downloads.askWhere', label: 'Ask where to save each file', type: 'toggle' },
+      { path: 'downloads.directory', label: 'Download folder', type: 'text', help: 'Leave empty to use your system Downloads folder.' },
+    ],
+    mouse: [
+      { path: 'mouse.gestures', label: 'Enable mouse gestures', type: 'toggle', help: 'Hold the right mouse button, drag, and release.' },
+    ],
+    sync: [
+      { path: 'sync.device', label: 'Device name', type: 'text', help: 'Shown on your other devices. Defaults to the hostname.' },
+      { path: 'sync.settings', label: 'Sync settings and speed dials', type: 'toggle', help: 'Themes, search engines, speed dials, shortcuts, panel and similar. Per-device things (system title bar, download folder, accepted certificates) stay local.' },
+    ],
+
+  };
+  const GESTURE_HELP = [['←', 'Back'], ['→', 'Forward'], ['↓', 'New tab'], ['↓ →', 'Close tab'], ['↑ ↓', 'Reload'], ['↑ ←', 'Previous tab'], ['↑ →', 'Next tab'], ['↓ ←', 'Reopen closed tab']];
+
+  const $ = (id) => document.getElementById(id);
+  const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+  let S = null, cur = (location.hash || '#general').slice(1);
+
+  const get = (p) => p.split('.').reduce((o, k) => (o == null ? o : o[k]), S);
+  async function set(p, v) {
+    await browser.setSetting(p, v);
+    S = await browser.getSettings();
+    if (p.startsWith('appearance')) $('themecss').href = 'my://assets/theme.css?' + Date.now();
+  }
+
+  function field(def) {
+    const row = el('div', 'row' + (def.type === 'textarea' || def.type === 'lines' ? ' col' : ''));
+    const label = el('label', null, def.label);
+    if (def.help) label.append(el('span', 'help', def.help));
+    row.append(label);
+    const val = get(def.path);
+    let input;
+    if (def.type === 'toggle') {
+      input = el('input'); input.type = 'checkbox'; input.checked = !!val;
+      input.onchange = () => set(def.path, input.checked);
+    } else if (def.type === 'select') {
+      input = el('select');
+      for (const [v, t] of def.options) { const o = el('option', null, t); o.value = v; input.append(o); }
+      input.value = val;
+      input.onchange = () => set(def.path, input.value);
+    } else if (def.type === 'number') {
+      input = el('input'); input.type = 'number'; input.min = def.min; input.max = def.max; input.value = val;
+      input.onchange = () => { const n = Math.min(def.max, Math.max(def.min, Number(input.value) || def.min)); input.value = n; set(def.path, n); };
+    } else if (def.type === 'color') {
+      input = el('input'); input.type = 'color'; input.value = val;
+      input.onchange = () => set(def.path, input.value);
+    } else if (def.type === 'lines') {
+      input = el('textarea'); input.value = (val || []).join('\n');
+      input.onchange = () => set(def.path, input.value.split('\n').map((x) => x.trim()).filter(Boolean));
+    } else if (def.type === 'textarea') {
+      input = el('textarea'); input.value = val || '';
+      input.onchange = () => set(def.path, input.value);
+    } else {
+      input = el('input'); input.type = def.type === 'password' ? 'password' : 'text'; input.value = val || '';
+      input.onchange = () => set(def.path, input.value.trim());
+    }
+    row.append(input);
+    return row;
+  }
+
+  // ---- search engines ----
+  function searchSection(m) {
+    m.append(el('p', 'muted', 'Type a nickname and a space in the address bar to search with that engine, for example “w cats” for Wikipedia. Use %s where the search words go.'));
+    const engines = S.search.engines.map((e) => ({ ...e }));
+    const table = el('table');
+    const head = el('tr');
+    ['Default', 'Name', 'Nickname', 'URL', ''].forEach((h) => head.append(el('th', null, h)));
+    table.append(head);
+    const save = async () => { await set('search.engines', engines); };
+    engines.forEach((e, i) => {
+      const tr = el('tr');
+      const radio = el('input'); radio.type = 'radio'; radio.name = 'def'; radio.checked = S.search.default === e.id;
+      radio.onchange = () => set('search.default', e.id);
+      const cell = (k, w) => { const inp = el('input'); inp.type = 'text'; inp.value = e[k] || ''; if (w) inp.style.width = w; inp.onchange = () => { e[k] = inp.value.trim(); save(); }; return inp; };
+      const del = el('button', 'danger', '×');
+      del.onclick = async () => {
+        if (engines.length < 2) return;
+        engines.splice(i, 1);
+        if (!engines.some((x) => x.id === S.search.default)) await set('search.default', engines[0].id);
+        await save(); render();
+      };
+      const td = (c) => { const t = el('td'); t.append(c); return t; };
+      tr.append(td(radio), td(cell('name')), td(cell('nick', '70px')), td(cell('url')), td(del));
+      table.append(tr);
+    });
+    m.append(table);
+    const add = el('button', null, 'Add search engine');
+    add.style.marginTop = '12px';
+    add.onclick = async () => {
+      engines.push({ id: 'e' + Date.now(), name: 'New engine', nick: '', url: 'https://example.com/search?q=%s' });
+      await save(); render();
+    };
+    m.append(add);
+  }
+
+  // ---- keyboard ----
+  function accel(e) {
+    if (['Control', 'Shift', 'Alt', 'Meta'].includes(e.key)) return null;
+    const parts = [];
+    if (e.ctrlKey) parts.push('Ctrl');
+    if (e.altKey) parts.push('Alt');
+    if (e.shiftKey) parts.push('Shift');
+    if (e.metaKey) parts.push('Meta');
+    let name = e.key.length === 1 ? e.key.toUpperCase() : e.key.replace('Arrow', '');
+    if (e.key === ' ') name = 'Space';
+    parts.push(name);
+    return parts.join('+');
+  }
+  async function keyboardSection(m) {
+    m.append(el('p', 'muted', 'Click “Change”, then press the new key combination. Escape cancels. Shortcuts need Ctrl, Alt or a function key.'));
+    const cmds = await browser.getCommands();
+    const table = el('table');
+    for (const c of cmds) {
+      const tr = el('tr');
+      const keys = el('td');
+      if (c.keys.length) c.keys.forEach((k) => { keys.append(el('kbd', null, k), document.createTextNode(' ')); });
+      else keys.append(el('span', 'muted', 'none'));
+      const act = el('td');
+      act.style.textAlign = 'right';
+      const change = el('button', null, 'Change');
+      change.onclick = () => {
+        change.textContent = 'Press keys…';
+        const h = async (e) => {
+          e.preventDefault(); e.stopPropagation();
+          if (e.key === 'Escape') { window.removeEventListener('keydown', h, true); render(); return; }
+          const a = accel(e);
+          if (!a) return;
+          if (!(e.ctrlKey || e.altKey || e.metaKey || /^F\d+$/.test(e.key))) return;
+          window.removeEventListener('keydown', h, true);
+          await set('keyboard.overrides.' + c.id, a);
+          render();
+        };
+        window.addEventListener('keydown', h, true);
+      };
+      const clear = el('button', null, 'Clear');
+      clear.onclick = async () => { await set('keyboard.overrides.' + c.id, ''); render(); };
+      act.append(change, document.createTextNode(' '), clear);
+      if (c.custom) {
+        const reset = el('button', null, 'Reset');
+        reset.onclick = async () => { await set('keyboard.overrides.' + c.id, null); render(); };
+        act.append(document.createTextNode(' '), reset);
+      }
+      tr.append(el('td', null, c.label), keys, act);
+      table.append(tr);
+    }
+    m.append(table);
+  }
+
+  // ---- privacy data buttons ----
+  function clearButtons(m) {
+    m.append(el('h2', null, 'Clear browsing data'));
+    const msg = el('div', 'msg');
+    const row = el('div', 'btn-row');
+    [['history', 'Clear history'], ['cookies', 'Clear cookies & site data'], ['cache', 'Clear cache'], ['all', 'Clear everything']].forEach(([w, t]) => {
+      const b = el('button', 'danger', t);
+      b.onclick = async () => { await browser.clearData(w); msg.textContent = 'Done: ' + t.toLowerCase() + '.'; };
+      row.append(b);
+    });
+    m.append(row, msg);
+  }
+
+  // ---- sync ----
+  // server address + sign-in (account or API key)
+  function syncAuthSection(m) {
+    m.append(field({ path: 'sync.server', label: 'Server address', type: 'text', help: 'For example https://sync.example.com or http://192.168.1.50:4242' }));
+    const acc = S.sync.account || {};
+    const box = el('div', 'editor'); box.style.gridTemplateColumns = '150px 1fr';
+
+    const status = el('div', 'msg'); status.style.gridColumn = '1 / -1';
+    status.textContent = S.sync.token
+      ? (acc.user ? 'Signed in as ' + acc.user + (acc.profile ? ' (profile ' + acc.profile + ')' : '') + '.' : 'An API key is set.')
+      : 'Not signed in.';
+    box.append(status);
+
+    const row = (label, input) => { box.append(el('label', null, label), input); return input; };
+    const user = row('Username', Object.assign(el('input'), { type: 'text', autocomplete: 'off' }));
+    const pass = row('Password', Object.assign(el('input'), { type: 'password', autocomplete: 'off' }));
+    const totp = row('2FA code (if enabled)', Object.assign(el('input'), { type: 'text', inputMode: 'numeric', maxLength: 8, autocomplete: 'off' }));
+    const profSel = el('select'); profSel.style.display = 'none';
+    const profLabel = el('label', null, 'Profile'); profLabel.style.display = 'none';
+    box.append(profLabel, profSel);
+    const out = el('div', 'msg'); out.style.gridColumn = '1 / -1';
+    const go = el('button', null, S.sync.token ? 'Sign in again' : 'Sign in');
+    const outBtn = el('button', 'danger', 'Sign out');
+    const btns = el('div', 'btn-row'); btns.style.gridColumn = '1 / -1'; btns.append(go);
+    if (S.sync.token) btns.append(outBtn);
+    box.append(btns, out);
+    go.onclick = async () => {
+      out.style.color = ''; out.textContent = 'Signing in…';
+      const r = await browser.syncLogin({ username: user.value.trim(), password: pass.value, totp: totp.value.trim(), profile: profSel.style.display === 'none' ? '' : profSel.value });
+      if (r.needProfile) {
+        profSel.textContent = '';
+        for (const p of r.profiles) { const o = el('option', null, p.name); o.value = p.id; profSel.append(o); }
+        profSel.style.display = ''; profLabel.style.display = '';
+        out.textContent = 'Choose which profile this browser should sync with, then press the button again.';
+      } else if (r.error) { out.style.color = '#ff6b6b'; out.textContent = r.error; }
+      else { out.style.color = '#4cc38a'; out.textContent = 'Signed in. Profile: ' + r.profile.name; S = await browser.getSettings(); setTimeout(render, 600); }
+    };
+    outBtn.onclick = async () => { await browser.syncLogout(); render(); };
+    m.append(el('h2', null, 'Account'), box);
+
+    // API key: view, copy, or paste a different one
+    const kr = el('div', 'row');
+    const lab = el('label', null, 'API key'); lab.append(el('span', 'help', 'Created on the server’s web interface (your profile, API keys). Signing in above fills this in for you.'));
+    const wrap = el('div'); wrap.style.cssText = 'display:flex;gap:6px;align-items:center';
+    const key = el('input'); key.type = 'password'; key.value = S.sync.token || ''; key.style.width = '260px'; key.autocomplete = 'off';
+    key.onchange = async () => { await set('sync.token', key.value.trim()); if (!key.value.trim()) await set('sync.account', {}); render(); };
+    const show = el('button', null, 'Show'); show.onclick = () => { const on = key.type === 'password'; key.type = on ? 'text' : 'password'; show.textContent = on ? 'Hide' : 'Show'; };
+    const copy = el('button', null, 'Copy');
+    copy.onclick = async () => { try { await navigator.clipboard.writeText(key.value); copy.textContent = 'Copied'; } catch { key.type = 'text'; key.select(); copy.textContent = 'Select + Ctrl+C'; } setTimeout(() => { copy.textContent = 'Copy'; }, 2000); };
+    wrap.append(key, show, copy);
+    kr.append(lab, wrap);
+    m.append(kr);
+  }
+
+  let flash = '';
+  function syncExtras(m) {
+    const msg = el('div', 'msg');
+    if (flash) { msg.textContent = flash; flash = ''; }
+    else browser.syncStatus().then((s) => { msg.textContent = s; });
+    const b = el('button', null, 'Sync now');
+    b.onclick = async () => { msg.textContent = 'Syncing…'; msg.textContent = await browser.syncNow(); };
+    const test = el('button', null, 'Test connection');
+    const out = el('div', 'msg'); out.style.whiteSpace = 'pre-wrap'; out.style.marginTop = '10px';
+    test.onclick = async () => {
+      out.textContent = 'Testing…'; out.style.color = '';
+      const lines = await browser.syncTest();
+      out.textContent = lines.join('\n');
+      out.style.color = lines.some((l) => l.startsWith('PROBLEM')) ? '#ff6b6b' : '#4cc38a';
+    };
+    const row = el('div', 'btn-row');
+    row.append(b, test);
+    m.append(row, msg, out);
+  }
+
+  const ICONS = [['classic', 'Classic'], ['color', 'Logo (colour)'], ['blue', 'Logo (blue)'], ['white', 'Logo (white)'], ['blue-m', 'M (blue)'], ['white-m', 'M (white)']];
+  let iconNote = '';
+  function iconSection(m) {
+    m.append(el('h2', null, 'Program icon'));
+    if (iconNote) { const n = el('p', null, iconNote); n.style.color = '#4cc38a'; m.append(n); }
+    const grid = el('div', 'themes');
+    for (const [id, name] of ICONS) {
+      const c = el('div', 'tcard' + (S.appearance.icon === id ? ' on' : ''));
+      const pv = el('div', 'tprev'); pv.style.background = '#1e1f22'; pv.style.display = 'grid'; pv.style.placeItems = 'center';
+      const img = el('img'); img.src = 'my://assets/icon/' + id + '.png'; img.style.cssText = 'width:44px;height:44px;object-fit:contain';
+      pv.append(img); c.append(pv, el('div', 'tname', name));
+      c.onclick = async () => {
+        await set('appearance.icon', id);
+        const r = await browser.applyIcon(id);
+        iconNote = r.window ? 'Window icon changed.' : 'The window icon could not be changed on this system.';
+        if (r.launcher === 'updated') iconNote += ' The Linux launcher icon was updated too; it shows after you restart mbrowser (sometimes after logging out and in).';
+        else if (r.launcher === 'no-launcher') iconNote += ' To change the taskbar icon on Linux run: sh install-linux.sh ' + id;
+        render();
+      };
+      grid.append(c);
+    }
+    m.append(grid);
+    m.append(el('p', 'muted', 'Changes the window and taskbar icon. The transparent versions suit dark taskbars. On Linux the launcher entry keeps the icon it was installed with: run  sh install-linux.sh white-m  (or another name) to change it. The Windows installer keeps the classic icon.'));
+  }
+
+  const THEME_KEYS = [['bg', 'Background'], ['tab', 'Tabs'], ['active', 'Active / toolbar'], ['fg', 'Text'], ['muted', 'Muted text'], ['line', 'Borders'], ['accent', 'Accent']];
+
+  async function themeSection(m) {
+    const info = await browser.getThemes();
+    const cur_id = S.appearance.themeId;
+    m.append(el('h2', null, 'Theme'));
+    const grid = el('div', 'themes');
+    const card = (t, label) => {
+      const c = el('div', 'tcard' + (cur_id === t.id ? ' on' : ''));
+      const pv = el('div', 'tprev'); pv.style.background = t.bg;
+      const a = el('i'); a.style.background = t.active;
+      const b = el('b'); b.style.background = t.tab;
+      const u = el('u'); u.style.background = t.accent;
+      pv.append(a, b, u);
+      c.append(pv, el('div', 'tname', label || t.name));
+      c.onclick = async () => { await set('appearance.themeId', t.id); render(); };
+      return c;
+    };
+    info.presets.forEach((t) => grid.append(card(t)));
+    info.custom.forEach((t) => grid.append(card(t, t.name + ' ✎')));
+    const sys = card({ id: 'system', bg: '#808080', tab: '#a0a0a0', active: '#c0c0c0', accent: '#3b82f6' }, 'Follow system');
+    grid.append(sys);
+    m.append(grid);
+
+    const row = el('div', 'btn-row');
+    const mk = el('button', null, '+ New custom theme');
+    mk.onclick = async () => {
+      const base = [...info.presets, ...info.custom].find((t) => t.id === cur_id) || info.presets[0];
+      const t = { ...base, id: 'custom-' + Date.now(), name: 'My theme' };
+      await set('appearance.customThemes', [...info.custom, t]);
+      await set('appearance.themeId', t.id);
+      render();
+    };
+    row.append(mk);
+    m.append(row);
+
+    const ct = info.custom.find((t) => t.id === cur_id);
+    if (ct) {
+      const ed = el('div', 'editor');
+      const save = async () => { await set('appearance.customThemes', info.custom); };
+      ed.append(el('label', null, 'Name'));
+      const nm = el('input'); nm.type = 'text'; nm.value = ct.name; nm.onchange = async () => { ct.name = nm.value.trim() || 'My theme'; await save(); render(); };
+      ed.append(nm);
+      ed.append(el('label', null, 'Dark theme'));
+      const dk = el('input'); dk.type = 'checkbox'; dk.checked = !!ct.dark; dk.onchange = async () => { ct.dark = dk.checked; await save(); };
+      ed.append(dk);
+      for (const [k, name] of THEME_KEYS) {
+        ed.append(el('label', null, name));
+        const c = el('input'); c.type = 'color'; c.value = ct[k];
+        c.onchange = async () => { ct[k] = c.value; await save(); $('themecss').href = 'my://assets/theme.css?' + Date.now(); };
+        ed.append(c);
+      }
+      const del = el('button', 'danger', 'Delete this theme');
+      del.onclick = async () => { await set('appearance.customThemes', info.custom.filter((t) => t.id !== ct.id)); await set('appearance.themeId', 'mbrowser'); render(); };
+      ed.append(el('span'), del);
+      m.append(ed);
+    }
+
+    // accent colour override
+    const r = el('div', 'row');
+    const lab = el('label', null, 'Accent colour');
+    lab.append(el('span', 'help', 'Overrides the theme’s accent. Reset to use the theme’s own.'));
+    const col = el('input'); col.type = 'color';
+    const th = [...info.presets, ...info.custom].find((t) => t.id === cur_id);
+    col.value = S.appearance.accentOverride || (th ? th.accent : '#5b8cff');
+    col.onchange = async () => { await set('appearance.accentOverride', col.value); render(); };
+    const rs = el('button', null, 'Reset');
+    rs.onclick = async () => { await set('appearance.accentOverride', ''); render(); };
+    const box = el('div'); box.style.display = 'flex'; box.style.gap = '8px'; box.append(col, rs);
+    r.append(lab, box);
+    m.append(r);
+  }
+
+  async function render() {
+    S = await browser.getSettings();
+    const nav = $('nav');
+    nav.textContent = '';
+    nav.append(el('h1', null, 'Settings'));
+    for (const [id, name] of CATS) {
+      const b = el('button', id === cur ? 'on' : '', name);
+      b.onclick = () => { cur = id; location.hash = id; render(); };
+      nav.append(b);
+    }
+    const m = $('main');
+    m.textContent = '';
+    m.append(el('h1', null, CATS.find((c) => c[0] === cur)[1]));
+
+    if (cur === 'search') { searchSection(m); return; }
+    if (cur === 'keyboard') { await keyboardSection(m); return; }
+    if (cur === 'about') {
+      m.append(el('p', null, 'mbrowser: a Chromium-based browser with self-hosted sync. Your data, your server.'));
+      m.append(el('p', 'muted', navigator.userAgent));
+      return;
+    }
+    if (cur === 'appearance') { await themeSection(m); iconSection(m); }
+    if (cur === 'import') { const a = el('a', null, 'Open the import page'); a.href = 'my://import'; const p = el('p'); p.append(el('span', null, 'Bring in bookmarks and passwords from Vivaldi, Chrome, Edge, Brave, Firefox, Bitwarden and others. ')); p.append(a); m.append(p); return; }
+    if (cur === 'profiles') { const a = el('a', null, 'Manage profiles'); a.href = 'my://profiles'; const p = el('p'); p.append(el('span', null, 'Separate bookmarks, history, passwords and settings for work, personal and so on, each with an optional password. ')); p.append(a); m.append(p); return; }
+    if (cur === 'sync') syncAuthSection(m);
+    (FIELDS[cur] || []).forEach((d) => m.append(field(d)));
+    if (cur === 'passwords') { const a = el('a', null, 'Open the password manager'); a.href = 'my://passwords'; const p = el('p'); p.append(a); m.append(p); }
+    if (cur === 'panel') m.append(el('p', 'muted', 'Open the panel with F4 or the ▤ button. Add web panels (pinned sites such as a chat or a calendar) with the + button inside the panel.'));
+    if (cur === 'startpage') m.append(el('p', 'muted', 'Add, edit, group and reorder speed dials on the start page itself. Drag a tile to reorder it, or drop it on a group tab to move it.'));
+    if (cur === 'privacy') clearButtons(m);
+    if (cur === 'sync') syncExtras(m);
+    if (cur === 'mouse') {
+      m.append(el('h2', null, 'Gestures'));
+      const t = el('table');
+      GESTURE_HELP.forEach(([g, a]) => { const tr = el('tr'); tr.append(el('td', null, g), el('td', null, a)); t.append(tr); });
+      m.append(t);
+    }
+  }
+  if (!CATS.some((c) => c[0] === cur)) cur = 'general';
+  render();
+</script>
+</body>
+</html>

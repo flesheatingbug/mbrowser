@@ -1,0 +1,59 @@
+{
+  "name": "mbrowser",
+  "productName": "mbrowser",
+  "version": "0.8.0",
+  "description": "mbrowser: browse your way, with your data on your own server",
+  "author": "mbrowser",
+  "main": "main.js",
+  "desktopName": "mbrowser.desktop",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --publish never",
+    "dist:win": "electron-builder --win --publish never",
+    "dist:linux": "electron-builder --linux --publish never"
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0"
+  },
+  "build": {
+    "appId": "local.mbrowser",
+    "productName": "mbrowser",
+    "files": [
+      "**/*",
+      "!server/**",
+      "!.github/**",
+      "!dist/**",
+      "!node_modules/.cache/**",
+      "!*.cmd",
+      "!*.sh",
+      "!*.md"
+    ],
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "icon": "build/icon.png",
+      "category": "Network;WebBrowser"
+    },
+    "win": {
+      "target": [
+        "nsis",
+        "zip"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "perMachine": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    },
+    "extraResources": [
+      {
+        "from": "assets",
+        "to": "assets"
+      }
+    ]
+  }
+}

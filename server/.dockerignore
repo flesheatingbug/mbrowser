@@ -1,0 +1,4 @@
+tests
+config
+.env
+**/__pycache__

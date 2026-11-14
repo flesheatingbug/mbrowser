@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Can't open this page</title>
+<link rel="stylesheet" href="my://assets/theme.css">
+<link rel="stylesheet" href="my://assets/common.css">
+<style>
+  .box { max-width:620px; margin:14vh auto 0; padding:0 20px; }
+  .url { word-break:break-all; color:var(--muted); }
+  .why { margin:18px 0; line-height:1.5; }
+  .btns { display:flex; gap:10px; flex-wrap:wrap; margin-top:20px; }
+  .btns button { padding:9px 18px; }
+  .primary { background:var(--accent); color:var(--onaccent); border-color:var(--accent); }
+  small { display:block; margin-top:26px; }
+</style>
+</head>
+<body>
+<div class="box">
+  <h1 id="title">Can't open this page</h1>
+  <div class="url" id="url"></div>
+  <div class="why" id="why"></div>
+  <div class="btns" id="btns"></div>
+  <small id="tech"></small>
+</div>
+<script>
+  const q = new URLSearchParams(location.search);
+  const url = q.get('url') || '', code = Number(q.get('code') || 0), desc = q.get('desc') || '';
+  const $ = (id) => document.getElementById(id);
+  const isCert = code <= -200 && code >= -219;
+  let host = ''; try { host = new URL(url).host; } catch {}
+  const hostname = host.replace(/:\d+$/, '');
+
+  const reasons = {
+    '-102': 'The server refused the connection. Check that the service is running and that the port is right.',
+    '-105': 'The address could not be found. Check the spelling, or your DNS.',
+    '-106': 'You appear to be offline.',
+    '-107': 'The site does not support a secure (https) connection here. It may only speak plain http.',
+    '-113': 'The site does not support a secure (https) connection here. It may only speak plain http.',
+    '-109': 'The address is not reachable from this network.',
+    '-118': 'The server took too long to respond.',
+    '-324': 'The server closed the connection without sending any data.',
+  };
+  if (isCert) {
+    $('title').textContent = 'This connection is not private';
+    $('why').textContent = 'The site’s certificate is not trusted (for example it is self-signed, expired, or issued for a different name). Only continue if you trust this address, such as a service on your own network.';
+  } else {
+    $('why').textContent = reasons[String(code)] || 'The page could not be loaded.';
+  }
+  $('url').textContent = url;
+  $('tech').textContent = desc + ' (' + code + ')';
+
+  const btn = (text, fn, cls) => { const b = document.createElement('button'); b.textContent = text; if (cls) b.className = cls; b.onclick = fn; $('btns').append(b); };
+  btn('Try again', () => browser.go(url), 'primary');
+  if ((code === -107 || code === -113) && /^https:/i.test(url)) btn('Open with http instead', () => browser.go(url.replace(/^https:/i, 'http:')));
+  if (isCert && hostname) btn('Proceed to ' + hostname + ' (unsafe)', async () => { await browser.allowCert(hostname); browser.go(url); }, 'danger');
+</script>
+</body>
+</html>

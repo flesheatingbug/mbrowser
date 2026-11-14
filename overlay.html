@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'unsafe-inline'; script-src 'self' 'unsafe-inline'; img-src https: http: data:">
+<style>
+  :root { --bg:#1e1f22; --tab:#2b2d31; --active:#3a3d44; --fg:#e6e6e6; --muted:#9aa0a6; --line:#34363b; --accent:#7aa2f7; }
+  * { box-sizing: border-box; }
+  html, body { margin:0; height:100%; background:transparent; color:var(--fg); font:14px system-ui, sans-serif; overflow:hidden; }
+  .card { height:100%; background:var(--active); border:1px solid var(--line); border-radius:12px;
+    box-shadow:0 8px 30px rgba(0,0,0,.45); display:flex; flex-direction:column; overflow:hidden; }
+  input { width:100%; border:0; outline:0; background:transparent; color:var(--fg); font:inherit; }
+  #palette, #find { display:none; height:100%; flex-direction:column; }
+  #palette input { padding:14px 16px; font-size:16px; border-bottom:1px solid var(--line); }
+  #list { flex:1; overflow-y:auto; }
+  .row { display:flex; justify-content:space-between; gap:12px; padding:8px 16px; cursor:default; }
+  .row.sel { background:var(--accent); color:var(--onaccent); }
+  .row .l { overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+  .row .d { color:var(--muted); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:50%; }
+  .row.sel .d { color:var(--onaccent); opacity:.75; }
+  #find { flex-direction:row; align-items:center; gap:6px; padding:0 10px; }
+  #find input { flex:1; padding:6px 4px; }
+  #find button { background:none; border:0; color:var(--fg); cursor:pointer; font-size:15px; width:28px; height:28px; border-radius:6px; }
+  #find button:hover { background:var(--tab); }
+  #count { color:var(--muted); font-size:12px; min-width:48px; text-align:right; }
+  #pw { display:none; }
+  #pw .pbox { padding:16px 18px; }
+  #pw h2 { margin:0 0 2px; font-size:15px; }
+  #pw .sub { color:var(--muted); font-size:12px; margin-bottom:10px; word-break:break-all; }
+  #pw p { margin:6px 0; font-size:12px; color:var(--muted); line-height:1.45; }
+  #pw input { width:100%; padding:8px 10px; margin:4px 0; background:var(--bg); border:1px solid var(--line); border-radius:8px; }
+  #pw input:focus { border-color:var(--accent); }
+  #pw .btns { display:flex; gap:8px; margin-top:10px; flex-wrap:wrap; }
+  #pw button { background:var(--tab); color:var(--fg); border:1px solid var(--line); border-radius:8px; padding:6px 12px; cursor:pointer; font:inherit; }
+  #pw button:hover { border-color:var(--accent); }
+  #pw button.primary { background:var(--accent); color:var(--onaccent); border-color:var(--accent); }
+  #pw .err { color:#ff6b6b; font-size:12px; min-height:16px; margin-top:4px; }
+  #pw .frow { display:flex; align-items:center; gap:10px; height:40px; padding:0 14px; cursor:default; }
+  #pw .frow:hover { background:var(--tab); }
+  #pw .frow .ic { width:20px; text-align:center; }
+  #pw .frow .l { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  #pw .frow.muted .l { color:var(--muted); font-size:12px; }
+  #tablist { display:none; height:100%; flex-direction:column; }
+  #tablist input { padding:12px 14px; border-bottom:1px solid var(--line); font-size:14px; }
+  #tl-body { flex:1; overflow-y:auto; padding-bottom:6px; }
+  #tl-body h4 { margin:10px 14px 4px; font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); font-weight:600; }
+  .trow { display:flex; align-items:center; gap:10px; padding:0 8px 0 14px; height:38px; cursor:default; }
+  .trow:hover { background:var(--tab); }
+  .trow.active { box-shadow:inset 3px 0 0 var(--accent); }
+  .trow .fi { width:16px; height:16px; flex:none; border-radius:3px; background:var(--line); display:grid; place-items:center; font-size:10px; color:var(--muted); object-fit:cover; }
+  .trow .tx { flex:1; min-width:0; }
+  .trow .tx b { display:block; font-weight:400; font-size:13px; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+  .trow .tx small { display:block; color:var(--muted); font-size:11px; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+  .trow .win { font-size:10px; color:var(--muted); border:1px solid var(--line); border-radius:8px; padding:0 5px; }
+  .trow .x { background:none; border:0; color:var(--muted); cursor:pointer; font-size:14px; width:24px; height:24px; border-radius:6px; }
+  .trow .x:hover { background:var(--line); color:var(--fg); }
+  .tempty { color:var(--muted); font-size:12px; padding:6px 14px; }
+  #suggest { display:none; padding:6px 0; }
+  #suggest .srow { display:flex; align-items:center; gap:10px; padding:0 14px; height:36px; cursor:default; }
+  #suggest .srow.sel { background:var(--accent); color:var(--onaccent); }
+  #suggest .ic { width:18px; text-align:center; flex:none; }
+  #suggest .l { flex:1; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+  #suggest .d { color:var(--muted); font-size:12px; max-width:45%; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+  #suggest .srow.sel .d { color:var(--onaccent); opacity:.75; }
+  #security { display:none; padding:16px 18px; overflow-y:auto; height:100%; }
+  #security h2 { font-size:15px; margin:0 0 4px; }
+  #security .host { color:var(--muted); font-size:12px; word-break:break-all; margin-bottom:12px; }
+  #security .kv { display:grid; grid-template-columns:90px 1fr; gap:4px 10px; font-size:12px; margin:6px 0; }
+  #security .kv span:nth-child(odd) { color:var(--muted); }
+  #security .kv span:nth-child(even) { word-break:break-all; }
+  #security hr { border:0; border-top:1px solid var(--line); margin:12px 0; }
+  #security .warn { color:#e8a33d; font-size:13px; margin:6px 0; }
+  #security button { background:var(--tab); color:var(--fg); border:1px solid var(--line); border-radius:8px; padding:6px 12px; cursor:pointer; margin-top:6px; }
+  #security button:hover { border-color:var(--accent); }
+</style>
+</head>
+<body>
+<div class="card">
+  <div id="palette">
+    <input id="q" placeholder="Quick commands: search tabs, bookmarks, history, commands…" spellcheck="false">
+    <div id="list"></div>
+  </div>
+  <div id="pw"></div>
+  <div id="tablist">
+    <input id="tlq" placeholder="Search open and recently closed tabs…" spellcheck="false">
+    <div id="tl-body"></div>
+  </div>
+  <div id="suggest"></div>
+  <div id="security"></div>
+  <div id="find">
+    <input id="f" placeholder="Find in page" spellcheck="false">
+    <span id="count"></span>
+    <button id="prev" title="Previous (Shift+Enter)">▲</button>
+    <button id="next" title="Next (Enter)">▼</button>
+    <button id="close" title="Close (Esc)">×</button>
+  </div>
+</div>
+<script>
+  const $ = (id) => document.getElementById(id);
+  let mode = null, items = [], sel = 0, seq = 0, lastText = '';
+
+  api.onState((s) => {
+    const root = document.documentElement.style;
+    for (const [k, v] of Object.entries(s.theme)) if (typeof v === 'string') root.setProperty('--' + k, v);
+  });
+
+  api.onOverlayOpen((m, data) => {
+    mode = m;
+    $('palette').style.display = m === 'palette' ? 'flex' : 'none';
+    $('find').style.display = m === 'find' ? 'flex' : 'none';
+    $('security').style.display = m === 'security' ? 'block' : 'none';
+    $('suggest').style.display = m === 'suggest' ? 'block' : 'none';
+    $('tablist').style.display = m === 'tablist' ? 'flex' : 'none';
+    $('pw').style.display = m === 'pw' ? 'block' : 'none';
+    if (m === 'pw') renderPw(data || {});
+    if (m === 'tablist') { TL = data || { open: [], closed: [] }; $('tlq').value = ''; renderTabList(); setTimeout(() => $('tlq').focus(), 0); }
+    if (m === 'security') renderSecurity(data || {});
+    else if (m === 'palette') { $('q').value = ''; refresh(); setTimeout(() => $('q').focus(), 0); }
+    else { $('count').textContent = ''; lastText = ''; setTimeout(() => { $('f').focus(); $('f').select(); if ($('f').value) doFind(true, false); }, 0); }
+  });
+
+  // ---- palette ----
+  async function refresh() {
+    const my = ++seq;
+    const res = await api.paletteQuery($('q').value);
+    if (my !== seq) return;
+    items = res; sel = 0; render();
+  }
+  function render() {
+    const list = $('list');
+    list.textContent = '';
+    items.forEach((it, i) => {
+      const row = document.createElement('div');
+      row.className = 'row' + (i === sel ? ' sel' : '');
+      const l = document.createElement('span'); l.className = 'l'; l.textContent = it.label;
+      const d = document.createElement('span'); d.className = 'd'; d.textContent = it.detail || '';
+      row.append(l, d);
+      row.onmousedown = (e) => { e.preventDefault(); api.paletteRun(it); };
+      list.appendChild(row);
+    });
+    const cur = list.children[sel];
+    if (cur) cur.scrollIntoView({ block: 'nearest' });
+  }
+  $('q').addEventListener('input', refresh);
+  $('q').addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowDown') { e.preventDefault(); sel = Math.min(items.length - 1, sel + 1); render(); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); sel = Math.max(0, sel - 1); render(); }
+    else if (e.key === 'Enter') { e.preventDefault(); if (items[sel]) api.paletteRun(items[sel]); }
+    else if (e.key === 'Escape') { api.closeOverlay(); }
+  });
+
+  // ---- passwords: save bubble, fill list, unlock ----
+  function renderPw(d) {
+    const box = $('pw');
+    box.textContent = '';
+    const mk = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+
+    if (d.view === 'fill') {
+      if (d.locked) {
+        const r = mk('div', 'frow'); r.append(mk('span', 'ic', '🔒'), mk('span', 'l', 'Unlock to fill saved passwords'));
+        r.onmousedown = (e) => { e.preventDefault(); api.pwAction({ action: 'unlockPrompt' }); };
+        box.append(r);
+      }
+      for (const it of d.items || []) {
+        const r = mk('div', 'frow'); r.append(mk('span', 'ic', '👤'), mk('span', 'l', (it.name && it.name !== it.username ? it.name + ' · ' : '') + it.username));
+        r.onmousedown = (e) => { e.preventDefault(); api.pwAction({ action: 'fill', id: it.id }); };
+        box.append(r);
+      }
+      if (d.empty) { const e = mk('div', 'frow muted'); e.append(mk('span', 'ic', ''), mk('span', 'l', 'No saved logins for this site')); box.append(e); }
+      const m = mk('div', 'frow muted'); m.append(mk('span', 'ic', '🔑'), mk('span', 'l', 'Manage passwords…'));
+      m.onmousedown = (e) => { e.preventDefault(); api.pwAction({ action: 'manage' }); };
+      box.append(m);
+      return;
+    }
+
+    const b = mk('div', 'pbox'); box.append(b);
+    let master = null, confirm = null;
+    const err = mk('div', 'err');
+    const run = async (payload) => {
+      const r = await api.pwAction(payload);
+      if (r && r.error) { err.textContent = r.error; }
+    };
+    const gather = () => ({ master: master ? master.value : '', confirm: confirm ? confirm.value : '' });
+
+    if (d.view === 'save') {
+      b.append(mk('h2', '', d.mode === 'update' ? 'Update password?' : 'Save password?'));
+      b.append(mk('div', 'sub', (d.username || '(no username)') + ' on ' + d.host));
+      if (d.needsCreate) {
+        b.append(mk('p', '', 'Create a master password to protect your saved passwords. Any length works, but short ones are easy to guess. It is never stored or sent anywhere; if you forget it, the passwords cannot be recovered.'));
+        master = mk('input'); master.type = 'password'; master.placeholder = 'New master password (any length)';
+        confirm = mk('input'); confirm.type = 'password'; confirm.placeholder = 'Repeat master password';
+        b.append(master, confirm);
+      } else if (d.needsUnlock) {
+        master = mk('input'); master.type = 'password'; master.placeholder = 'Master password';
+        b.append(master);
+      }
+      b.append(err);
+      const btns = mk('div', 'btns');
+      const save = mk('button', 'primary', d.mode === 'update' ? 'Update' : 'Save');
+      save.onclick = () => run({ action: 'save', ...gather() });
+      const later = mk('button', '', 'Not now'); later.onclick = () => api.pwAction({ action: 'dismiss' });
+      const never = mk('button', '', 'Never for this site'); never.onclick = () => api.pwAction({ action: 'never' });
+      btns.append(save, later, never);
+      b.append(btns);
+    } else { // unlock
+      b.append(mk('h2', '', 'Unlock passwords'));
+      b.append(mk('div', 'sub', 'Enter your master password to fill saved logins.'));
+      master = mk('input'); master.type = 'password'; master.placeholder = 'Master password';
+      b.append(master, err);
+      const btns = mk('div', 'btns');
+      const go = mk('button', 'primary', 'Unlock'); go.onclick = () => run({ action: 'unlock', master: master.value, after: d.after });
+      const no = mk('button', '', 'Cancel'); no.onclick = () => api.pwAction({ action: 'dismiss' });
+      btns.append(go, no); b.append(btns);
+    }
+    const submit = () => (d.view === 'save' ? b.querySelector('.primary').click() : b.querySelector('.primary').click());
+    for (const inp of b.querySelectorAll('input')) inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') submit(); else if (e.key === 'Escape') api.pwAction({ action: 'dismiss' }); });
+    if (master) setTimeout(() => master.focus(), 0);
+  }
+
+  // ---- all tabs / recently closed ----
+  let TL = { open: [], closed: [] };
+  function renderTabList() {
+    const body = $('tl-body');
+    body.textContent = '';
+    const q = $('tlq').value.toLowerCase().split(/\s+/).filter(Boolean);
+    const ok = (t) => { const s = (t.title + ' ' + t.url).toLowerCase(); return q.every((w) => s.includes(w)); };
+    const row = (t, kind) => {
+      const r = document.createElement('div');
+      r.className = 'trow' + (t.active ? ' active' : '');
+      let fi;
+      if (t.favicon) { fi = document.createElement('img'); fi.src = t.favicon; fi.onerror = () => fi.removeAttribute('src'); }
+      else { fi = document.createElement('div'); fi.textContent = (t.title || '?').trim().charAt(0).toUpperCase(); }
+      fi.className = 'fi';
+      const tx = document.createElement('div'); tx.className = 'tx';
+      const b = document.createElement('b'); b.textContent = (t.pinned ? '📌 ' : '') + (t.title || t.url);
+      const sm = document.createElement('small'); sm.textContent = t.url;
+      tx.append(b, sm);
+      r.append(fi, tx);
+      if (t.window) { const w = document.createElement('span'); w.className = 'win'; w.textContent = 'Window ' + t.window; r.append(w); }
+      if (kind === 'open') {
+        r.onclick = () => api.tablistSwitch(t.id);
+        const x = document.createElement('button'); x.className = 'x'; x.textContent = '×'; x.title = 'Close tab';
+        x.onclick = (e) => { e.stopPropagation(); api.tablistClose(t.id); };
+        r.append(x);
+      } else {
+        r.onclick = () => api.tablistReopen(t.idx);
+        const re = document.createElement('span'); re.className = 'win'; re.textContent = 'Reopen'; r.append(re);
+      }
+      return r;
+    };
+    const h1 = document.createElement('h4'); h1.textContent = 'Open tabs'; body.append(h1);
+    const open = TL.open.filter(ok);
+    open.forEach((t) => body.append(row(t, 'open')));
+    if (!open.length) { const e = document.createElement('div'); e.className = 'tempty'; e.textContent = 'No matching tabs'; body.append(e); }
+    const h2 = document.createElement('h4'); h2.textContent = 'Recently closed'; body.append(h2);
+    const closed = TL.closed.filter(ok);
+    closed.forEach((t) => body.append(row(t, 'closed')));
+    if (!closed.length) { const e = document.createElement('div'); e.className = 'tempty'; e.textContent = q.length ? 'No matches' : 'Nothing closed recently'; body.append(e); }
+  }
+  $('tlq').addEventListener('input', renderTabList);
+  $('tlq').addEventListener('keydown', (e) => { if (e.key === 'Escape') api.closeOverlay(); });
+  api.onTablistData((d) => { TL = d; renderTabList(); });
+
+  // ---- address bar suggestions ----
+  api.onSuggestItems((items, sel) => {
+    const box = $('suggest');
+    box.textContent = '';
+    items.forEach((it, i) => {
+      const row = document.createElement('div');
+      row.className = 'srow' + (i === sel ? ' sel' : '');
+      const ic = document.createElement('span'); ic.className = 'ic'; ic.textContent = it.icon || '';
+      const l = document.createElement('span'); l.className = 'l'; l.textContent = it.label;
+      const d = document.createElement('span'); d.className = 'd'; d.textContent = it.detail || '';
+      row.append(ic, l, d);
+      row.onmousedown = (e) => { e.preventDefault(); api.paletteRun(it); };
+      box.appendChild(row);
+    });
+  });
+
+  // ---- security / site info ----
+  function renderSecurity(d) {
+    const box = $('security');
+    box.textContent = '';
+    const add = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; box.append(e); return e; };
+    const titles = {
+      secure: 'Connection is secure',
+      insecure: 'Connection is not secure',
+      warning: 'Certificate is not trusted',
+      internal: 'Browser page',
+    };
+    add('h2', '', titles[d.level] || 'Site information');
+    add('div', 'host', d.host || d.url || '');
+    if (d.level === 'insecure') add('div', 'warn', 'Information you send or receive on this page could be read by others on the network. Avoid entering passwords or payment details.');
+    if (d.level === 'warning') add('div', 'warn', 'You chose to open this site despite a certificate problem. The connection is encrypted but the site’s identity was not verified.');
+    if (d.level === 'secure' || d.level === 'warning') {
+      const kv = add('div', 'kv');
+      const row = (k, v) => { const a = document.createElement('span'); a.textContent = k; const b = document.createElement('span'); b.textContent = v; kv.append(a, b); };
+      if (d.cert) {
+        const day = (s) => (s ? new Date(s * 1000).toLocaleDateString() : '?');
+        row('Issued to', d.cert.subject || '?');
+        row('Issued by', d.cert.issuer || '?');
+        row('Valid', day(d.cert.validFrom) + ' to ' + day(d.cert.validTo));
+        row('Check', d.cert.result || '?');
+        row('Fingerprint', (d.cert.fingerprint || '').replace('sha256/', '').slice(0, 24) + '…');
+      } else {
+        row('Certificate', 'Details not available for this connection yet. Reload the page to capture them.');
+      }
+    }
+    if (d.level !== 'internal') {
+      add('hr');
+      add('div', '', d.blockerOn ? (d.siteAllowed ? 'Tracker blocking is off for this site.' : d.blocked + ' tracker request' + (d.blocked === 1 ? '' : 's') + ' blocked on this page.') : 'Tracker blocking is off globally.');
+      if (d.blockerOn) {
+        const b = add('button', '', d.siteAllowed ? 'Block trackers on this site' : 'Allow trackers on this site');
+        b.onclick = () => { api.toggleShield(); api.closeOverlay(); };
+      }
+    }
+  }
+
+  // ---- find ----
+  function doFind(forward, next) {
+    const t = $('f').value;
+    if (!t) { api.find('', true, false); $('count').textContent = ''; return; }
+    api.find(t, forward, next && t === lastText);
+    lastText = t;
+  }
+  $('f').addEventListener('input', () => doFind(true, false));
+  $('f').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); doFind(!e.shiftKey, true); }
+    else if (e.key === 'Escape') { api.closeOverlay(); }
+  });
+  $('next').onclick = () => doFind(true, true);
+  $('prev').onclick = () => doFind(false, true);
+  $('close').onclick = () => api.closeOverlay();
+  api.onFindResult((r) => { $('count').textContent = r.matches ? r.activeMatchOrdinal + '/' + r.matches : '0/0'; });
+
+  // palette closes when it loses focus; the find bar stays
+  window.addEventListener('blur', () => { if (mode === 'palette' || mode === 'security' || mode === 'tablist') api.closeOverlay(); });
+</script>
+</body>
+</html>

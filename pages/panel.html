@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Panel</title>
+<link rel="stylesheet" href="my://assets/theme.css">
+<link rel="stylesheet" href="my://assets/common.css">
+<style>
+  html, body { height:100%; overflow:hidden; }
+  body { display:flex; flex-direction:column; font-size:13px; }
+  #head { flex:none; height:46px; display:flex; align-items:center; gap:2px; padding:0 6px; background:var(--active);
+    border-bottom:1px solid var(--line); overflow-x:auto; }
+  #head button { background:none; border:0; border-radius:8px; padding:0; width:34px; height:32px; font-size:16px; color:var(--muted); flex:none; display:grid; place-items:center; }
+  #head button:hover { background:var(--tab); color:var(--fg); }
+  #head button.on { background:var(--tab); color:var(--fg); box-shadow:inset 0 -2px 0 var(--accent); }
+  #head .sp { flex:1; }
+  #head .chip { font-size:13px; font-weight:600; }
+  #addform { display:none; flex:none; padding:8px; gap:6px; border-bottom:1px solid var(--line); background:var(--tab); }
+  #addform input { flex:1; min-width:0; padding:5px 8px; }
+  #content { flex:1; overflow-y:auto; padding:10px; }
+  #content h3 { margin:0 0 8px; font-size:14px; }
+  .filter { width:100%; margin-bottom:8px; }
+  .item { display:flex; align-items:center; gap:6px; padding:6px 4px; border-bottom:1px solid var(--line); border-radius:6px; }
+  .item:hover { background:var(--tab); }
+  .item .t { flex:1; min-width:0; cursor:pointer; }
+  .item .t b { display:block; font-weight:400; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .item .t small { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .item button { padding:2px 8px; font-size:12px; }
+  progress { width:100%; height:5px; accent-color:var(--accent); }
+  .empty { color:var(--muted); padding:8px 4px; }
+  .fh { font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); margin:12px 4px 2px; }
+  textarea.note { width:100%; height:calc(100vh - 190px); min-height:140px; resize:none; }
+  input.ntitle { width:100%; margin-bottom:6px; }
+  .row2 { display:flex; gap:6px; margin-bottom:8px; }
+</style>
+</head>
+<body>
+<div id="head"></div>
+<form id="addform"><input id="wt" placeholder="Name"><input id="wu" placeholder="https://…"><button>Add</button></form>
+<div id="content"></div>
+<script>
+  const $ = (id) => document.getElementById(id);
+  const svg = (inner) => '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' + inner + '</svg>';
+  const IC = {
+    bookmarks: svg('<path d="M7 4h10a1 1 0 0 1 1 1v15l-6-4-6 4V5a1 1 0 0 1 1-1z"/>'),
+    history: svg('<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>'),
+    downloads: svg('<path d="M12 4v10.5M8 11.2l4 4 4-4M5 19.5h14"/>'),
+    notes: svg('<path d="M6 3.8h8.5L18 7.3V20H6z"/><path d="M9 11.5h6M9 15.5h6"/>'),
+    plus: svg('<path d="M12 5v14M5 12h14"/>'),
+    close: svg('<path d="M6 6l12 12M18 6L6 18"/>'),
+  };
+  const BUILTIN = [['bookmarks', IC.bookmarks, 'Bookmarks'], ['history', IC.history, 'History'], ['downloads', IC.downloads, 'Downloads'], ['notes', IC.notes, 'Notes']];
+  const isWeb = (u) => /^https?:\/\//i.test(u);
+  let state = { tab: 'bookmarks', webPanels: [] };
+  let timer = null;
+  let editingNote = null;
+
+  const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+  const fmt = (n) => n > 1e9 ? (n / 1e9).toFixed(1) + ' GB' : n > 1e6 ? (n / 1e6).toFixed(1) + ' MB' : n > 1e3 ? Math.round(n / 1e3) + ' KB' : n + ' B';
+
+  function openLink(e, url) {
+    e.preventDefault();
+    browser.openUrl(url, e.ctrlKey || e.metaKey ? 'tab' : e.button === 1 ? 'background' : 'current');
+  }
+  function linkItem(url, title, extra) {
+    const row = el('div', 'item');
+    const t = el('div', 't');
+    t.append(el('b', '', title || url), el('small', 'muted', url));
+    t.onclick = (e) => openLink(e, url);
+    t.onauxclick = (e) => { if (e.button === 1) openLink(e, url); };
+    row.append(t);
+    if (extra) row.append(extra);
+    return row;
+  }
+
+  async function refreshState() {
+    state = await browser.panelState();
+    renderHead();
+    await renderContent();
+  }
+
+  function renderHead() {
+    const h = $('head');
+    h.textContent = '';
+    for (const [id, icon, name] of BUILTIN) {
+      const b = el('button', state.tab === id ? 'on' : '');
+      b.innerHTML = icon;
+      b.title = name; b.onclick = () => browser.panelSelect(id);
+      h.append(b);
+    }
+    for (const p of state.webPanels) {
+      const id = 'web:' + p.id;
+      const b = el('button', 'chip' + (state.tab === id ? ' on' : ''), (p.title || p.url).charAt(0).toUpperCase());
+      b.title = p.title + ' (right-click to remove)';
+      b.onclick = () => browser.panelSelect(id);
+      b.oncontextmenu = async (e) => {
+        e.preventDefault();
+        if (!confirm('Remove the web panel “' + p.title + '”?')) return;
+        const s = await browser.getSettings();
+        await browser.setSetting('panel.webPanels', s.panel.webPanels.filter((x) => x.id !== p.id));
+        if (state.tab === id) browser.panelSelect('bookmarks'); else refreshState();
+      };
+      h.append(b);
+    }
+    const add = el('button', ''); add.innerHTML = IC.plus; add.title = 'Add a web panel';
+    add.onclick = () => { const f = $('addform'); f.style.display = f.style.display === 'flex' ? 'none' : 'flex'; if (f.style.display === 'flex') $('wt').focus(); };
+    h.append(add, el('span', 'sp'));
+    const close = el('button', ''); close.innerHTML = IC.close; close.title = 'Close panel (F4)'; close.onclick = () => browser.panelClose();
+    h.append(close);
+  }
+  $('addform').onsubmit = async (e) => {
+    e.preventDefault();
+    let url = $('wu').value.trim();
+    if (!url) return;
+    if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
+    const title = $('wt').value.trim() || url.replace(/^https?:\/\//i, '').replace(/\/.*$/, '');
+    const s = await browser.getSettings();
+    const id = 'p' + Date.now().toString(36);
+    await browser.setSetting('panel.webPanels', [...s.panel.webPanels, { id, title, url }]);
+    $('wt').value = ''; $('wu').value = ''; $('addform').style.display = 'none';
+    browser.panelSelect('web:' + id);
+  };
+
+  async function renderContent() {
+    clearInterval(timer);
+    const c = $('content');
+    c.style.display = state.tab.startsWith('web:') ? 'none' : '';
+    if (state.tab.startsWith('web:')) return;
+    c.textContent = '';
+
+    if (state.tab === 'bookmarks' || state.tab === 'history') {
+      const L = await browser.getLibrary();
+      const isBm = state.tab === 'bookmarks';
+      const h3 = el('h3', '', isBm ? 'Bookmarks' : 'History');
+      const all = el('a', '', isBm ? 'Open the bookmark manager' : 'Open full history');
+      all.href = isBm ? 'my://bookmarks' : 'my://history'; all.style.cssText = 'font-size:12px;margin-left:10px;font-weight:400';
+      h3.append(all);
+      c.append(h3);
+      const f = el('input', 'filter'); f.placeholder = 'Filter…'; c.append(f);
+      if (!isBm) {
+        const clr = el('button', 'danger', 'Clear history'); clr.style.marginBottom = '8px';
+        clr.onclick = async () => { await browser.clearData('history'); renderContent(); };
+        c.append(clr);
+      }
+      const list = el('div'); c.append(list);
+      const draw = () => {
+        const q = f.value.toLowerCase().split(/\s+/).filter(Boolean);
+        const ok = (...x) => { const s = x.join(' ').toLowerCase(); return q.every((t) => s.includes(t)); };
+        list.textContent = '';
+        const src = (isBm ? L.bookmarks : L.history).filter((x) => isWeb(x.url) && ok(x.title, x.url)).slice(0, 300);
+        if (isBm) src.sort((a, b) => (a.folder || '\uffff').localeCompare(b.folder || '\uffff') || b.added - a.added);
+        const anyFolder = isBm && src.some((y) => y.folder);
+        let lastFolder = null;
+        src.forEach((x) => {
+          if (anyFolder && (x.folder || '') !== lastFolder) { lastFolder = x.folder || ''; list.append(el('div', 'fh', lastFolder || 'Unsorted')); }
+          let extra = null;
+          if (isBm) { extra = el('button', 'danger', '×'); extra.onclick = async () => { await browser.removeBookmark(x.url); renderContent(); }; }
+          list.append(linkItem(x.url, x.title, extra));
+        });
+        if (!src.length) list.append(el('div', 'empty', isBm ? 'No bookmarks yet. Press Ctrl+D on a page.' : 'Nothing here.'));
+      };
+      f.oninput = draw; draw();
+    }
+
+    if (state.tab === 'downloads') {
+      c.append(el('h3', '', 'Downloads'));
+      const list = el('div'); c.append(list);
+      const draw = async () => {
+        const ds = await browser.getDownloads();
+        list.textContent = '';
+        if (!ds.length) list.append(el('div', 'empty', 'No downloads yet.'));
+        for (const d of ds) {
+          const row = el('div', 'item');
+          const t = el('div', 't');
+          const active = d.state === 'progressing' || d.state === 'paused';
+          t.append(el('b', '', d.name), el('small', 'muted', active ? fmt(d.received) + ' / ' + (d.total ? fmt(d.total) : '?') : d.state));
+          if (active && d.total) { const p = el('progress'); p.max = d.total; p.value = d.received; t.append(p); }
+          row.append(t);
+          if (d.state === 'completed') { const o = el('button', '', 'Open'); o.onclick = () => browser.downloadAction(d.id, 'open'); row.append(o); }
+          if (active) { const x = el('button', 'danger', 'Cancel'); x.onclick = () => browser.downloadAction(d.id, 'cancel'); row.append(x); }
+          list.append(row);
+        }
+      };
+      draw(); timer = setInterval(draw, 1000);
+    }
+
+    if (state.tab === 'notes') await renderNotes(c);
+  }
+
+  async function renderNotes(c) {
+    if (editingNote) {
+      const n = editingNote;
+      const back = el('button', '', '← All notes'); back.onclick = () => { editingNote = null; renderContent(); };
+      const del = el('button', 'danger', 'Delete');
+      del.onclick = async () => { if (n.id) await browser.notesDelete(n.id); editingNote = null; renderContent(); };
+      const row = el('div', 'row2'); row.append(back, del);
+      const title = el('input', 'ntitle'); title.placeholder = 'Title'; title.value = n.title || '';
+      const text = el('textarea', 'note'); text.placeholder = 'Write a note…'; text.value = n.text || '';
+      let t = null;
+      const queue = () => { clearTimeout(t); t = setTimeout(async () => {
+        const saved = await browser.notesSave({ id: n.id, title: title.value, text: text.value });
+        if (saved) n.id = saved.id;
+      }, 500); };
+      title.oninput = queue; text.oninput = queue;
+      c.append(row, title, text);
+      text.focus();
+      return;
+    }
+    c.append(el('h3', '', 'Notes'));
+    const add = el('button', '', '+ New note'); add.style.marginBottom = '8px';
+    add.onclick = () => { editingNote = { id: null, title: '', text: '' }; renderContent(); };
+    c.append(add);
+    const list = await browser.notesList();
+    if (!list.length) c.append(el('div', 'empty', 'No notes yet.'));
+    for (const n of list) {
+      const row = el('div', 'item');
+      const t = el('div', 't');
+      t.append(el('b', '', n.title || (n.text || '').split('\n')[0] || 'Untitled'), el('small', 'muted', new Date(n.updated).toLocaleString()));
+      t.onclick = () => { editingNote = { ...n }; renderContent(); };
+      row.append(t);
+      c.append(row);
+    }
+  }
+
+  browser.onPanelChanged(() => { editingNote = null; refreshState(); });
+  refreshState();
+</script>
+</body>
+</html>

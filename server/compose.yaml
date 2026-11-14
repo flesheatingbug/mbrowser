@@ -1,0 +1,36 @@
+---
+# mbrowser sync server. Settings live in the .env file next to this one (copy .env.example to .env).
+#   docker compose up -d --build        start (and build the image the first time)
+#   docker compose logs -f              watch the log
+#   docker compose exec mbrowser-sync python -m app.cli list-users     maintenance commands
+services:
+  mbrowser-sync:
+    build: .
+    image: mbrowser-sync:latest
+    container_name: mbrowser-sync
+    environment:
+      - PUID=${PUID:-1000}
+      - PGID=${PGID:-1000}
+      - TZ=${TZ:-Etc/UTC}
+      - ADMIN_USER=${ADMIN_USER:-}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
+      - TRUST_PROXY=${TRUST_PROXY:-true}
+      - SESSION_DAYS=${SESSION_DAYS:-7}
+    volumes:
+      - ${CONFIG_PATH:-./config}:/config
+    ports:
+      - ${HTTP_PORT:-4242}:4242
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://localhost:4242/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    # Behind Nginx Proxy Manager on a shared Docker network? Remove "ports" above, then uncomment:
+    # networks:
+    #   - myown
+
+# networks:
+#   myown:
+#     external: true

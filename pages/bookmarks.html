@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Bookmarks</title>
+<link rel="stylesheet" href="my://assets/theme.css">
+<link rel="stylesheet" href="my://assets/common.css">
+<style>
+  html, body { height:100%; }
+  .app { display:flex; height:100vh; }
+  aside { width:270px; flex:none; border-right:1px solid var(--line); padding:18px 10px; overflow-y:auto; background:var(--bg); }
+  aside h1 { font-size:18px; margin:0 8px 14px; }
+  main { flex:1; min-width:0; display:flex; flex-direction:column; }
+  .top { display:flex; gap:8px; padding:16px 20px 10px; align-items:center; flex-wrap:wrap; }
+  .top input[type=search] { flex:1; min-width:200px; }
+  .crumb { padding:0 20px 8px; color:var(--muted); font-size:13px; display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  .crumb button { padding:2px 10px; font-size:12px; }
+  .bulk { display:none; padding:8px 20px; background:var(--tab); border-top:1px solid var(--line); border-bottom:1px solid var(--line); gap:8px; align-items:center; }
+  .bulk.on { display:flex; }
+  .list { flex:1; overflow-y:auto; padding:4px 12px 40px; }
+  .node { display:flex; align-items:center; gap:6px; padding:6px 8px; border-radius:8px; cursor:pointer; user-select:none; }
+  .node:hover { background:var(--tab); }
+  .node.on { background:var(--accent); color:var(--onaccent); }
+  .node.drop { outline:2px dashed var(--accent); }
+  .node .nm { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .node .ct { font-size:11px; opacity:.7; }
+  .node svg { width:16px; height:16px; flex:none; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+  .caret { width:14px; flex:none; text-align:center; font-size:10px; opacity:.7; }
+  .row { display:flex; align-items:center; gap:12px; padding:8px 8px; border-bottom:1px solid var(--line); border-radius:8px; }
+  .row:hover { background:var(--tab); }
+  .row .fi { width:28px; height:28px; border-radius:8px; background:var(--line); display:grid; place-items:center; font-size:12px; font-weight:600; color:var(--muted); flex:none; }
+  .row .t { flex:1; min-width:0; }
+  .row .t a { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .row .t small { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .row .tag { font-size:11px; border:1px solid var(--line); border-radius:9px; padding:0 8px; color:var(--muted); white-space:nowrap; }
+  .row .acts { display:none; gap:6px; } .row:hover .acts { display:flex; }
+  .row .acts button { padding:2px 9px; font-size:12px; }
+  .row input[type=checkbox] { flex:none; }
+  .subs { display:flex; gap:8px; flex-wrap:wrap; padding:0 20px 10px; }
+  .chip { display:flex; align-items:center; gap:6px; background:var(--tab); border:1px solid var(--line); border-radius:10px; padding:5px 12px; cursor:pointer; }
+  .chip:hover { border-color:var(--accent); }
+  .modal { position:fixed; inset:0; background:rgba(0,0,0,.55); display:grid; place-items:center; z-index:10; }
+  .modal form { background:var(--bg); border:1px solid var(--line); border-radius:14px; padding:20px; width:min(460px, 92vw); }
+  .modal h3 { margin:0 0 8px; }
+  .modal label { display:block; margin:10px 0 3px; color:var(--muted); font-size:13px; }
+  .modal input[type=text] { width:100%; }
+  .modal .r { display:flex; gap:8px; margin-top:16px; }
+  .err { color:#ff6b6b; font-size:13px; min-height:18px; margin-top:6px; }
+  .empty { color:var(--muted); padding:30px 10px; text-align:center; }
+</style>
+</head>
+<body>
+<div class="app">
+  <aside>
+    <h1>Bookmarks</h1>
+    <div id="tree"></div>
+    <button id="newfolder" style="margin:12px 8px 0">+ New folder</button>
+  </aside>
+  <main>
+    <div class="top">
+      <input id="q" type="search" placeholder="Search bookmarks" autofocus>
+      <select id="sort">
+        <option value="added-desc">Newest first</option>
+        <option value="added-asc">Oldest first</option>
+        <option value="title">Title A–Z</option>
+        <option value="url">Address A–Z</option>
+      </select>
+      <button id="add">+ Add bookmark</button>
+      <a href="my://import" style="font-size:12px">Import…</a>
+    </div>
+    <div class="crumb" id="crumb"></div>
+    <div class="subs" id="subs"></div>
+    <div class="bulk" id="bulk"><span id="bulkn"></span><button id="bmove">Move to folder…</button><button id="bdel" class="danger">Delete</button><button id="bclear">Clear selection</button></div>
+    <div class="list" id="list"></div>
+  </main>
+</div>
+<script>
+  const SEP = ' / ';
+  const $ = (id) => document.getElementById(id);
+  const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+  const FOLDER = '<svg viewBox="0 0 24 24"><path d="M3.5 7a2 2 0 0 1 2-2h4l2 2.5h7a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/></svg>';
+  const ALL = '<svg viewBox="0 0 24 24"><path d="M7 4h10a1 1 0 0 1 1 1v15l-6-4-6 4V5a1 1 0 0 1 1-1z"/></svg>';
+
+  let D = { bookmarks: [], folders: [] };
+  let sel = null;                 // null = all, '' = unsorted, otherwise a folder path
+  let picked = new Set();         // selected bookmark addresses
+  let open = new Set();           // expanded folders
+  let drag = null;                // addresses being dragged
+
+  const parentOf = (p) => (p.includes(SEP) ? p.slice(0, p.lastIndexOf(SEP)) : '');
+  const leaf = (p) => (p.includes(SEP) ? p.slice(p.lastIndexOf(SEP) + SEP.length) : p);
+  const countIn = (path) => D.bookmarks.filter((b) => b.folder === path || b.folder.startsWith(path + SEP)).length;
+
+  // ---- a small form dialog; fields: [{ key, label, value, list }] ----
+  function ask(title, fields, okText, validate) {
+    return new Promise((resolve) => {
+      const m = el('div', 'modal'); const f = el('form'); m.append(f);
+      f.append(el('h3', null, title));
+      const ins = {};
+      for (const fd of fields) {
+        f.append(el('label', null, fd.label));
+        const i = el('input'); i.type = 'text'; i.value = fd.value || ''; i.autocomplete = 'off'; ins[fd.key] = i;
+        if (fd.list) { const dl = el('datalist'); dl.id = 'dl-' + fd.key; fd.list.forEach((x) => { const o = el('option'); o.value = x; dl.append(o); }); f.append(dl); i.setAttribute('list', dl.id); }
+        f.append(i);
+      }
+      const err = el('div', 'err'); f.append(err);
+      const row = el('div', 'r'); const ok = el('button', null, okText || 'OK'); const no = el('button', null, 'Cancel'); no.type = 'button'; row.append(ok, no); f.append(row);
+      document.body.append(m); (f.querySelector('input') || {}).focus && f.querySelector('input').focus();
+      no.onclick = () => { m.remove(); resolve(null); };
+      f.onsubmit = async (e) => {
+        e.preventDefault();
+        const v = {}; for (const k in ins) v[k] = ins[k].value;
+        const msg = validate ? await validate(v) : null;
+        if (msg) { err.textContent = msg; return; }
+        m.remove(); resolve(v);
+      };
+    });
+  }
+
+  async function load() { D = await browser.bookmarksAll(); render(); }
+
+  // ---- folder tree ----
+  function treeNode(path, depth) {
+    const kids = D.folders.filter((f) => parentOf(f) === path);
+    const row = el('div', 'node' + (sel === path ? ' on' : ''));
+    row.style.paddingLeft = (8 + depth * 14) + 'px';
+    const caret = el('span', 'caret', kids.length ? (open.has(path) ? '▾' : '▸') : '');
+    caret.onclick = (e) => { e.stopPropagation(); if (open.has(path)) open.delete(path); else open.add(path); render(); };
+    const ic = el('span'); ic.innerHTML = FOLDER;
+    row.append(caret, ic, el('span', 'nm', leaf(path)), el('span', 'ct', String(countIn(path))));
+    row.onclick = () => { sel = path; open.add(path); picked.clear(); render(); };
+    wireDrop(row, path);
+    const wrap = el('div'); wrap.append(row);
+    if (open.has(path)) kids.forEach((k) => wrap.append(treeNode(k, depth + 1)));
+    return wrap;
+  }
+  function special(label, icon, value, count) {
+    const row = el('div', 'node' + (sel === value ? ' on' : ''));
+    const ic = el('span'); ic.innerHTML = icon;
+    row.append(el('span', 'caret'), ic, el('span', 'nm', label), el('span', 'ct', String(count)));
+    row.onclick = () => { sel = value; picked.clear(); render(); };
+    if (value === '') wireDrop(row, '');
+    return row;
+  }
+  function wireDrop(row, path) {
+    row.ondragover = (e) => { if (drag) { e.preventDefault(); row.classList.add('drop'); } };
+    row.ondragleave = () => row.classList.remove('drop');
+    row.ondrop = async (e) => {
+      e.preventDefault(); row.classList.remove('drop');
+      if (!drag) return;
+      await browser.bookmarksMove(drag, path); drag = null; picked.clear(); load();
+    };
+  }
+
+  // ---- list ----
+  function visible() {
+    const terms = $('q').value.toLowerCase().split(/\s+/).filter(Boolean);
+    let items = D.bookmarks.filter((b) => {
+      if (terms.length) { const s = (b.title + ' ' + b.url + ' ' + b.folder).toLowerCase(); return terms.every((t) => s.includes(t)); }
+      return sel === null ? true : b.folder === sel;
+    });
+    const s = $('sort').value;
+    items.sort((a, b) => s === 'title' ? a.title.localeCompare(b.title) : s === 'url' ? a.url.localeCompare(b.url) : s === 'added-asc' ? a.added - b.added : b.added - a.added);
+    return items;
+  }
+
+  function render() {
+    const tree = $('tree'); tree.textContent = '';
+    tree.append(special('All bookmarks', ALL, null, D.bookmarks.length));
+    tree.append(special('Unsorted', FOLDER, '', D.bookmarks.filter((b) => !b.folder).length));
+    D.folders.filter((f) => !f.includes(SEP)).forEach((f) => tree.append(treeNode(f, 0)));
+
+    // breadcrumb with folder actions
+    const crumb = $('crumb'); crumb.textContent = '';
+    const searching = $('q').value.trim();
+    if (searching) crumb.append(el('span', null, 'Search results'));
+    else if (sel === null) crumb.append(el('span', null, 'All bookmarks'));
+    else if (sel === '') crumb.append(el('span', null, 'Unsorted'));
+    else {
+      crumb.append(el('span', null, sel.split(SEP).join('  ›  ')));
+      const mk = (t, fn, cls) => { const b = el('button', cls || '', t); b.onclick = fn; crumb.append(b); };
+      mk('New subfolder', async () => { const r = await ask('New subfolder in “' + leaf(sel) + '”', [{ key: 'n', label: 'Name' }], 'Create', async (v) => { const x = await browser.bookmarksFolderAdd(sel + SEP + v.n); return x.error || null; }); if (r) { open.add(sel); load(); } });
+      mk('Rename', async () => { const r = await ask('Rename folder', [{ key: 'n', label: 'Name', value: leaf(sel) }], 'Rename', async (v) => { const to = (parentOf(sel) ? parentOf(sel) + SEP : '') + v.n.replace(/\//g, '-'); const x = await browser.bookmarksFolderRename(sel, to); if (!x.error) sel = to; return x.error || null; }); if (r) load(); });
+      mk('Delete', async () => {
+        const n = countIn(sel);
+        const del = confirm(n ? 'Delete the folder “' + leaf(sel) + '” and also its ' + n + ' bookmark(s)?\n\nPress Cancel to keep the bookmarks (they move up one level).' : 'Delete the empty folder “' + leaf(sel) + '”?');
+        if (n && !del && !confirm('Delete only the folder and keep its bookmarks?')) return;
+        await browser.bookmarksFolderDelete(sel, n && del ? 'delete' : 'keep'); sel = parentOf(sel) || null; picked.clear(); load();
+      }, 'danger');
+    }
+
+    // sub folders as chips
+    const subs = $('subs'); subs.textContent = '';
+    if (!searching && sel !== null && sel !== '') D.folders.filter((f) => parentOf(f) === sel).forEach((f) => { const c = el('div', 'chip'); const i = el('span'); i.innerHTML = FOLDER; i.firstChild.style.cssText = 'width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2'; c.append(i, el('span', null, leaf(f) + ' (' + countIn(f) + ')')); c.onclick = () => { sel = f; open.add(f); render(); }; subs.append(c); });
+    if (!searching && sel === null) D.folders.filter((f) => !f.includes(SEP)).forEach((f) => { const c = el('div', 'chip'); c.append(el('span', null, '📁 ' + leaf(f) + ' (' + countIn(f) + ')')); c.onclick = () => { sel = f; open.add(f); render(); }; subs.append(c); });
+
+    const list = $('list'); list.textContent = '';
+    const items = visible();
+    for (const b of items) {
+      const row = el('div', 'row'); row.draggable = true;
+      const cb = el('input'); cb.type = 'checkbox'; cb.checked = picked.has(b.url);
+      cb.onchange = () => { if (cb.checked) picked.add(b.url); else picked.delete(b.url); bulk(); };
+      const fi = el('div', 'fi', (b.title || b.url).replace(/^https?:\/\/(www\.)?/, '').charAt(0).toUpperCase());
+      const t = el('div', 't'); const a = el('a'); a.href = b.url; a.textContent = b.title || b.url;
+      const sm = el('small', 'muted', b.url); t.append(a, sm);
+      row.append(cb, fi, t);
+      if ((sel === null || searching) && b.folder) row.append(el('span', 'tag', b.folder));
+      const acts = el('div', 'acts');
+      const ed = el('button', null, 'Edit'); ed.onclick = () => edit(b);
+      const del = el('button', 'danger', 'Delete'); del.onclick = async () => { await browser.bookmarksRemove([b.url]); picked.delete(b.url); load(); };
+      acts.append(ed, del); row.append(acts);
+      row.ondragstart = (e) => { drag = picked.has(b.url) ? [...picked] : [b.url]; e.dataTransfer.setData('text/plain', b.url); e.dataTransfer.effectAllowed = 'move'; };
+      row.ondragend = () => { drag = null; };
+      list.append(row);
+    }
+    if (!items.length) list.append(el('div', 'empty', searching ? 'No bookmarks match your search.' : 'Nothing here yet. Press Ctrl+D on a page, drag bookmarks here, or import them.'));
+    bulk();
+  }
+
+  function bulk() {
+    const n = picked.size;
+    $('bulk').classList.toggle('on', n > 0);
+    $('bulkn').textContent = n + ' selected';
+  }
+
+  async function edit(b) {
+    const r = await ask(b ? 'Edit bookmark' : 'Add bookmark', [
+      { key: 'title', label: 'Title', value: b ? b.title : '' },
+      { key: 'url', label: 'Address', value: b ? b.url : '' },
+      { key: 'folder', label: 'Folder (type a new one to create it)', value: b ? b.folder : (typeof sel === 'string' ? sel : ''), list: D.folders },
+    ], 'Save', async (v) => { const x = await browser.bookmarksSave({ url: b ? b.url : '', newUrl: v.url, title: v.title, folder: v.folder }); return x.error || null; });
+    if (r) load();
+  }
+
+  $('add').onclick = () => edit(null);
+  $('newfolder').onclick = async () => {
+    const base = typeof sel === 'string' && sel ? sel + SEP : '';
+    const r = await ask('New folder' + (base ? ' inside “' + leaf(sel) + '”' : ''), [{ key: 'n', label: 'Name' }], 'Create', async (v) => { const x = await browser.bookmarksFolderAdd(base + v.n.replace(/\//g, '-')); return x.error || null; });
+    if (r) { if (base) open.add(sel); load(); }
+  };
+  $('bdel').onclick = async () => { if (!confirm('Delete ' + picked.size + ' bookmark(s)?')) return; await browser.bookmarksRemove([...picked]); picked.clear(); load(); };
+  $('bclear').onclick = () => { picked.clear(); render(); };
+  $('bmove').onclick = async () => {
+    const r = await ask('Move ' + picked.size + ' bookmark(s)', [{ key: 'folder', label: 'Folder (leave empty for Unsorted; type a new name to create it)', list: D.folders }], 'Move', null);
+    if (r) { await browser.bookmarksMove([...picked], r.folder); picked.clear(); load(); }
+  };
+  $('q').oninput = render; $('sort').onchange = render;
+  window.addEventListener('focus', load);
+  load();
+</script>
+</body>
+</html>

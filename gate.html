@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>mbrowser</title>
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'unsafe-inline'; script-src 'self' 'unsafe-inline'; img-src 'self' file: data:">
+<style>
+  * { box-sizing:border-box; }
+  body { margin:0; background:radial-gradient(1200px 600px at 20% -10%, #14224d 0%, #0a0e1f 55%); color:#eaf0ff;
+    font:15px system-ui, sans-serif; min-height:100vh; display:flex; justify-content:center; }
+  .box { width:100%; padding:34px 30px; }
+  .brand { display:flex; align-items:center; gap:12px; margin-bottom:26px; }
+  .brand img { width:44px; height:44px; }
+  .brand span { font-size:26px; font-weight:600; letter-spacing:-.4px; }
+  h2 { font-size:17px; margin:0 0 14px; font-weight:600; }
+  .card { display:flex; align-items:center; gap:14px; width:100%; padding:12px 14px; margin-bottom:10px; text-align:left;
+    background:#131a33; border:1px solid #243056; border-radius:14px; color:inherit; font:inherit; cursor:pointer; }
+  .card:hover { border-color:#5b8cff; }
+  .dot { width:36px; height:36px; border-radius:50%; flex:none; display:grid; place-items:center; font-weight:700; color:#fff; }
+  .nm { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .nm small { display:block; color:#8f9bc2; font-size:12px; }
+  input[type=password] { width:100%; padding:11px 14px; margin:8px 0; background:#0a0e1f; color:#eaf0ff; border:1px solid #243056; border-radius:10px; font:inherit; outline:none; }
+  input[type=password]:focus { border-color:#5b8cff; }
+  button.main { background:#5b8cff; color:#fff; border:0; border-radius:10px; padding:10px 18px; font:inherit; cursor:pointer; }
+  button.sec { background:none; color:#8f9bc2; border:1px solid #243056; border-radius:10px; padding:10px 18px; font:inherit; cursor:pointer; }
+  button:hover { filter:brightness(1.12); }
+  .err { color:#ff7b7b; min-height:20px; font-size:13px; }
+  .row { display:flex; gap:10px; margin-top:6px; }
+  .opt { display:flex; align-items:center; gap:8px; color:#8f9bc2; font-size:13px; margin-top:18px; }
+  a { color:#8fb0ff; cursor:pointer; font-size:13px; }
+</style>
+</head>
+<body>
+<div class="box">
+  <div class="brand"><img src="assets/icon.png" alt=""><span>mbrowser</span></div>
+  <div id="view"></div>
+</div>
+<script>
+  const q = new URLSearchParams(location.search);
+  let mode = q.get('mode');
+  let data = null;
+  const $ = (id) => document.getElementById(id);
+  const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+  const dot = (p) => { const d = el('span', 'dot', (p.name || '?').charAt(0).toUpperCase()); d.style.background = p.color; return d; };
+
+  function unlockCard(p, back) {
+    const v = $('view'); v.textContent = '';
+    v.append(el('h2', null, p.locked ? 'Enter the password for this profile' : 'Open profile'));
+    const c = el('div', 'card'); c.style.cursor = 'default';
+    const n = el('div', 'nm', p.name); c.append(dot(p), n); v.append(c);
+    const pw = el('input'); pw.type = 'password'; pw.placeholder = 'Profile password'; pw.autocomplete = 'off';
+    const err = el('div', 'err');
+    const go = async () => {
+      const r = await gate.choose(p.id, pw.value, remember ? remember.checked : undefined);
+      if (r && r.error) { err.textContent = r.error; pw.select(); }
+    };
+    if (p.locked) v.append(pw);
+    v.append(err);
+    const row = el('div', 'row');
+    const ok = el('button', 'main', 'Open'); ok.onclick = go;
+    const quit = el('button', 'sec', back ? 'Back' : 'Quit'); quit.onclick = () => (back ? render() : gate.cancel());
+    row.append(ok, quit); v.append(row);
+    let remember = null;
+    if (!back && data.profiles.length > 1) {
+      const lab = el('label', 'opt'); remember = el('input'); remember.type = 'checkbox'; remember.checked = data.askAtStart;
+      lab.append(remember, document.createTextNode('Ask which profile to use every time mbrowser starts')); v.append(lab);
+      const other = el('a', null, 'Choose another profile'); other.style.display = 'inline-block'; other.style.marginTop = '14px';
+      other.onclick = () => { mode = 'choose'; render(); }; v.append(other);
+    }
+    pw.addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
+    if (p.locked) pw.focus(); else if (mode === 'unlock') setTimeout(go, 0);
+  }
+
+  function render() {
+    const v = $('view'); v.textContent = '';
+    if (mode === 'unlock') { unlockCard(data.profiles.find((p) => p.id === data.current) || data.profiles[0], false); return; }
+    v.append(el('h2', null, 'Who is browsing?'));
+    for (const p of data.profiles) {
+      const b = el('button', 'card');
+      const n = el('div', 'nm', p.name); if (p.locked) n.append(el('small', null, 'Password protected'));
+      b.append(dot(p), n);
+      b.onclick = () => (p.locked ? unlockCard(p, true) : gate.choose(p.id, '', document.getElementById('rem').checked));
+      v.append(b);
+    }
+    const lab = el('label', 'opt'); const rem = el('input'); rem.type = 'checkbox'; rem.id = 'rem'; rem.checked = data.askAtStart;
+    lab.append(rem, document.createTextNode('Ask every time mbrowser starts')); v.append(lab);
+    const quit = el('button', 'sec', 'Quit'); quit.style.marginTop = '18px'; quit.onclick = () => gate.cancel(); v.append(quit);
+  }
+
+  gate.list().then((d) => { data = d; render(); });
+</script>
+</body>
+</html>

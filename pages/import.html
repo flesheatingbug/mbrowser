@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Import</title>
+<link rel="stylesheet" href="my://assets/theme.css">
+<link rel="stylesheet" href="my://assets/common.css">
+<style>
+  .card { background:var(--tab); border:1px solid var(--line); border-radius:12px; padding:16px 18px; margin:10px 0 22px; }
+  .src { display:flex; align-items:center; gap:12px; padding:8px 0; border-bottom:1px solid var(--line); }
+  .src:last-child { border-bottom:0; }
+  .src .t { flex:1; }
+  .msg { min-height:20px; margin-top:8px; font-size:13px; }
+  .msg.ok { color:#4cc38a; } .msg.bad { color:#ff6b6b; }
+  details { margin:8px 0; } summary { cursor:pointer; color:var(--accent); }
+  ol { margin:8px 0 8px 18px; padding:0; line-height:1.6; }
+  code { background:var(--bg); padding:1px 6px; border-radius:5px; font-size:12px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Import</h1>
+
+  <h2>Bookmarks</h2>
+  <div class="card">
+    <b>Browsers found on this computer</b>
+    <div id="found" class="muted" style="margin:8px 0">Looking…</div>
+    <button id="again">Look again</button>
+    <hr style="border:0;border-top:1px solid var(--line);margin:16px 0">
+    <b>From a file</b>
+    <p class="muted" style="margin:6px 0">A bookmarks <code>.html</code> file (any browser), a Chrome / Vivaldi / Edge <code>Bookmarks</code> file, or a Firefox backup (<code>.json</code> or <code>.jsonlz4</code>).</p>
+    <input id="bfile" type="file" accept=".html,.htm,.json,.jsonlz4">
+    <div id="bmsg" class="msg"></div>
+    <details>
+      <summary>How to export bookmarks from other browsers</summary>
+      <ol>
+        <li><b>Vivaldi / Chrome / Edge / Brave:</b> press <code>Ctrl+Shift+O</code> (bookmark manager), open the menu, choose <i>Export bookmarks</i>. Or just use the list above: they are read straight from the browser’s own file.</li>
+        <li><b>Firefox:</b> <code>Ctrl+Shift+O</code> (Library), <i>Import and Backup → Export Bookmarks to HTML</i>. The list above also finds Firefox’s automatic backups.</li>
+        <li><b>Safari:</b> File → Export → Bookmarks.</li>
+      </ol>
+    </details>
+  </div>
+
+  <h2>Passwords</h2>
+  <div class="card">
+    <div id="pwstate" class="muted">Checking the vault…</div>
+    <div id="pwarea" style="display:none">
+      <p class="muted" style="margin:6px 0">Choose the file you exported. CSV from Chrome, Vivaldi, Edge, Brave, Firefox, Bitwarden, LastPass, 1Password and KeePass works, and so does an unencrypted Bitwarden <code>.json</code>.</p>
+      <input id="pfile" type="file" accept=".csv,.json,text/csv,application/json">
+      <div id="pmsg" class="msg"></div>
+    </div>
+    <details>
+      <summary>How to export passwords from other browsers and managers</summary>
+      <ol>
+        <li><b>Vivaldi / Chrome / Edge / Brave:</b> open <code>vivaldi://password-manager</code> (or <code>chrome://password-manager/settings</code>), Settings, <i>Export passwords</i>. Your operating system password is asked.</li>
+        <li><b>Firefox:</b> <code>about:logins</code>, the “…” menu, <i>Export Logins…</i></li>
+        <li><b>Bitwarden:</b> web vault or app → Tools → <i>Export vault</i>, format <code>.json</code> or <code>.csv</code> (not “encrypted”).</li>
+        <li><b>LastPass / 1Password / KeePassXC:</b> use their CSV export.</li>
+      </ol>
+      <p class="muted"><b>Delete the exported file as soon as you have imported it.</b> It holds your passwords in plain text.</p>
+    </details>
+    <p><a href="my://passwords">Open the password manager</a></p>
+  </div>
+</div>
+<script>
+  const $ = (id) => document.getElementById(id);
+  const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+  const say = (id, text, bad) => { const m = $(id); m.textContent = text; m.className = 'msg ' + (bad ? 'bad' : 'ok'); };
+  const summary = (r) => `Imported ${r.added} new bookmark${r.added === 1 ? '' : 's'}; ${r.skipped} skipped (already here or not web links). Format: ${r.format}.`;
+
+  async function detect() {
+    const box = $('found'); box.textContent = 'Looking…';
+    const list = await browser.importDetect();
+    box.textContent = '';
+    if (!list.length) { box.textContent = 'No other browsers were found. You can still import a file below.'; return; }
+    for (const s of list) {
+      const row = el('div', 'src');
+      row.append(el('span', 't', s.name + (s.count != null ? ' · ' + s.count + ' bookmarks' : '')));
+      const b = el('button', null, 'Import');
+      b.onclick = async () => {
+        b.disabled = true;
+        const r = await browser.importRun(s.id);
+        b.disabled = false;
+        if (r.error) say('bmsg', r.error, true); else say('bmsg', s.name + ': ' + summary(r));
+      };
+      row.append(b); box.append(row);
+    }
+  }
+  $('again').onclick = detect;
+  $('bfile').onchange = async () => {
+    const f = $('bfile').files[0]; $('bfile').value = '';
+    if (!f) return;
+    const r = await browser.importFile(f.name, new Uint8Array(await f.arrayBuffer()));
+    if (r.error) say('bmsg', r.error, true); else say('bmsg', f.name + ': ' + summary(r));
+  };
+
+  async function vaultState() {
+    const st = await browser.vaultStatus();
+    if (!st.exists) { $('pwstate').textContent = 'You have no password vault yet. Create one first (Passwords page), then come back to import.'; return; }
+    if (!st.unlocked) { $('pwstate').textContent = 'The vault is locked. Unlock it on the Passwords page, then import here.'; return; }
+    $('pwstate').textContent = 'Vault unlocked (' + st.count + ' saved logins).';
+    $('pwarea').style.display = '';
+  }
+  $('pfile').onchange = async () => {
+    const f = $('pfile').files[0]; $('pfile').value = '';
+    if (!f) return;
+    const r = await browser.vaultImportFile(await f.text());
+    if (r.error) say('pmsg', r.error, true);
+    else say('pmsg', `${f.name} (${r.format}): ${r.added} added, ${r.updated} updated, ${r.skipped} skipped. Delete the file now: it holds your passwords in plain text.`);
+    vaultState();
+  };
+  detect(); vaultState();
+</script>
+</body>
+</html>

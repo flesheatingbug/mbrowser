@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'unsafe-inline'; script-src 'self' 'unsafe-inline'">
+<style>
+  html, body { margin:0; height:100%; background:transparent; overflow:hidden; }
+  #h { position:absolute; inset:0; cursor:col-resize; display:flex; justify-content:center; }
+  #h::after { content:""; width:2px; height:100%; background:transparent; }
+  #h:hover::after, #h.drag::after { background:var(--accent, #5b8cff); }
+</style>
+</head>
+<body>
+<div id="h"></div>
+<script>
+  const h = document.getElementById('h');
+  let startX = 0;
+  api.onState((s) => { document.documentElement.style.setProperty('--accent', s.theme.accent); });
+  h.addEventListener('pointerdown', (e) => {
+    startX = e.screenX;
+    h.setPointerCapture(e.pointerId);
+    h.classList.add('drag');
+    api.panelResize('start', 0);
+  });
+  h.addEventListener('pointermove', (e) => {
+    if (h.hasPointerCapture(e.pointerId)) api.panelResize('move', e.screenX - startX);
+  });
+  const end = (e) => {
+    if (!h.hasPointerCapture(e.pointerId)) return;
+    h.releasePointerCapture(e.pointerId);
+    h.classList.remove('drag');
+    api.panelResize('end', e.screenX - startX);
+  };
+  h.addEventListener('pointerup', end);
+  h.addEventListener('pointercancel', end);
+</script>
+</body>
+</html>
