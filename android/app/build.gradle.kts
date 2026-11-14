@@ -14,21 +14,25 @@ android {
         versionCode = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1
         versionName = "0.3." + (System.getenv("GITHUB_RUN_NUMBER") ?: "0")
     }
-    // One fixed key for every build, so a new APK installs over the old one instead of being refused.
-    // (A personal sideloading key kept in the repo; not suitable for publishing to an app store.)
-    signingConfigs {
-        create("mb") {
-            storeFile = file("mbrowser.keystore")
-            storePassword = "mbrowser"
-            keyAlias = "mbrowser"
-            keyPassword = "mbrowser"
+    // Builds are signed with a personal key so a new APK installs over the old one. The key is stored
+    // encrypted in the repo (mbrowser.keystore.enc); its passphrase is the GitHub secret KEYSTORE_PASSPHRASE.
+    // Without the passphrase (a local build) the normal Android debug key is used instead.
+    val ksPass: String? = System.getenv("KEYSTORE_PASSPHRASE")
+    if (ksPass != null) {
+        signingConfigs {
+            create("mb") {
+                storeFile = file("mbrowser-ci.keystore")
+                storePassword = ksPass
+                keyAlias = "mbrowser"
+                keyPassword = ksPass
+            }
         }
     }
     buildTypes {
-        getByName("debug") { signingConfig = signingConfigs.getByName("mb") }
+        getByName("debug") { signingConfigs.findByName("mb")?.let { signingConfig = it } }
         release {
             isMinifyEnabled = false
-            signingConfig = signingConfigs.getByName("mb")
+            signingConfigs.findByName("mb")?.let { signingConfig = it }
         }
     }
     compileOptions {

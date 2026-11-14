@@ -22,6 +22,17 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
+      - name: Prepare the signing key
+        env:
+          KEYSTORE_PASSPHRASE: ${{ secrets.KEYSTORE_PASSPHRASE }}
+        run: |
+          if [ -z "$KEYSTORE_PASSPHRASE" ]; then
+            echo "::error::Add the repository secret KEYSTORE_PASSPHRASE (Settings > Secrets and variables > Actions), then re-run this job."
+            exit 1
+          fi
+          openssl enc -d -aes-256-cbc -pbkdf2 -iter 600000 -pass env:KEYSTORE_PASSPHRASE \
+            -in android/app/mbrowser.keystore.enc -out android/app/mbrowser-ci.keystore
+          echo "KEYSTORE_PASSPHRASE=$KEYSTORE_PASSPHRASE" >> "$GITHUB_ENV"
       - name: Build debug APK
         working-directory: android
         run: gradle assembleDebug --no-daemon

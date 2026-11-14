@@ -4,3 +4,4 @@ dist/
 .env
 server/data/
 server/config/
+android/app/mbrowser-ci.keystore
