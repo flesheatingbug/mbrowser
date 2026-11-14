@@ -1,0 +1,330 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/bg"
+    android:fitsSystemWindows="true"
+    android:orientation="vertical">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@color/bar"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:padding="10dp">
+
+        <LinearLayout
+            android:id="@+id/addressPill"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="52dp"
+            android:background="@drawable/bg_pill"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <ImageView
+                android:id="@+id/siteIcon"
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:layout_marginStart="14dp"
+                android:src="@drawable/ic_search"
+                android:tint="@color/muted" />
+
+            <EditText
+                android:id="@+id/urlBar"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_marginStart="10dp"
+                android:layout_weight="1"
+                android:background="@null"
+                android:hint="Search or type URL"
+                android:imeOptions="actionGo"
+                android:importantForAutofill="no"
+                android:inputType="textUri"
+                android:maxLines="1"
+                android:selectAllOnFocus="true"
+                android:textColor="@color/text"
+                android:textColorHint="@color/muted"
+                android:textSize="16sp" />
+
+            <ImageButton
+                android:id="@+id/btnStar"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="Bookmark"
+                android:src="@drawable/ic_star"
+                android:tint="@color/muted" />
+
+            <ImageButton
+                android:id="@+id/btnReload"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="Reload"
+                android:src="@drawable/ic_reload"
+                android:tint="@color/muted" />
+        </LinearLayout>
+
+        <ImageView
+            android:id="@+id/appLogo"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:layout_marginStart="10dp"
+            android:contentDescription="Menu"
+            android:padding="2dp"
+            android:src="@mipmap/ic_launcher" />
+    </LinearLayout>
+
+    <ProgressBar
+        android:id="@+id/progress"
+        style="?android:attr/progressBarStyleHorizontal"
+        android:layout_width="match_parent"
+        android:layout_height="3dp"
+        android:max="100"
+        android:progressTint="@color/accent"
+        android:visibility="invisible" />
+
+    <HorizontalScrollView
+        android:id="@+id/engineStrip"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@color/bar"
+        android:scrollbars="none"
+        android:visibility="gone">
+        <LinearLayout
+            android:id="@+id/engineRow"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:paddingStart="10dp"
+            android:paddingEnd="10dp"
+            android:paddingTop="6dp"
+            android:paddingBottom="10dp" />
+    </HorizontalScrollView>
+
+    <ScrollView
+        android:id="@+id/suggestScroll"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@color/bg"
+        android:visibility="gone">
+        <LinearLayout
+            android:id="@+id/suggestList"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical" />
+    </ScrollView>
+
+    <LinearLayout
+        android:id="@+id/findBar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@color/bar"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="14dp"
+        android:visibility="gone">
+        <EditText
+            android:id="@+id/findInput"
+            android:layout_width="0dp"
+            android:layout_height="48dp"
+            android:layout_weight="1"
+            android:background="@null"
+            android:hint="Find on this page"
+            android:imeOptions="actionSearch"
+            android:importantForAutofill="no"
+            android:inputType="text"
+            android:maxLines="1"
+            android:textColor="@color/text"
+            android:textColorHint="@color/muted" />
+        <TextView
+            android:id="@+id/findCount"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:padding="6dp"
+            android:textColor="@color/muted" />
+        <TextView android:id="@+id/findPrev" android:layout_width="44dp" android:layout_height="48dp"
+            android:gravity="center" android:text="▲" android:textColor="@color/text" android:textSize="18sp" />
+        <TextView android:id="@+id/findNext" android:layout_width="44dp" android:layout_height="48dp"
+            android:gravity="center" android:text="▼" android:textColor="@color/text" android:textSize="18sp" />
+        <TextView android:id="@+id/findClose" android:layout_width="44dp" android:layout_height="48dp"
+            android:gravity="center" android:text="✕" android:textColor="@color/text" android:textSize="18sp" />
+    </LinearLayout>
+
+    <FrameLayout
+        android:id="@+id/stack"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1">
+
+        <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+            android:id="@+id/swipe"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent">
+
+            <FrameLayout
+                android:id="@+id/container"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent" />
+        </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
+
+        <FrameLayout
+            android:id="@+id/switcher"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="@color/bg"
+            android:visibility="gone">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:orientation="vertical">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingStart="16dp"
+                    android:paddingEnd="8dp"
+                    android:paddingTop="12dp"
+                    android:paddingBottom="8dp">
+
+                    <TextView
+                        android:id="@+id/switcherTitle"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:textColor="@color/text"
+                        android:textSize="26sp" />
+
+                    <ImageButton android:id="@+id/switcherSearch" android:layout_width="48dp" android:layout_height="48dp"
+                        android:background="?attr/selectableItemBackgroundBorderless" android:contentDescription="Search tabs"
+                        android:src="@drawable/ic_search" android:tint="@color/text" />
+                    <ImageButton android:id="@+id/switcherMore" android:layout_width="48dp" android:layout_height="48dp"
+                        android:background="?attr/selectableItemBackgroundBorderless" android:contentDescription="More"
+                        android:src="@drawable/ic_more" android:tint="@color/text" />
+                    <ImageButton android:id="@+id/switcherClose" android:layout_width="48dp" android:layout_height="48dp"
+                        android:background="?attr/selectableItemBackgroundBorderless" android:contentDescription="Close"
+                        android:src="@drawable/ic_close" android:tint="@color/text" />
+                </LinearLayout>
+
+                <EditText
+                    android:id="@+id/switcherFilter"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="16dp"
+                    android:layout_marginEnd="16dp"
+                    android:hint="Search"
+                    android:importantForAutofill="no"
+                    android:inputType="text"
+                    android:maxLines="1"
+                    android:textColor="@color/text"
+                    android:textColorHint="@color/muted"
+                    android:visibility="gone" />
+
+                <TextView
+                    android:id="@+id/switcherEmpty"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:padding="24dp"
+                    android:textColor="@color/muted"
+                    android:textSize="16sp"
+                    android:visibility="gone" />
+
+                <androidx.recyclerview.widget.RecyclerView
+                    android:id="@+id/switcherList"
+                    android:layout_width="match_parent"
+                    android:layout_height="0dp"
+                    android:layout_weight="1"
+                    android:clipToPadding="false"
+                    android:paddingStart="8dp"
+                    android:paddingEnd="8dp"
+                    android:paddingBottom="170dp" />
+            </LinearLayout>
+
+            <ImageButton
+                android:id="@+id/switcherNew"
+                android:layout_width="64dp"
+                android:layout_height="64dp"
+                android:layout_gravity="bottom|end"
+                android:layout_marginEnd="20dp"
+                android:layout_marginBottom="92dp"
+                android:background="@drawable/bg_fab"
+                android:contentDescription="New tab"
+                android:elevation="6dp"
+                android:src="@drawable/ic_add"
+                android:tint="#FFFFFF" />
+
+            <LinearLayout
+                android:id="@+id/switcherModes"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="bottom|center_horizontal"
+                android:layout_marginBottom="16dp"
+                android:background="@drawable/bg_pill"
+                android:elevation="4dp"
+                android:orientation="horizontal"
+                android:padding="4dp">
+                <ImageButton android:id="@+id/modeTabs" android:layout_width="56dp" android:layout_height="48dp"
+                    android:layout_margin="4dp" android:background="@null" android:contentDescription="Tabs"
+                    android:src="@drawable/ic_tabs" android:tint="@color/text" />
+                <ImageButton android:id="@+id/modePrivate" android:layout_width="56dp" android:layout_height="48dp"
+                    android:layout_margin="4dp" android:background="@null" android:contentDescription="Private tabs"
+                    android:src="@drawable/ic_ghost" android:tint="@color/text" />
+                <ImageButton android:id="@+id/modeSynced" android:layout_width="56dp" android:layout_height="48dp"
+                    android:layout_margin="4dp" android:background="@null" android:contentDescription="Tabs from other devices"
+                    android:src="@drawable/ic_cloud" android:tint="@color/text" />
+                <ImageButton android:id="@+id/modeClosed" android:layout_width="56dp" android:layout_height="48dp"
+                    android:layout_margin="4dp" android:background="@null" android:contentDescription="Recently closed"
+                    android:src="@drawable/ic_trash" android:tint="@color/text" />
+            </LinearLayout>
+        </FrameLayout>
+    </FrameLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:background="@color/bar"
+        android:gravity="center"
+        android:orientation="horizontal">
+
+        <ImageButton android:id="@+id/btnDownloads" style="@style/BarButton"
+            android:contentDescription="Downloads" android:src="@drawable/ic_download" />
+        <ImageButton android:id="@+id/btnBack" style="@style/BarButton"
+            android:contentDescription="Back" android:src="@drawable/ic_back" />
+        <ImageButton android:id="@+id/btnHome" style="@style/BarButton"
+            android:contentDescription="Home" android:src="@drawable/ic_home" />
+        <ImageButton android:id="@+id/btnForward" style="@style/BarButton"
+            android:contentDescription="Forward" android:src="@drawable/ic_forward" />
+
+        <FrameLayout
+            android:id="@+id/btnTabs"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="Tabs">
+
+            <ImageView
+                android:layout_width="26dp"
+                android:layout_height="26dp"
+                android:layout_gravity="center"
+                android:src="@drawable/ic_tabs"
+                android:tint="@color/text" />
+
+            <TextView
+                android:id="@+id/tabCount"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:text="1"
+                android:textColor="@color/text"
+                android:textSize="12sp"
+                android:textStyle="bold" />
+        </FrameLayout>
+
+    </LinearLayout>
+</LinearLayout>

@@ -1,0 +1,52 @@
+plugins {
+    id("com.android.application")
+    id("org.jetbrains.kotlin.android")
+}
+
+android {
+    namespace = "app.mbrowser"
+    compileSdk = 34
+    defaultConfig {
+        applicationId = "app.mbrowser"
+        minSdk = 26
+        targetSdk = 34
+        // CI numbers every build, so each new APK counts as an upgrade of the one before
+        versionCode = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1
+        versionName = "0.3." + (System.getenv("GITHUB_RUN_NUMBER") ?: "0")
+    }
+    // Builds are signed with a personal key so a new APK installs over the old one. The key is stored
+    // encrypted in the repo (mbrowser.keystore.enc); its passphrase is the GitHub secret KEYSTORE_PASSPHRASE.
+    // Without the passphrase (a local build) the normal Android debug key is used instead.
+    val ksPass: String? = System.getenv("KEYSTORE_PASSPHRASE")
+    if (ksPass != null) {
+        signingConfigs {
+            create("mb") {
+                storeFile = file("mbrowser-ci.keystore")
+                storePassword = ksPass
+                keyAlias = "mbrowser"
+                keyPassword = ksPass
+            }
+        }
+    }
+    buildTypes {
+        getByName("debug") { signingConfigs.findByName("mb")?.let { signingConfig = it } }
+        release {
+            isMinifyEnabled = false
+            signingConfigs.findByName("mb")?.let { signingConfig = it }
+        }
+    }
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+    kotlinOptions { jvmTarget = "17" }
+}
+
+dependencies {
+    implementation("androidx.appcompat:appcompat:1.7.0")
+    implementation("com.google.android.material:material:1.12.0")
+    implementation("androidx.recyclerview:recyclerview:1.3.2")
+    implementation("androidx.swiperefreshlayout:swiperefreshlayout:1.1.0")
+    implementation("androidx.webkit:webkit:1.12.1")
+    implementation("androidx.work:work-runtime:2.9.1")
+}
