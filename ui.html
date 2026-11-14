@@ -132,6 +132,11 @@
   #st-zoom-wrap { display:flex; align-items:center; gap:4px; }
   #st-zoom-range { width:72px; height:3px; accent-color:var(--accent); cursor:pointer; }
   #st-zoom-pct { font-size:11px; min-width:34px; text-align:right; cursor:pointer; }
+  #update-pill { display:none; align-items:center; gap:5px; background:var(--accent); color:var(--onaccent);
+    border-radius:10px; padding:1px 8px 1px 6px; font-size:11px; cursor:pointer; white-space:nowrap; }
+  #update-pill:hover { opacity:.88; }
+  #update-pill .upd-x { margin-left:4px; opacity:.7; font-size:13px; line-height:1; }
+  #update-pill .upd-x:hover { opacity:1; }
   #star.on { color:#f7c948; }
   #shield { font-size:14px; }
   #shield.off { opacity:.4; }
@@ -181,6 +186,10 @@
     </span>
     <span id="st-tabs"></span>
     <span id="st-time"></span>
+    <span id="update-pill" title="Click to install update">
+      <span>⬆ Update available</span>
+      <span class="upd-x" id="update-dismiss" title="Dismiss">×</span>
+    </span>
   </div>
   <div id="bar">
     <button id="back" class="nav" title="Back"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="M12 5l-7 7 7 7"/></svg></button>
@@ -290,6 +299,17 @@
   }
   updateTime();
   setInterval(updateTime, 60000);
+
+  // ---- update notification ----
+  let _updateInfo = null;
+  api.onUpdateAvailable((info) => {
+    _updateInfo = info;
+    $('update-pill').style.display = 'flex';
+  });
+  $('update-pill').onclick = (e) => {
+    if (e.target.id === 'update-dismiss') { $('update-pill').style.display = 'none'; return; }
+    if (_updateInfo) api.installUpdate(_updateInfo);
+  };
 
   // scroll wheel on tab strip to switch tabs
   let wheelCooldown = false;

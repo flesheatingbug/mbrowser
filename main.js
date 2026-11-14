@@ -132,6 +132,92 @@ app.on('second-instance', () => {
 
 const S = () => store.get();
 
+// ---------- build / update ----------
+const BUILD_NUMBER = 0; // replaced by CI — do not edit
+const UPDATE_REPO = 'flesheatingbug/mbrowser';
+const UPDATE_TAG  = 'latest-desktop';
+
+async function checkForUpdates(manual = false) {
+  try {
+    const r = await fetch(`https://api.github.com/repos/${UPDATE_REPO}/releases/tags/${UPDATE_TAG}`, {
+      headers: { 'User-Agent': 'mbrowser-desktop', Accept: 'application/vnd.github+json' },
+    });
+    if (!r.ok) {
+      if (manual) dialog.showErrorBox('Update check failed', `GitHub returned HTTP ${r.status}.`);
+      return;
+    }
+    const j = await r.json();
+    const notes = j.body || '';
+    const m = notes.match(/[Bb]uild\s+(\d+)/);
+    const remote = m ? parseInt(m[1], 10) : 0;
+    if (BUILD_NUMBER > 0 && remote <= BUILD_NUMBER) {
+      if (manual) dialog.showMessageBox({ type: 'info', title: 'mbrowser', message: `You are up to date (build ${BUILD_NUMBER}).` });
+      return;
+    }
+    const isWin = process.platform === 'win32';
+    const isAppImage = !!process.env.APPIMAGE;
+    const assetName = isWin ? 'mbrowser-windows-setup.exe' : 'mbrowser-linux.AppImage';
+    const asset = (j.assets || []).find((a) => a.name === assetName);
+    const downloadUrl = asset?.browser_download_url || j.html_url;
+    const info = { build: remote, currentBuild: BUILD_NUMBER, url: downloadUrl, canInstall: !!(asset && (isWin || isAppImage)) };
+    // Notify all browser chrome windows (status bar)
+    for (const w of windows) { try { w.statusView.webContents.send('app:update-available', info); } catch { /* ignore */ } }
+    if (manual) promptInstallUpdate(info);
+  } catch (e) {
+    if (manual) dialog.showErrorBox('Update check failed', e.message);
+  }
+}
+
+async function promptInstallUpdate(info) {
+  const isWin = process.platform === 'win32';
+  const isAppImage = !!process.env.APPIMAGE;
+  const { response } = await dialog.showMessageBox({
+    type: 'info',
+    title: 'Update available',
+    message: `Build ${info.build} is available` + (info.currentBuild ? ` (you have build ${info.currentBuild})` : '') + '.',
+    detail: 'The update will be downloaded and installed.',
+    buttons: info.canInstall ? ['Download & install', 'Later'] : ['Open download page', 'Later'],
+    defaultId: 0,
+  });
+  if (response !== 0) return;
+  if (!info.canInstall) { shell.openExternal(info.url); return; }
+  await downloadAndInstall(info.url, isWin, isAppImage);
+}
+
+async function downloadAndInstall(url, isWin, isAppImage) {
+  const ext = isWin ? '.exe' : '.AppImage';
+  const dest = path.join(os.tmpdir(), `mbrowser-update${ext}`);
+  const prog = await dialog.showMessageBox({ type: 'info', title: 'Downloading update…', message: 'Downloading, please wait.', buttons: [] }).catch(() => null);
+  try {
+    await new Promise((resolve, reject) => {
+      const follow = (u, depth) => {
+        if (depth > 6) return reject(new Error('Too many redirects'));
+        const mod = u.startsWith('https') ? require('https') : require('http');
+        mod.get(u, { headers: { 'User-Agent': 'mbrowser-desktop' } }, (res) => {
+          if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) { res.resume(); return follow(res.headers.location, depth + 1); }
+          if (res.statusCode !== 200) return reject(new Error('HTTP ' + res.statusCode));
+          const ws = fs.createWriteStream(dest); res.pipe(ws);
+          ws.on('finish', resolve); ws.on('error', reject);
+        }).on('error', reject);
+      };
+      follow(url, 0);
+    });
+    if (isAppImage) {
+      fs.chmodSync(dest, 0o755);
+      const target = process.env.APPIMAGE;
+      fs.renameSync(dest, target);
+      app.relaunch({ execPath: target });
+      app.exit(0);
+    } else {
+      // Windows: launch installer then quit
+      shell.openPath(dest);
+      setTimeout(() => app.quit(), 2000);
+    }
+  } catch (e) {
+    dialog.showErrorBox('Update failed', e.message);
+  }
+}
+
 // ---------- local data files ----------
 const file = (name) => path.join(app.getPath('userData'), name);
 const load = (name, fallback) => {
@@ -1146,6 +1232,7 @@ function mainMenu() {
     item('app-start'), item('page-add-speeddial'), { type: 'separator' },
     item('page-find'), item('page-print'), item('page-screenshot'), item('page-fullscreen'), { type: 'separator' },
     item('app-history'), item('app-bookmarks'), item('app-downloads'), item('app-passwords'), item('app-profiles'), item('toggle-vertical-tabs'), item('app-quick-commands'), item('app-settings'), { type: 'separator' },
+    { label: 'Check for updates', click: () => checkForUpdates(true) },
     { label: 'Quit', click: () => app.quit() },
   ]));
 }
@@ -2249,6 +2336,10 @@ function setupIpc() {
     }
     return result;
   }, BOTH);
+  handle('app:check-updates', async () => { await checkForUpdates(true); }, BOTH);
+  handle('app:install-update', async (_e, info) => { await promptInstallUpdate(info); }, BOTH);
+  handle('app:build-number', () => BUILD_NUMBER, BOTH);
+
   handle('app:resetAll', async () => {
     await clearData('all');
     profiles.resetAll();
@@ -2887,6 +2978,10 @@ app.whenReady().then(async () => {
   createWindow({ first: true });
 
   setInterval(syncAll, 60 * 1000);
+
+  // Check for updates ~60s after launch, then every 24h
+  setTimeout(() => checkForUpdates(false), 60_000);
+  setInterval(() => checkForUpdates(false), 24 * 60 * 60 * 1000);
 });
 
 // Self-signed certificates (common on home servers): refuse unless the user chose "proceed anyway"

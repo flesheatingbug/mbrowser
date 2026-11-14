@@ -33,6 +33,11 @@ jobs:
       - name: Install dependencies
         run: npm install
 
+      - name: Stamp build number into main.js
+        shell: bash
+        run: |
+          sed -i "s/const BUILD_NUMBER = 0;/const BUILD_NUMBER = ${{ github.run_number }};/" main.js
+
       - name: Build (Linux)
         if: matrix.platform == 'linux'
         run: npm run dist:linux
@@ -80,26 +85,26 @@ jobs:
           path: release-assets
           merge-multiple: true
 
-      - name: Publish rolling "latest" release
+      - name: Publish rolling desktop release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           TAG="${{ github.ref_name }}"
-          # For manual runs (no tag) use "latest"
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then TAG="latest"; fi
+          # For manual runs (no tag) use "latest-desktop"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then TAG="latest-desktop"; fi
 
-          NOTES="**Download mbrowser**
+          NOTES="**Download mbrowser** — Build ${{ github.run_number }}
 
           | Platform | File |
           |----------|------|
-          | 🐧 Linux | [mbrowser-linux.AppImage](https://github.com/${{ github.repository }}/releases/latest/download/mbrowser-linux.AppImage) |
-          | 🪟 Windows | [mbrowser-windows-setup.exe](https://github.com/${{ github.repository }}/releases/latest/download/mbrowser-windows-setup.exe) |
-          | 🤖 Android | [mbrowser.apk](https://github.com/${{ github.repository }}/releases/latest/download/mbrowser.apk) |
+          | 🐧 Linux | [mbrowser-linux.AppImage](https://github.com/${{ github.repository }}/releases/download/${TAG}/mbrowser-linux.AppImage) |
+          | 🪟 Windows | [mbrowser-windows-setup.exe](https://github.com/${{ github.repository }}/releases/download/${TAG}/mbrowser-windows-setup.exe) |
+          | 🤖 Android | [mbrowser.apk](https://github.com/${{ github.repository }}/releases/download/latest-apk/mbrowser.apk) |
 
-          Built from commit \`${GITHUB_SHA::7}\` by GitHub Actions."
+          Build ${{ github.run_number }} from commit \`${GITHUB_SHA::7}\`."
 
           gh release delete "$TAG" --yes --cleanup-tag 2>/dev/null || true
           gh release create "$TAG" release-assets/* \
-            --title "mbrowser ${TAG}" \
+            --title "mbrowser Build ${{ github.run_number }}" \
             --notes "$NOTES" \
             --latest

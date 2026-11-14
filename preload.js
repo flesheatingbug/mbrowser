@@ -57,5 +57,8 @@ contextBridge.exposeInMainWorld('api', {
   showDlCtxMenu: (id) => ipcRenderer.send('downloads:ctxmenu', id),
   onOverlayOpen: (cb) => ipcRenderer.on('overlay:open', (_e, mode, data) => cb(mode, data)),
   onFindResult: (cb) => ipcRenderer.on('find:result', (_e, r) => cb(r)),
+  onUpdateAvailable: (cb) => ipcRenderer.on('app:update-available', (_e, info) => cb(info)),
+  checkUpdates: () => ipcRenderer.invoke('app:check-updates'),
+  installUpdate: (info) => ipcRenderer.invoke('app:install-update', info),
   invoke: (ch, ...a) => ipcRenderer.invoke(ch, ...a),
 });
