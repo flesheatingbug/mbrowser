@@ -5,6 +5,9 @@ on:
     paths: ['android/**', '.github/workflows/android.yml']
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -26,3 +29,10 @@ jobs:
         with:
           name: mbrowser-debug-apk
           path: android/app/build/outputs/apk/debug/*.apk
+      - name: Publish APK as a release (downloadable from the GitHub app)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp android/app/build/outputs/apk/debug/app-debug.apk mbrowser.apk
+          gh release delete latest-apk --yes --cleanup-tag || true
+          gh release create latest-apk mbrowser.apk --title "mbrowser Android (latest build)" --notes "Debug build from commit ${GITHUB_SHA::7}. Install the .apk on your phone." --target "$GITHUB_SHA"
