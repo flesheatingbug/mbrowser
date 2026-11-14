@@ -67,9 +67,12 @@ class StartPage(
         return null
     }
 
-    private fun dialArray(o: JSONObject): JSONArray = o.optJSONArray("dials") ?: JSONArray().also { o.put("dials", it) }
+    // Desktop uses { type:"folder", items:[] }; Android uses { dials:[] }. Accept both.
+    private fun dialArray(o: JSONObject): JSONArray =
+        o.optJSONArray("dials") ?: o.optJSONArray("items") ?: JSONArray().also { o.put("dials", it) }
 
-    private fun isFolder(o: JSONObject) = o.has("dials") && o.optString("url").isEmpty()
+    private fun isFolder(o: JSONObject) =
+        (o.has("dials") || o.has("items") || o.optString("type") == "folder") && o.optString("url").isEmpty()
 
     /** The list of dials inside the given folder path of a group (the group's own list for an empty path). */
     private fun listAt(sp: JSONObject, groupId: String, p: List<Int>): JSONArray? {

@@ -466,25 +466,23 @@
   }
 
   async function addToNewSpeedDial(bms) {
-    const name = prompt('Name for the new Speed Dial:', 'Speed dial');
-    if (!name) return;
+    const r = await ask('New Speed Dial', [{ key: 'name', label: 'Speed Dial name', value: 'Speed dial' }], 'Create');
+    if (!r) return;
     const S = await browser.getSettings();
-    const newGroup = { name, dials: [] };
+    const newGroup = { name: r.name || 'Speed dial', dials: [] };
     for (const b of bms) {
       if (!b.url || b.recycleBin) continue;
       newGroup.dials.push({ title: b.title || b.url, url: b.url });
     }
     S.startPage.groups.push(newGroup);
     await browser.setSetting('startPage.groups', S.startPage.groups);
-    alert(newGroup.dials.length + ' bookmark(s) added to new Speed Dial "' + name + '".');
   }
 
   async function addFolderToNewSpeedDial(folderPath) {
-    const folderName = leaf(folderPath);
-    const name = prompt('Name for the new Speed Dial:', folderName);
-    if (!name) return;
+    const r = await ask('New Speed Dial from folder', [{ key: 'name', label: 'Speed Dial name', value: leaf(folderPath) }], 'Create');
+    if (!r) return;
     const S = await browser.getSettings();
-    const newGroup = { name, dials: [] };
+    const newGroup = { name: r.name || leaf(folderPath), dials: [] };
     const bms = D.bookmarks.filter((b) => b.folder === folderPath || b.folder.startsWith(folderPath + SEP));
     for (const b of bms) {
       if (!b.url || b.recycleBin) continue;
@@ -492,7 +490,6 @@
     }
     S.startPage.groups.push(newGroup);
     await browser.setSetting('startPage.groups', S.startPage.groups);
-    alert(newGroup.dials.length + ' bookmark(s) added to new Speed Dial "' + name + '".');
   }
 
   $('add').onclick = () => edit(null);
