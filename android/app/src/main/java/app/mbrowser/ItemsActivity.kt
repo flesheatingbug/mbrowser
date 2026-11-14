@@ -149,6 +149,21 @@ class ItemsActivity : AppCompatActivity() {
         val ext = android.webkit.MimeTypeMap.getFileExtensionFromUrl(d.name.replace(" ", "_")).lowercase()
         val guessed = android.webkit.MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext)
         val mime = guessed ?: d.mime.takeIf { it.isNotBlank() && it != "application/octet-stream" } ?: "*/*"
+        if (mime == "application/vnd.android.package-archive" || ext == "apk") {
+            // installing needs a one-time permission for this app ("install unknown apps")
+            if (!packageManager.canRequestPackageInstalls()) {
+                android.widget.Toast.makeText(this, "Allow mbrowser to install apps, then tap the download again", android.widget.Toast.LENGTH_LONG).show()
+                try { startActivity(Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, android.net.Uri.parse("package:$packageName"))) } catch (_: Exception) { }
+                return
+            }
+            try {
+                startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(uri, "application/vnd.android.package-archive")
+                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK))
+            } catch (_: Exception) {
+                android.widget.Toast.makeText(this, "Could not start the installer", android.widget.Toast.LENGTH_LONG).show()
+            }
+            return
+        }
         val view = Intent(Intent.ACTION_VIEW).setDataAndType(uri, mime).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         try {
             startActivity(Intent.createChooser(view, "Open with").addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
