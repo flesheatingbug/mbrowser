@@ -96,7 +96,7 @@ class MainActivity : AppCompatActivity() {
             val t = cur()
             if (t != null && !t.home) t.web.reload() else swipe.isRefreshing = false
         }
-        findViewById<View>(R.id.appLogo).setOnClickListener { goHome() }
+        findViewById<View>(R.id.appLogo).setOnClickListener { showMenu(it) }
         switcher = findViewById(R.id.switcher)
         switcherList = findViewById(R.id.switcherList)
         switcherTitle = findViewById(R.id.switcherTitle)
@@ -125,7 +125,6 @@ class MainActivity : AppCompatActivity() {
         findViewById<View>(R.id.btnForward).setOnClickListener { cur()?.let { if (it.web.canGoForward()) it.web.goForward() } }
         btnStar.setOnClickListener { toggleBookmark() }
         findViewById<View>(R.id.btnTabs).setOnClickListener { if (switcher.visibility == View.VISIBLE) hideSwitcher() else showSwitcher() }
-        findViewById<View>(R.id.btnMenu).setOnClickListener { showMenu(it) }
 
         findViewById<View>(R.id.switcherNew).setOnClickListener { hideSwitcher(); newTab(null) }
         findViewById<View>(R.id.switcherCloseAll).setOnClickListener {

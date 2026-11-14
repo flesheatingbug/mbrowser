@@ -10,11 +10,26 @@ android {
         applicationId = "app.mbrowser"
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
-        versionName = "0.1.0"
+        // CI numbers every build, so each new APK counts as an upgrade of the one before
+        versionCode = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1
+        versionName = "0.3." + (System.getenv("GITHUB_RUN_NUMBER") ?: "0")
+    }
+    // One fixed key for every build, so a new APK installs over the old one instead of being refused.
+    // (A personal sideloading key kept in the repo; not suitable for publishing to an app store.)
+    signingConfigs {
+        create("mb") {
+            storeFile = file("mbrowser.keystore")
+            storePassword = "mbrowser"
+            keyAlias = "mbrowser"
+            keyPassword = "mbrowser"
+        }
     }
     buildTypes {
-        release { isMinifyEnabled = false }
+        getByName("debug") { signingConfig = signingConfigs.getByName("mb") }
+        release {
+            isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("mb")
+        }
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17

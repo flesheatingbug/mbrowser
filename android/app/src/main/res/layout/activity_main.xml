@@ -71,7 +71,7 @@
             android:layout_width="40dp"
             android:layout_height="40dp"
             android:layout_marginStart="10dp"
-            android:contentDescription="Home"
+            android:contentDescription="Menu"
             android:padding="2dp"
             android:src="@mipmap/ic_launcher" />
     </LinearLayout>
@@ -202,7 +202,5 @@
                 android:textStyle="bold" />
         </FrameLayout>
 
-        <ImageButton android:id="@+id/btnMenu" style="@style/BarButton"
-            android:contentDescription="Menu" android:src="@drawable/ic_menu" />
     </LinearLayout>
 </LinearLayout>
