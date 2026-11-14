@@ -109,7 +109,7 @@ object Vault {
             e = JSONObject().put("id", "p" + rnd.joinToString("") { "%02x".format(it) }).put("created", now).put("folder", "")
             entries.add(e)
         }
-        e.put("origin", o).put("username", username.take(512)).put("password", password).put("note", note.take(2000))
+        e!!.put("origin", o).put("username", username.take(512)).put("password", password).put("note", note.take(2000))
             .put("name", name.trim().take(120)).put("updated", now)
         persist(ctx)
     }
