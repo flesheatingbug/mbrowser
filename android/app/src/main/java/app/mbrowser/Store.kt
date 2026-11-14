@@ -113,6 +113,12 @@ object Store {
 
     @Synchronized fun clearHistory() { history.clear(); saveHistory() }
 
+    /** Forgets all local bookmarks and history (used when the phone is pointed at a different server profile). */
+    @Synchronized fun resetAll() {
+        bookmarks.clear(); history.clear()
+        saveBookmarks(); saveHistory()
+    }
+
     // ---- speed dial = bookmark folders (top-level folder name is the dial) ----
     fun topOf(folder: String): String = folder.substringBefore('/').trim()
 

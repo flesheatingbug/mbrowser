@@ -14,7 +14,6 @@ import android.widget.TextView
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
 import com.google.android.material.button.MaterialButton
-import java.util.concurrent.Executors
 
 /** First run. Two clear choices: browse on this phone only, or connect to your own server. */
 class WelcomeActivity : AppCompatActivity() {
@@ -22,6 +21,9 @@ class WelcomeActivity : AppCompatActivity() {
     private lateinit var box: LinearLayout
     private val ui = Handler(Looper.getMainLooper())
     private var step = "start"
+    private val login = registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()) {
+        if (it.resultCode == RESULT_OK) show("done-server")
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -101,22 +103,12 @@ class WelcomeActivity : AppCompatActivity() {
             }
             "server" -> {
                 title("Connect to your server")
-                body("Open your server's web page, go to Profiles → API keys, and copy a key.")
-                val url = field("Server address, e.g. https://sync.example.com")
-                val key = field("API key (starts with mbk_)", password = true)
-                val status = body("", 12)
-                val btn = primary("Connect") {}
-                btn.setOnClickListener {
-                    prefs.server = url.text.toString(); prefs.token = key.text.toString()
-                    if (!prefs.syncConfigured) { status.text = "Enter both the address and the key."; return@setOnClickListener }
-                    status.text = "Checking…"; btn.isEnabled = false
-                    Executors.newSingleThreadExecutor().execute {
-                        val r = Sync.test(applicationContext)
-                        ui.post {
-                            btn.isEnabled = true
-                            if (r.startsWith("Connected")) { show("done-server") } else status.text = r
-                        }
-                    }
+                body("Sign in with your account, or use an API key from your server's web page.", 10)
+                choiceCard("Sign in with an account", "User name and password. You can choose which profile to sync with.") {
+                    login.launch(android.content.Intent(this, ServerLoginActivity::class.java))
+                }
+                choiceCard("Use an API key", "Paste a key for one profile (Profiles → API keys on your server).") {
+                    login.launch(android.content.Intent(this, ServerLoginActivity::class.java).putExtra("mode", "key"))
                 }
                 link("I don't have a server, just browse") { prefs.server = ""; prefs.token = ""; show("local") }
                 link("Back") { show("start") }

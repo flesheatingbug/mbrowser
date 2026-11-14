@@ -25,6 +25,8 @@ object Settings {
         loaded = true
     }
 
+    @Synchronized fun reset() { groups = JSONObject(); save() }
+
     private fun save() { try { file.writeText(groups.toString()) } catch (_: Exception) { } }
 
     private fun defaults(key: String): JSONObject = when (key) {

@@ -50,10 +50,7 @@ class SettingsActivity : AppCompatActivity() {
         box.addView(top)
 
         header("Sync")
-        textRow("Server", "Address of your sync server", { prefs.server }, { prefs.server = it }, "https://sync.example.com")
-        textRow("API key", "From the server web interface: Profiles → API keys",
-            { if (prefs.token.isEmpty()) "" else "••••••••" + prefs.token.takeLast(4) },
-            { prefs.token = it }, "mbk_…", password = true, blankInitial = true)
+        accountRows()
         textRow("Device name", "Shown to your other devices", { prefs.device }, { prefs.device = it }, "")
         actionRow("Test connection", "Checks the server address and key") {
             Toast.makeText(this, "Testing…", Toast.LENGTH_SHORT).show()
@@ -107,6 +104,34 @@ class SettingsActivity : AppCompatActivity() {
 
         header("About")
         actionRow("mbrowser for Android", "Version 0.2.0. Syncs with your own mbrowser server.") { }
+    }
+
+    private val loginLauncher = registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()) {
+        if (it.resultCode == RESULT_OK) { build(); toast("Connected") }
+    }
+
+    private fun accountRows() {
+        val who = when {
+            !prefs.syncConfigured -> "Not connected"
+            prefs.accountUser.isNotEmpty() -> "${prefs.accountUser} · profile “${prefs.profileName}” · ${prefs.server}"
+            else -> "API key · ${prefs.server}"
+        }
+        actionRow(if (prefs.syncConfigured) "Account" else "Connect to a server", who) {
+            loginLauncher.launch(android.content.Intent(this, ServerLoginActivity::class.java))
+        }
+        if (prefs.syncConfigured) {
+            actionRow("Switch profile or account", "Sign in again to pick a different profile") {
+                loginLauncher.launch(android.content.Intent(this, ServerLoginActivity::class.java))
+            }
+            actionRow("Use an API key instead", null) {
+                loginLauncher.launch(android.content.Intent(this, ServerLoginActivity::class.java).putExtra("mode", "key"))
+            }
+            actionRow("Disconnect", "Stops syncing. Bookmarks and history stay on this phone.") {
+                confirm("Disconnect from the server?") {
+                    prefs.token = ""; prefs.accountUser = ""; prefs.profileName = ""; build()
+                }
+            }
+        }
     }
 
     private fun searchRows() {

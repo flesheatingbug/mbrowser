@@ -23,6 +23,15 @@ class Prefs(ctx: Context) {
     var device: String
         get() = str("device", "Android ${Build.MODEL}")
         set(v) = put("device", v.trim())
+    var accountUser: String
+        get() = str("accountUser", "")
+        set(v) = put("accountUser", v)
+    var profileName: String
+        get() = str("profileName", "")
+        set(v) = put("profileName", v)
+    var profileId: String
+        get() = str("profileId", "")
+        set(v) = put("profileId", v)
     var autoSync: Boolean
         get() = bool("autoSync", true)
         set(v) = putB("autoSync", v)
