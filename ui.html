@@ -153,6 +153,20 @@
   #dlbtn .n { position:absolute; right:-3px; top:-3px; font-size:9px; border-radius:8px; padding:0 3px; min-width:14px; text-align:center; line-height:14px; }
   #dlbtn.active .n { background:var(--accent); color:var(--onaccent); animation:pulse 1.2s infinite; }
   #dlbtn.done .n { background:#4cc38a; color:#fff; }
+  #dlbtn.dl-pop { animation: dl-btn-pop 0.35s cubic-bezier(.4,0,.2,1); }
+  @keyframes dl-btn-pop {
+    0%  { transform: scale(1); }
+    40% { transform: scale(1.55); }
+    70% { transform: scale(0.88); }
+    100%{ transform: scale(1); }
+  }
+  .dl-whoosh-orb {
+    position: fixed; pointer-events: none; z-index: 99999;
+    width: 34px; height: 34px; border-radius: 50%;
+    background: var(--tab); border: 1.5px solid var(--accent);
+    color: var(--accent); display: grid; place-items: center;
+    will-change: left, top, transform, opacity;
+  }
 
   /* ---- newtab context menu ---- */
   #newtab-ctx { display:none; position:fixed; background:var(--bg); border:1px solid var(--line); border-radius:10px;
@@ -341,6 +355,40 @@
     const d = dls.find((x) => x.state === 'progressing' || x.state === 'paused') || dls[0];
     if (d) api.showDlCtxMenu(d.id);
   };
+  // --- download whoosh animation ---
+  function triggerDownloadWhoosh() {
+    const btn = $('dlbtn');
+    if (!btn) return;
+    const tr = btn.getBoundingClientRect();
+    if (!tr.width) return; // button not visible yet
+    const targetX = tr.left + tr.width / 2;
+    const targetY = tr.top + tr.height / 2;
+    // Start from the lower-middle of the viewport (where page content lives)
+    const startX = window.innerWidth * 0.5;
+    const startY = window.innerHeight * 0.6;
+
+    const orb = document.createElement('div');
+    orb.className = 'dl-whoosh-orb';
+    orb.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v10M8 10l4 4 4-4"/><path d="M5 19h14"/></svg>';
+    orb.style.cssText = `left:${startX}px;top:${startY}px;transform:translate(-50%,-50%) scale(1);opacity:1;transition:none;`;
+    document.body.appendChild(orb);
+
+    // Force layout then kick off transition
+    orb.getBoundingClientRect();
+    orb.style.transition = 'left 0.52s cubic-bezier(.4,.05,.15,1), top 0.44s cubic-bezier(.55,0,1,.8), transform 0.48s cubic-bezier(.55,0,1,.8), opacity 0.48s ease-in';
+    orb.style.left = targetX + 'px';
+    orb.style.top  = targetY + 'px';
+    orb.style.transform = 'translate(-50%,-50%) scale(0.1)';
+    orb.style.opacity = '0';
+
+    setTimeout(() => {
+      orb.remove();
+      btn.classList.add('dl-pop');
+      btn.addEventListener('animationend', () => btn.classList.remove('dl-pop'), { once: true });
+    }, 500);
+  }
+
+  let _prevDlActive = false;
   $('dlbtn').onclick = () => api.openDownloads();
   $('dlbtn').oncontextmenu = (e) => {
     e.preventDefault();
@@ -490,6 +538,8 @@
     lastState = s;
     const dls = s.downloads || [];
     const activeDl = dls.find((d) => d.state === 'progressing' || d.state === 'paused');
+    if (activeDl && !_prevDlActive) triggerDownloadWhoosh();
+    _prevDlActive = !!activeDl;
     const pill = $('dl-pill');
     const dlbtn = $('dlbtn');
     const shownStillPresent = dlDoneVisible && dls.some((d) => d.id === dlDoneShownId);
