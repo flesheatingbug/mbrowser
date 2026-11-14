@@ -170,10 +170,10 @@
         android:gravity="center"
         android:orientation="horizontal">
 
-        <ImageButton android:id="@+id/btnBack" style="@style/BarButton"
-            android:contentDescription="Back" android:src="@drawable/ic_back" />
         <ImageButton android:id="@+id/btnDownloads" style="@style/BarButton"
             android:contentDescription="Downloads" android:src="@drawable/ic_download" />
+        <ImageButton android:id="@+id/btnBack" style="@style/BarButton"
+            android:contentDescription="Back" android:src="@drawable/ic_back" />
         <ImageButton android:id="@+id/btnHome" style="@style/BarButton"
             android:contentDescription="Home" android:src="@drawable/ic_home" />
         <ImageButton android:id="@+id/btnForward" style="@style/BarButton"
