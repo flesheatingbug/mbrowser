@@ -49,4 +49,5 @@ dependencies {
     implementation("androidx.swiperefreshlayout:swiperefreshlayout:1.1.0")
     implementation("androidx.webkit:webkit:1.12.1")
     implementation("androidx.work:work-runtime:2.9.1")
+    implementation("org.bouncycastle:bcprov-jdk18on:1.78.1")
 }

@@ -252,7 +252,9 @@ class MainActivity : AppCompatActivity() {
         val strip = findViewById<View>(R.id.engineStrip)
         val row = findViewById<LinearLayout>(R.id.engineRow)
         row.removeAllViews()
-        val engines = Settings.engines()
+        val defId = Settings.defaultEngine().id
+        val engines = Settings.engines().sortedBy { if (it.id == defId) 0 else 1 }
+        row.isBaselineAligned = false
         if (engines.size < 2) { strip.visibility = View.GONE; return }
         val chosen = engineOverride ?: Settings.defaultEngine()
         val d = resources.displayMetrics.density
@@ -904,12 +906,47 @@ class MainActivity : AppCompatActivity() {
         (getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager).hideSoftInputFromWindow(bar.windowToken, 0)
     }
 
+    // ---------- fill a saved login into the page ----------
+    private fun fillLogin() {
+        val t = cur()
+        if (t == null || t.home) { Toast.makeText(this, "Open a login page first", Toast.LENGTH_SHORT).show(); return }
+        if (!Vault.unlocked()) {
+            Toast.makeText(this, "Unlock your passwords first", Toast.LENGTH_SHORT).show()
+            picker.launch(Intent(this, PasswordsActivity::class.java)); return
+        }
+        val origin = Vault.originOf(t.url) ?: return
+        val found = Vault.findByOrigin(origin)
+        when {
+            found.isEmpty() -> Toast.makeText(this, "No saved login for ${Vault.hostOf(origin)}", Toast.LENGTH_LONG).show()
+            found.size == 1 -> injectLogin(t, found[0])
+            else -> AlertDialog.Builder(this).setTitle("Choose a login")
+                .setItems(found.map { it.optString("username").ifBlank { "(no user name)" } }.toTypedArray()) { _, i -> injectLogin(t, found[i]) }.show()
+        }
+    }
+
+    private fun injectLogin(t: Tab, e: org.json.JSONObject) {
+        val u = org.json.JSONObject.quote(e.optString("username")); val p = org.json.JSONObject.quote(e.optString("password"))
+        val js = """(function(u,p){
+            function set(el,v){var d=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value');d.set.call(el,v);
+              el.dispatchEvent(new Event('input',{bubbles:true}));el.dispatchEvent(new Event('change',{bubbles:true}));}
+            var all=[].slice.call(document.querySelectorAll('input')).filter(function(i){return i.offsetParent!==null||i.type==='password';});
+            var pw=all.filter(function(i){return i.type==='password';})[0];
+            var user=null;
+            if(pw){for(var k=all.indexOf(pw)-1;k>=0;k--){var ty=(all[k].type||'text').toLowerCase();if(['text','email','tel'].indexOf(ty)>-1){user=all[k];break;}}}
+            else{user=all.filter(function(i){return ['text','email','tel'].indexOf((i.type||'text').toLowerCase())>-1;})[0];}
+            if(user&&u)set(user,u); if(pw)set(pw,p);
+            return pw?'ok':(user?'user':'none');})($u,$p);"""
+        t.web.evaluateJavascript(js) { r ->
+            Toast.makeText(this, if (r.contains("none")) "No login fields found on this page" else "Filled", Toast.LENGTH_SHORT).show()
+        }
+    }
+
     private fun showMenu(anchor: View) {
         val t = cur()
         val m = PopupMenu(this, anchor)
         val items = listOf(
             0 to "New tab", 9 to "New private tab", 1 to "Bookmarks", 2 to "History", 3 to "Tabs from other devices", 4 to "Sync now",
-            5 to ((if (t?.desktop == true) "✓ " else "") + "Desktop site"), 10 to "Find on this page", 6 to "Share page", 7 to "Add to speed dial", 8 to "Settings",
+            5 to ((if (t?.desktop == true) "✓ " else "") + "Desktop site"), 10 to "Find on this page", 11 to "Passwords", 12 to "Fill saved login", 6 to "Share page", 7 to "Add to speed dial", 8 to "Settings",
         )
         items.forEachIndexed { i, (id, label) -> m.menu.add(0, id, i, label) }
         m.setOnMenuItemClickListener {
@@ -929,6 +966,8 @@ class MainActivity : AppCompatActivity() {
                     Toast.makeText(this, "Added to speed dial", Toast.LENGTH_SHORT).show()
                 }
                 8 -> startActivity(Intent(this, SettingsActivity::class.java))
+                11 -> picker.launch(Intent(this, PasswordsActivity::class.java))
+                12 -> fillLogin()
                 10 -> if (t != null && !t.home) openFind() else Toast.makeText(this, "Open a web page first", Toast.LENGTH_SHORT).show()
             }
             true

@@ -64,6 +64,8 @@ object Sync {
 
         if (prefs.syncSettings) syncSettings(api)
 
+        if (prefs.syncVault) { try { VaultSync.run(ctx, api) } catch (e: Exception) { prefs.vaultStatus = "Sync failed: ${e.message}" } }
+
         return "Synced"
     }
 
