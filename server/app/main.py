@@ -184,7 +184,7 @@ class Handler(BaseHTTPRequestHandler):
             data, ctype = payload, 'application/octet-stream'
         self.send_response(status)
         h = {'Content-Type': ctype, 'Content-Length': str(len(data)), 'X-Content-Type-Options': 'nosniff',
-             'X-Frame-Options': 'DENY', 'Referrer-Policy': 'same-origin', 'Cache-Control': 'no-store'}
+             'Referrer-Policy': 'same-origin', 'Cache-Control': 'no-store'}
         h.update(headers or {})
         if 'html' in h['Content-Type']:
             h['Content-Security-Policy'] = CSP

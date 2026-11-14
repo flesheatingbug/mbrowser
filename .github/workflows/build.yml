@@ -1,30 +1,105 @@
-# Builds the Windows installer (+ zip) and the Linux AppImage on GitHub's servers.
-# Run it from the repository's "Actions" tab (Build mbrowser > Run workflow), or push a tag like v0.6.0.
-# Download the results from the finished run under "Artifacts".
 name: Build mbrowser
+
+# Builds Windows installer + zip and Linux AppImage.
+# Triggered automatically on version tags (v*) and manually from the Actions tab.
+# Assets are published to a rolling "latest" release so there is always a stable download link.
+
 on:
   workflow_dispatch:
   push:
     tags: ['v*']
+
+permissions:
+  contents: write
+
 jobs:
   build:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, ubuntu-latest]
+        include:
+          - os: ubuntu-latest
+            platform: linux
+          - os: windows-latest
+            platform: windows
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: npm install
-      - run: npm run dist
-      - uses: actions/upload-artifact@v4
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build (Linux)
+        if: matrix.platform == 'linux'
+        run: npm run dist:linux
+
+      - name: Build (Windows)
+        if: matrix.platform == 'windows'
+        run: npm run dist:win
+        env:
+          # prevents winCodeSign from requiring Developer Mode on the CI runner
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+
+      - name: Rename artifacts to stable names (Linux)
+        if: matrix.platform == 'linux'
+        run: |
+          cd dist
+          APPIMAGE=$(ls *.AppImage | head -1)
+          cp "$APPIMAGE" mbrowser-linux.AppImage
+
+      - name: Rename artifacts to stable names (Windows)
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: |
+          cd dist
+          $exe = Get-ChildItem *.exe | Select-Object -First 1
+          Copy-Item $exe.FullName "mbrowser-windows-setup.exe"
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
         with:
-          name: mbrowser-${{ matrix.os }}
+          name: mbrowser-${{ matrix.platform }}
           path: |
-            dist/*.exe
-            dist/*.zip
-            dist/*.AppImage
-          if-no-files-found: error
+            dist/mbrowser-linux.AppImage
+            dist/mbrowser-windows-setup.exe
+          if-no-files-found: ignore
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: Publish rolling "latest" release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${{ github.ref_name }}"
+          # For manual runs (no tag) use "latest"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then TAG="latest"; fi
+
+          NOTES="**Download mbrowser**
+
+          | Platform | File |
+          |----------|------|
+          | 🐧 Linux | [mbrowser-linux.AppImage](https://github.com/${{ github.repository }}/releases/latest/download/mbrowser-linux.AppImage) |
+          | 🪟 Windows | [mbrowser-windows-setup.exe](https://github.com/${{ github.repository }}/releases/latest/download/mbrowser-windows-setup.exe) |
+          | 🤖 Android | [mbrowser.apk](https://github.com/${{ github.repository }}/releases/latest/download/mbrowser.apk) |
+
+          Built from commit \`${GITHUB_SHA::7}\` by GitHub Actions."
+
+          gh release delete "$TAG" --yes --cleanup-tag 2>/dev/null || true
+          gh release create "$TAG" release-assets/* \
+            --title "mbrowser ${TAG}" \
+            --notes "$NOTES" \
+            --latest

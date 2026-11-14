@@ -1,0 +1,84 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Server Admin</title>
+<link rel="stylesheet" href="my://assets/theme.css">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(--fg); font-family: system-ui, sans-serif; }
+  #bar {
+    display: flex; align-items: center; gap: 8px;
+    padding: 6px 12px; background: var(--tab); border-bottom: 1px solid var(--line);
+    flex-shrink: 0; height: 38px;
+  }
+  #bar .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex: none; }
+  #bar .dot.ok { background: #4cc38a; }
+  #bar .dot.err { background: #e5534b; }
+  #url { flex: 1; font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #bar button { padding: 2px 10px; font-size: 12px; cursor: pointer; border: 1px solid var(--line); background: var(--bg); color: var(--fg); border-radius: 6px; }
+  #bar button:hover { background: var(--tab); }
+  #frame-wrap { height: calc(100% - 38px); }
+  #frame { width: 100%; height: 100%; border: none; display: none; }
+  #no-server {
+    height: 100%; display: flex; align-items: center; justify-content: center;
+    flex-direction: column; gap: 14px; text-align: center; color: var(--muted); padding: 40px;
+  }
+  #no-server h2 { color: var(--fg); font-size: 18px; }
+  #no-server button { padding: 8px 20px; background: var(--accent); color: var(--onaccent); border: 0; border-radius: 8px; cursor: pointer; font-size: 14px; }
+</style>
+</head>
+<body>
+<div id="bar">
+  <span class="dot" id="dot"></span>
+  <span id="url">Connecting…</span>
+  <button id="reload-btn" title="Reload" style="display:none">↻ Reload</button>
+  <button id="newtab-btn" title="Open in new tab" style="display:none">⬡ Open in tab</button>
+</div>
+<div id="frame-wrap">
+  <iframe id="frame" sandbox="allow-scripts allow-same-origin allow-forms allow-popups"></iframe>
+  <div id="no-server" style="display:none">
+    <h2>No server configured</h2>
+    <p>Set a server address in Settings → Sync first.</p>
+    <button id="go-sync">Open Sync Settings</button>
+  </div>
+</div>
+<script>
+(async () => {
+  const S = await browser.getSettings();
+  const url = S.sync && S.sync.server ? S.sync.server.replace(/\/+$/, '') : '';
+  const dot = document.getElementById('dot');
+  const urlEl = document.getElementById('url');
+  const frame = document.getElementById('frame');
+  const noServer = document.getElementById('no-server');
+  const reloadBtn = document.getElementById('reload-btn');
+  const newTabBtn = document.getElementById('newtab-btn');
+
+  if (!url) {
+    urlEl.textContent = 'No server configured';
+    dot.className = 'dot err';
+    noServer.style.display = 'flex';
+    document.getElementById('go-sync').onclick = () => browser.openUrl('my://settings#sync', 'tab');
+    return;
+  }
+
+  urlEl.textContent = url;
+  reloadBtn.style.display = '';
+  newTabBtn.style.display = '';
+  reloadBtn.onclick = () => { frame.src = ''; frame.src = url; };
+  newTabBtn.onclick = () => browser.openUrl(url, 'tab');
+
+  frame.style.display = 'block';
+  frame.src = url;
+
+  frame.onload = () => { dot.className = 'dot ok'; };
+  frame.onerror = () => { dot.className = 'dot err'; urlEl.textContent = 'Could not load ' + url; };
+
+  // ping the server to set initial dot colour
+  browser.invoke('server:ping', url).then((r) => {
+    dot.className = 'dot ' + (r && r.ok ? 'ok' : 'err');
+  }).catch(() => { dot.className = 'dot err'; });
+})();
+</script>
+</body>
+</html>

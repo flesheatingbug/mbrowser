@@ -734,6 +734,7 @@ const COMMANDS = [
   { id: 'app-import', label: 'Import Bookmarks & Passwords', keys: [], run: () => openInternal('import') },
   { id: 'app-profiles', label: 'Profiles', keys: [], run: () => openInternal('profiles') },
   { id: 'app-passwords', label: 'Password Manager', keys: [], run: () => openInternal('passwords') },
+  { id: 'app-server-admin', label: 'Server Admin', keys: [], run: () => openInternal('server-admin') },
   { id: 'sync-now', label: 'Sync Now', keys: [], run: syncAll },
 ];
 
@@ -2275,7 +2276,7 @@ function setupIpc() {
 }
 
 // ---------- internal pages ----------
-const PAGES = { bookmarks: 'bookmarks.html', profiles: 'profiles.html', import: 'import.html', passwords: 'passwords.html', history: 'history.html', panel: 'panel.html', error: 'error.html', start: 'start.html', settings: 'settings.html', library: 'library.html', downloads: 'downloads.html', welcome: 'welcome.html', notes: 'notes.html' };
+const PAGES = { bookmarks: 'bookmarks.html', profiles: 'profiles.html', import: 'import.html', passwords: 'passwords.html', history: 'history.html', panel: 'panel.html', error: 'error.html', start: 'start.html', settings: 'settings.html', library: 'library.html', downloads: 'downloads.html', welcome: 'welcome.html', notes: 'notes.html', 'server-admin': 'server-admin.html' };
 
 const CORS = { 'access-control-allow-origin': '*' };
 

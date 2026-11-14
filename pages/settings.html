@@ -493,7 +493,7 @@
         urlText.textContent = serverUrl;
         const openBtn = el('button'); openBtn.textContent = 'Open server admin';
         openBtn.style.cssText = 'background:var(--accent);color:var(--onaccent);border:0;padding:7px 18px;border-radius:8px;font-size:14px;cursor:pointer;white-space:nowrap;';
-        openBtn.onclick = () => browser.openUrl(serverUrl, 'tab');
+        openBtn.onclick = () => browser.openUrl('my://server-admin', 'tab');
         urlRow.append(urlText, openBtn);
         const status = el('div'); status.style.cssText = 'font-size:13px;color:var(--muted);';
         status.textContent = 'Checking connection…';
