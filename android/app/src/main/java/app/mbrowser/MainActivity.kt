@@ -130,6 +130,7 @@ class MainActivity : AppCompatActivity() {
                 val t = cur()
                 when {
                     switcher.visibility == View.VISIBLE -> hideSwitcher()
+                    t != null && t.home && startPage.up() -> Unit
                     t != null && !t.home && t.web.canGoBack() -> t.web.goBack()
                     t != null && !t.home -> { t.home = true; t.url = ""; t.title = ""; render() }
                     tabs.size > 1 -> closeTab(current)
@@ -419,6 +420,7 @@ class MainActivity : AppCompatActivity() {
         val t = cur() ?: return
         hideSwitcher()
         t.home = true; t.url = ""; t.title = ""
+        startPage.resetPath()
         render()
     }
 

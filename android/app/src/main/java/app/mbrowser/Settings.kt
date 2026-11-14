@@ -111,11 +111,18 @@ object Settings {
     fun dialHosts(): Set<String> {
         val out = HashSet<String>()
         val g = value("startPage").optJSONArray("groups") ?: return out
-        for (i in 0 until g.length()) {
-            val d = g.getJSONObject(i).optJSONArray("dials") ?: continue
-            for (j in 0 until d.length()) out.add(Thumbs.hostOf(d.getJSONObject(j).optString("url")))
-        }
+        for (i in 0 until g.length()) collectHosts(g.getJSONObject(i).optJSONArray("dials"), out)
         return out
+    }
+
+    private fun collectHosts(a: JSONArray?, out: HashSet<String>) {
+        if (a == null) return
+        for (i in 0 until a.length()) {
+            val o = a.optJSONObject(i) ?: continue
+            val u = o.optString("url")
+            if (u.isNotEmpty()) out.add(Thumbs.hostOf(u))
+            collectHosts(o.optJSONArray("dials"), out)   // folders hold more dials
+        }
     }
 
     fun addToGroup(groupId: String?, title: String, url: String) {

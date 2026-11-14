@@ -35,6 +35,17 @@
             android:tint="@color/text" />
     </LinearLayout>
 
+    <TextView
+        android:id="@+id/crumb"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingHorizontal="16dp"
+        android:paddingTop="12dp"
+        android:paddingBottom="2dp"
+        android:textColor="@color/accent"
+        android:textSize="14sp"
+        android:visibility="gone" />
+
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/grid"
         android:layout_width="match_parent"
