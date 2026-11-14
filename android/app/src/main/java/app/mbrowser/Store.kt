@@ -113,6 +113,50 @@ object Store {
 
     @Synchronized fun clearHistory() { history.clear(); saveHistory() }
 
+    // ---- speed dial = bookmark folders (top-level folder name is the dial) ----
+    fun topOf(folder: String): String = folder.substringBefore('/').trim()
+
+    @Synchronized fun topFolders(): List<String> =
+        bookmarks.values.filter { !it.deleted }.map { topOf(it.folder) }.filter { it.isNotEmpty() }.distinct()
+
+    @Synchronized fun inDial(dial: String, isDefault: Boolean, defaultName: String): List<Bookmark> =
+        bookmarks.values.filter { !it.deleted }.filter {
+            val t = topOf(it.folder)
+            if (isDefault) t.isEmpty() || t == defaultName else t == dial
+        }.sortedBy { it.added }
+
+    @Synchronized fun upsert(url: String, title: String, folder: String, oldUrl: String? = null) {
+        val now = System.currentTimeMillis()
+        if (oldUrl != null && oldUrl != url) {
+            bookmarks[oldUrl]?.let { it.deleted = true; it.updated = now; it.dirty = true }
+        }
+        val cur = bookmarks[url]
+        if (cur != null) {
+            cur.title = title.ifBlank { url }; cur.folder = folder; cur.deleted = false; cur.updated = now; cur.dirty = true
+        } else {
+            bookmarks[url] = Bookmark(url, title.ifBlank { url }, folder, now, now, false, true)
+        }
+        saveBookmarks()
+    }
+
+    @Synchronized fun renameTopFolder(old: String, new: String) {
+        val now = System.currentTimeMillis()
+        for (b in bookmarks.values) if (!b.deleted && topOf(b.folder) == old) {
+            b.folder = new + b.folder.removePrefix(old); b.updated = now; b.dirty = true
+        }
+        saveBookmarks()
+    }
+
+    @Synchronized fun deleteTopFolder(name: String) {
+        val now = System.currentTimeMillis()
+        for (b in bookmarks.values) if (!b.deleted && topOf(b.folder) == name) {
+            b.deleted = true; b.updated = now; b.dirty = true
+        }
+        saveBookmarks()
+    }
+
+    @Synchronized fun folderOf(url: String): String = bookmarks[url]?.folder ?: ""
+
     // ---- sync helpers ----
     @Synchronized fun dirtyBookmarks(): List<Bookmark> = bookmarks.values.filter { it.dirty }.map { it.copy() }
 

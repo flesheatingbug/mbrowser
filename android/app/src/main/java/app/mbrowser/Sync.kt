@@ -26,7 +26,7 @@ object Sync {
         if (!prefs.syncConfigured) return "Sync is not set up"
         val api = Api(prefs.server, prefs.token, prefs.device)
 
-        // bookmarks
+        if (prefs.syncBookmarks) {
         val sentB = Store.dirtyBookmarks()
         val bItems = JSONArray()
         for (b in sentB) {
@@ -37,8 +37,9 @@ object Sync {
         Store.markBookmarksSent(sentB)
         Store.mergeBookmarks(rb.optJSONArray("items") ?: JSONArray())
         prefs.bmRev = rb.optLong("rev", prefs.bmRev)
+        }
 
-        // history (the server pages at 5000 items)
+        if (prefs.syncHistory) {
         val sentH = Store.dirtyHistory()
         val hItems = JSONArray()
         for (v in sentH) hItems.put(JSONObject().put("url", v.url).put("title", v.title).put("time", v.time))
@@ -52,12 +53,14 @@ object Sync {
             if (got.length() < PAGE) break
             body = JSONObject().put("since", prefs.histRev).put("items", JSONArray())
         }
+        }
 
-        // tabs: publish ours, fetch the others
+        if (prefs.syncTabs) {
         val tArr = JSONArray()
         for ((u, t) in openTabs) if (u.startsWith("http")) tArr.put(JSONObject().put("url", u).put("title", t))
         api.request("PUT", "/api/tabs", JSONObject().put("device", prefs.device).put("tabs", tArr))
         prefs.otherTabs = (api.tabsGet().optJSONArray("devices") ?: JSONArray()).toString()
+        }
 
         return "Synced"
     }

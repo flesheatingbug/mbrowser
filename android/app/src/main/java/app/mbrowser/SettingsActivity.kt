@@ -1,44 +1,198 @@
 package app.mbrowser
 
+import android.graphics.Typeface
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
-import android.widget.Button
-import android.widget.EditText
+import android.view.View
+import android.view.ViewGroup
+import android.webkit.CookieManager
+import android.webkit.WebStorage
+import android.webkit.WebView
+import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.TextView
+import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.widget.SwitchCompat
 import java.util.concurrent.Executors
 
 class SettingsActivity : AppCompatActivity() {
+    private lateinit var prefs: Prefs
+    private lateinit var box: LinearLayout
+    private val ui = Handler(Looper.getMainLooper())
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_settings)
-        val prefs = Prefs(this)
-        val server = findViewById<EditText>(R.id.server)
-        val token = findViewById<EditText>(R.id.token)
-        val device = findViewById<EditText>(R.id.device)
-        val search = findViewById<EditText>(R.id.search)
-        val status = findViewById<TextView>(R.id.status)
-        server.setText(prefs.server)
-        token.setText(prefs.token)
-        device.setText(prefs.device)
-        search.setText(prefs.searchUrl)
+        prefs = Prefs(this)
+        Store.init(this)
+        val scroll = ScrollView(this)
+        scroll.setBackgroundColor(getColor(R.color.bg))
+        scroll.fitsSystemWindows = true
+        box = LinearLayout(this)
+        box.orientation = LinearLayout.VERTICAL
+        box.setPadding(0, 0, 0, dp(32))
+        scroll.addView(box, ViewGroup.LayoutParams(-1, -2))
+        setContentView(scroll)
+        build()
+    }
 
-        findViewById<Button>(R.id.save).setOnClickListener {
-            prefs.server = server.text.toString()
-            prefs.token = token.text.toString()
-            prefs.device = device.text.toString().ifBlank { prefs.device }
-            prefs.searchUrl = search.text.toString().ifBlank { "https://duckduckgo.com/?q=" }
-            if (!prefs.syncConfigured) {
-                status.text = "Saved. Sync is off (no server set)."
-                return@setOnClickListener
-            }
-            status.text = "Testing…"
-            val ui = Handler(Looper.getMainLooper())
+    private fun build() {
+        box.removeAllViews()
+        val top = TextView(this)
+        top.text = "Settings"
+        top.textSize = 22f
+        top.typeface = Typeface.DEFAULT_BOLD
+        top.setTextColor(getColor(R.color.text))
+        top.setBackgroundColor(getColor(R.color.bar))
+        top.setPadding(dp(16), dp(18), dp(16), dp(18))
+        box.addView(top)
+
+        header("Sync")
+        textRow("Server", "Address of your sync server", { prefs.server }, { prefs.server = it }, "https://sync.example.com")
+        textRow("API key", "From the server web interface: Profiles → API keys",
+            { if (prefs.token.isEmpty()) "" else "••••••••" + prefs.token.takeLast(4) },
+            { prefs.token = it }, "mbk_…", password = true, blankInitial = true)
+        textRow("Device name", "Shown to your other devices", { prefs.device }, { prefs.device = it }, "")
+        actionRow("Test connection", "Checks the server address and key") {
+            Toast.makeText(this, "Testing…", Toast.LENGTH_SHORT).show()
             Executors.newSingleThreadExecutor().execute {
                 val r = Sync.test(applicationContext)
-                ui.post { status.text = r }
+                ui.post { AlertDialog.Builder(this).setMessage(r).setPositiveButton("OK", null).show() }
+            }
+        }
+        actionRow("Sync now", "Bookmarks, history and tabs") {
+            Executors.newSingleThreadExecutor().execute {
+                val r = try { Sync.run(applicationContext, emptyList()) } catch (e: Exception) { "Sync failed: ${e.message}" }
+                ui.post { Toast.makeText(this, r, Toast.LENGTH_LONG).show() }
+            }
+        }
+        switchRow("Sync automatically", "When the app opens and closes", { prefs.autoSync }, { prefs.autoSync = it })
+        switchRow("Sync bookmarks and speed dials", null, { prefs.syncBookmarks }, { prefs.syncBookmarks = it })
+        switchRow("Sync history", null, { prefs.syncHistory }, { prefs.syncHistory = it })
+        switchRow("Sync open tabs", "Lets your other devices see this phone's tabs", { prefs.syncTabs }, { prefs.syncTabs = it })
+
+        header("Search")
+        choiceRow("Search engine", Engines.names, { prefs.engine }, { prefs.engine = it; build() })
+        if (prefs.engine == Engines.names.size - 1) {
+            textRow("Custom search address", "The search words are added to the end", { prefs.customSearch }, { prefs.customSearch = it },
+                "https://example.com/search?q=")
+        }
+
+        header("Appearance")
+        choiceRow("Theme", listOf("Follow system", "Light", "Dark"), { prefs.themeMode }, { prefs.themeMode = it; App.applyTheme(it) })
+
+        header("Speed dial")
+        choiceRow("Columns", listOf("2", "3", "4", "5"), { (prefs.dialCols - 2).coerceIn(0, 3) }, { prefs.dialCols = it + 2 })
+        switchRow("Show titles", null, { prefs.showTitles }, { prefs.showTitles = it })
+        switchRow("Show thumbnails", "Page previews, captured as you browse", { prefs.showThumbs }, { prefs.showThumbs = it })
+        switchRow("Show Add button", null, { prefs.showAdd }, { prefs.showAdd = it })
+        textRow("First dial name", null, { prefs.defaultDialName }, { prefs.defaultDialName = it }, "Speed Dial")
+
+        header("Browsing")
+        switchRow("Request desktop sites", "For new tabs", { prefs.desktopSite }, { prefs.desktopSite = it })
+        choiceRow("Text size", listOf("Small (80%)", "Normal (100%)", "Large (120%)", "Extra large (150%)"),
+            { listOf(80, 100, 120, 150).indexOf(prefs.textZoom).coerceAtLeast(1) },
+            { prefs.textZoom = listOf(80, 100, 120, 150)[it] })
+        switchRow("Block trackers and ads", "Drops requests to a built-in list of tracker domains", { prefs.blockTrackers }, { prefs.blockTrackers = it })
+
+        header("Privacy and data")
+        actionRow("Clear history", null) { confirm("Clear all browsing history on this device?") { Store.clearHistory(); toast("History cleared") } }
+        actionRow("Clear cookies and site data", "Signs you out of websites") {
+            confirm("Clear cookies and site data?") {
+                CookieManager.getInstance().removeAllCookies(null); WebStorage.getInstance().deleteAllData(); toast("Cleared")
+            }
+        }
+        actionRow("Clear cache", null) { WebView(this).clearCache(true); toast("Cache cleared") }
+        actionRow("Clear speed dial thumbnails", "They are captured again as you visit the sites") {
+            Thumbs.clear(this); toast("Thumbnails cleared")
+        }
+
+        header("About")
+        actionRow("mbrowser for Android", "Version 0.2.0. Syncs with your own mbrowser server.") { }
+    }
+
+    // ---------- row helpers ----------
+    private fun header(t: String) {
+        val v = TextView(this)
+        v.text = t
+        v.textSize = 13f
+        v.typeface = Typeface.DEFAULT_BOLD
+        v.setTextColor(getColor(R.color.accent))
+        v.setPadding(dp(16), dp(22), dp(16), dp(6))
+        box.addView(v)
+    }
+
+    private fun rowView(title: String, sub: String?): Pair<LinearLayout, TextView> {
+        val r = LinearLayout(this)
+        r.orientation = LinearLayout.VERTICAL
+        r.setPadding(dp(16), dp(12), dp(16), dp(12))
+        r.setBackgroundColor(getColor(R.color.card))
+        val t = TextView(this)
+        t.text = title; t.textSize = 16f; t.setTextColor(getColor(R.color.text))
+        r.addView(t)
+        val s = TextView(this)
+        s.textSize = 13f; s.setTextColor(getColor(R.color.muted))
+        s.text = sub ?: ""
+        s.visibility = if (sub.isNullOrEmpty()) View.GONE else View.VISIBLE
+        r.addView(s)
+        val lp = LinearLayout.LayoutParams(-1, -2)
+        lp.bottomMargin = 1
+        box.addView(r, lp)
+        return r to s
+    }
+
+    private fun actionRow(title: String, sub: String?, onClick: () -> Unit) {
+        val (r, _) = rowView(title, sub)
+        r.setOnClickListener { onClick() }
+    }
+
+    private fun textRow(title: String, help: String?, get: () -> String, set: (String) -> Unit, hint: String,
+                        password: Boolean = false, blankInitial: Boolean = false) {
+        val (r, s) = rowView(title, null)
+        fun show() {
+            val shown = get()
+            s.text = if (shown.isEmpty()) (help ?: "Not set") else shown
+            s.visibility = View.VISIBLE
+        }
+        show()
+        r.setOnClickListener {
+            promptFields(this, title, listOf(hint.ifEmpty { title }), listOf(if (blankInitial) "" else get()), "Save", password) {
+                set(it[0]); show()
             }
         }
     }
+
+    private fun switchRow(title: String, sub: String?, get: () -> Boolean, set: (Boolean) -> Unit) {
+        val (r, _) = rowView(title, sub)
+        val sw = SwitchCompat(this)
+        sw.isChecked = get()
+        sw.setOnCheckedChangeListener { _, c -> set(c) }
+        r.orientation = LinearLayout.HORIZONTAL
+        r.gravity = android.view.Gravity.CENTER_VERTICAL
+        // move the two text views into a column on the left
+        val col = LinearLayout(this)
+        col.orientation = LinearLayout.VERTICAL
+        while (r.childCount > 0) { val c = r.getChildAt(0); r.removeViewAt(0); col.addView(c) }
+        r.addView(col, LinearLayout.LayoutParams(0, -2, 1f))
+        r.addView(sw)
+        r.setOnClickListener { sw.toggle() }
+    }
+
+    private fun choiceRow(title: String, options: List<String>, get: () -> Int, set: (Int) -> Unit) {
+        val (r, s) = rowView(title, options.getOrElse(get()) { "" })
+        r.setOnClickListener {
+            AlertDialog.Builder(this).setTitle(title)
+                .setSingleChoiceItems(options.toTypedArray(), get()) { d, i ->
+                    set(i); s.text = options[i]; d.dismiss()
+                }.show()
+        }
+    }
+
+    private fun confirm(msg: String, ok: () -> Unit) {
+        AlertDialog.Builder(this).setMessage(msg).setPositiveButton("OK") { _, _ -> ok() }.setNegativeButton("Cancel", null).show()
+    }
+
+    private fun toast(m: String) = Toast.makeText(this, m, Toast.LENGTH_SHORT).show()
 }

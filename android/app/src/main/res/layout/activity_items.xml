@@ -2,6 +2,7 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:background="@color/bg"
     android:fitsSystemWindows="true"
     android:orientation="vertical">
 
@@ -9,19 +10,36 @@
         android:id="@+id/title"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:background="@color/bar"
         android:padding="16dp"
+        android:textColor="@color/text"
         android:textSize="20sp"
         android:textStyle="bold" />
+
+    <EditText
+        android:id="@+id/filter"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:layout_margin="10dp"
+        android:background="@drawable/bg_pill"
+        android:hint="Search"
+        android:importantForAutofill="no"
+        android:inputType="text"
+        android:maxLines="1"
+        android:paddingHorizontal="18dp"
+        android:textColor="@color/text"
+        android:textColorHint="@color/muted" />
 
     <TextView
         android:id="@+id/hint"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:paddingHorizontal="16dp"
-        android:paddingBottom="8dp"
+        android:paddingBottom="6dp"
+        android:textColor="@color/muted"
         android:textSize="12sp" />
 
-    <ListView
+    <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/list"
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
