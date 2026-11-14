@@ -128,6 +128,10 @@ class MainActivity : AppCompatActivity() {
         }
         findViewById<View>(R.id.btnBack).setOnClickListener { goBack() }
         findViewById<View>(R.id.btnHome).setOnClickListener { goHome() }
+        findViewById<View>(R.id.btnDownloads).setOnClickListener {
+            try { startActivity(Intent(DownloadManager.ACTION_VIEW_DOWNLOADS)) }
+            catch (_: Exception) { Toast.makeText(this, "No downloads app found on this phone", Toast.LENGTH_SHORT).show() }
+        }
         findViewById<View>(R.id.btnForward).setOnClickListener { cur()?.let { if (it.web.canGoForward()) it.web.goForward() } }
         btnStar.setOnClickListener { toggleBookmark() }
         findViewById<View>(R.id.btnTabs).setOnClickListener { if (switcher.visibility == View.VISIBLE) hideSwitcher() else showSwitcher() }
