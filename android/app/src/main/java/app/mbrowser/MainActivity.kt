@@ -146,8 +146,7 @@ class MainActivity : AppCompatActivity() {
         findViewById<View>(R.id.btnBack).setOnClickListener { goBack() }
         findViewById<View>(R.id.btnHome).setOnClickListener { goHome() }
         findViewById<View>(R.id.btnDownloads).setOnClickListener {
-            try { startActivity(Intent(DownloadManager.ACTION_VIEW_DOWNLOADS)) }
-            catch (_: Exception) { Toast.makeText(this, "No downloads app found on this phone", Toast.LENGTH_SHORT).show() }
+            startActivity(Intent(this, ItemsActivity::class.java).putExtra("mode", "downloads"))
         }
         findViewById<View>(R.id.btnForward).setOnClickListener { cur()?.let { if (it.web.canGoForward()) it.web.goForward() } }
         btnStar.setOnClickListener { toggleBookmark() }
@@ -483,8 +482,9 @@ class MainActivity : AppCompatActivity() {
                 CookieManager.getInstance().getCookie(dl)?.let { req.addRequestHeader("Cookie", it) }
                 req.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
                 req.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, URLUtil.guessFileName(dl, cd, mime))
-                (getSystemService(DOWNLOAD_SERVICE) as DownloadManager).enqueue(req)
-                Toast.makeText(this, "Downloading…", Toast.LENGTH_SHORT).show()
+                val id = (getSystemService(DOWNLOAD_SERVICE) as DownloadManager).enqueue(req)
+                Downloads.add(this, id)
+                Toast.makeText(this, "Downloading… see the Downloads button", Toast.LENGTH_SHORT).show()
             } catch (e: Exception) {
                 Toast.makeText(this, "Download failed: ${e.message}", Toast.LENGTH_LONG).show()
             }

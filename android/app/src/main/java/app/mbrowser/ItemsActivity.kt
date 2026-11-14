@@ -21,7 +21,7 @@ import java.util.Date
 
 /** One list screen for bookmarks, history and tabs from other devices. Tapping returns the URL. */
 class ItemsActivity : AppCompatActivity() {
-    private class Row(val title: String, val sub: String, val url: String)
+    private class Row(val title: String, val sub: String, val url: String, val dl: Downloads.Item? = null)
 
     private var mode = "bookmarks"
     private var all: List<Row> = emptyList()
@@ -38,11 +38,13 @@ class ItemsActivity : AppCompatActivity() {
         findViewById<TextView>(R.id.title).text = when (mode) {
             "history" -> "History"
             "devices" -> "Tabs from other devices"
+            "downloads" -> "Downloads"
             else -> "Bookmarks"
         }
         findViewById<TextView>(R.id.hint).text = when (mode) {
             "history" -> "Tap to open. Long-press to clear all history."
             "devices" -> "Updated each time you sync."
+            "downloads" -> "Tap to open. Long-press for more."
             else -> "Tap to open. Long-press to remove."
         }
         findViewById<EditText>(R.id.filter).addTextChangedListener(object : TextWatcher {
@@ -60,6 +62,15 @@ class ItemsActivity : AppCompatActivity() {
                     DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(it.time)), it.url)
             }
             "devices" -> otherDeviceRows()
+            "downloads" -> Downloads.list(this).map {
+                val state = when (it.status) {
+                    android.app.DownloadManager.STATUS_SUCCESSFUL -> sizeText(it.total)
+                    android.app.DownloadManager.STATUS_FAILED -> "Failed"
+                    android.app.DownloadManager.STATUS_PAUSED -> "Paused"
+                    else -> if (it.total > 0) "Downloading… ${it.done * 100 / it.total}%" else "Downloading…"
+                }
+                Row(it.name, state + "  ·  " + DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(it.time)), "", it)
+            }
             else -> Store.bookmarkList().map { Row(it.title.ifBlank { it.url }, it.url, it.url) }
         }
         applyFilter(findViewById<EditText>(R.id.filter).text.toString())
@@ -86,6 +97,22 @@ class ItemsActivity : AppCompatActivity() {
                 val ic = Thumbs.icon(this@ItemsActivity, Thumbs.hostOf(r.url))
                 if (ic != null) { icon.setImageBitmap(ic); icon.imageTintList = null }
                 else { icon.setImageResource(R.drawable.ic_globe); icon.imageTintList = getColorStateList(R.color.muted) }
+                if (r.dl != null) {
+                    icon.setImageResource(R.drawable.ic_download); icon.imageTintList = getColorStateList(R.color.accent)
+                    v.setOnClickListener { openDownload(r.dl) }
+                    v.setOnLongClickListener {
+                        AlertDialog.Builder(this@ItemsActivity).setTitle(r.title)
+                            .setItems(arrayOf("Open", "Remove from list", "Delete file")) { _, w ->
+                                when (w) {
+                                    0 -> openDownload(r.dl)
+                                    1 -> { Downloads.forget(this@ItemsActivity, r.dl.id); load() }
+                                    2 -> { (getSystemService(DOWNLOAD_SERVICE) as android.app.DownloadManager).remove(r.dl.id); Downloads.forget(this@ItemsActivity, r.dl.id); load() }
+                                }
+                            }.show()
+                        true
+                    }
+                    return
+                }
                 v.setOnClickListener {
                     setResult(Activity.RESULT_OK, Intent().putExtra("url", r.url)); finish()
                 }
@@ -103,6 +130,40 @@ class ItemsActivity : AppCompatActivity() {
             }
         }
     }
+
+    private fun sizeText(b: Long): String = when {
+        b <= 0 -> "Done"
+        b < 1024 * 1024 -> "${b / 1024} KB"
+        b < 1024L * 1024 * 1024 -> String.format("%.1f MB", b / 1048576.0)
+        else -> String.format("%.2f GB", b / 1073741824.0)
+    }
+
+    private fun openDownload(d: Downloads.Item) {
+        if (d.status != android.app.DownloadManager.STATUS_SUCCESSFUL) {
+            android.widget.Toast.makeText(this, "Not finished yet", android.widget.Toast.LENGTH_SHORT).show(); return
+        }
+        val dm = getSystemService(DOWNLOAD_SERVICE) as android.app.DownloadManager
+        val uri = dm.getUriForDownloadedFile(d.id)
+        if (uri == null) { android.widget.Toast.makeText(this, "The file is gone", android.widget.Toast.LENGTH_SHORT).show(); return }
+        try {
+            startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(uri, d.mime.ifBlank { "*/*" })
+                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK))
+        } catch (_: Exception) {
+            android.widget.Toast.makeText(this, "No app on this phone can open this file", android.widget.Toast.LENGTH_LONG).show()
+        }
+    }
+
+    // refresh progress while something is still downloading
+    private val tick = android.os.Handler(android.os.Looper.getMainLooper())
+    private val refresher = object : Runnable {
+        override fun run() {
+            if (mode != "downloads") return
+            if (all.any { it.dl != null && it.dl.status != android.app.DownloadManager.STATUS_SUCCESSFUL && it.dl.status != android.app.DownloadManager.STATUS_FAILED }) load()
+            tick.postDelayed(this, 1500)
+        }
+    }
+    override fun onResume() { super.onResume(); if (mode == "downloads") { load(); tick.postDelayed(refresher, 1500) } }
+    override fun onPause() { tick.removeCallbacks(refresher); super.onPause() }
 
     private fun otherDeviceRows(): List<Row> {
         val out = mutableListOf<Row>()
