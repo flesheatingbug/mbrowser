@@ -211,6 +211,7 @@ class MainActivity : AppCompatActivity() {
                 val t = cur()
                 when {
                     switcher.visibility == View.VISIBLE -> hideSwitcher()
+                    findViewById<View>(R.id.findBar).visibility == View.VISIBLE -> closeFind()
                     t != null && t.home && startPage.up() -> Unit
                     t != null && !t.home && t.web.canGoBack() -> t.web.goBack()
                     t != null && !t.home -> { t.home = true; t.url = ""; t.title = ""; render() }
@@ -597,6 +598,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun switchTo(i: Int) {
+        closeFind()
         current = i.coerceIn(0, tabs.size - 1)
         render()
     }
@@ -866,12 +868,48 @@ class MainActivity : AppCompatActivity() {
         Thumbs.saveThumb(this, Thumbs.hostOf(t.url), b)
     }
 
+    // ---------- find on this page ----------
+    private fun openFind() {
+        val bar = findViewById<View>(R.id.findBar)
+        val input = findViewById<EditText>(R.id.findInput)
+        val count = findViewById<TextView>(R.id.findCount)
+        bar.visibility = View.VISIBLE
+        fun web() = cur()?.takeIf { !it.home }?.web
+        fun listen() = web()?.setFindListener { active, total, _ ->
+            count.text = if (input.text.isEmpty()) "" else if (total == 0) "0" else "${active + 1}/$total"
+        }
+        listen()
+        input.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(a: CharSequence?, b: Int, c: Int, d: Int) {}
+            override fun onTextChanged(a: CharSequence?, b: Int, c: Int, d: Int) {}
+            override fun afterTextChanged(e: Editable?) {
+                val q = e?.toString() ?: ""
+                if (q.isEmpty()) { web()?.clearMatches(); count.text = "" } else web()?.findAllAsync(q)
+            }
+        })
+        input.setOnEditorActionListener { _, _, _ -> web()?.findNext(true); true }
+        findViewById<View>(R.id.findNext).setOnClickListener { web()?.findNext(true) }
+        findViewById<View>(R.id.findPrev).setOnClickListener { web()?.findNext(false) }
+        findViewById<View>(R.id.findClose).setOnClickListener { closeFind() }
+        input.requestFocus()
+        (getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager).showSoftInput(input, 0)
+    }
+
+    private fun closeFind() {
+        val bar = findViewById<View>(R.id.findBar)
+        if (bar.visibility != View.VISIBLE) return
+        cur()?.web?.clearMatches()
+        findViewById<EditText>(R.id.findInput).setText("")
+        bar.visibility = View.GONE
+        (getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager).hideSoftInputFromWindow(bar.windowToken, 0)
+    }
+
     private fun showMenu(anchor: View) {
         val t = cur()
         val m = PopupMenu(this, anchor)
         val items = listOf(
             0 to "New tab", 9 to "New private tab", 1 to "Bookmarks", 2 to "History", 3 to "Tabs from other devices", 4 to "Sync now",
-            5 to ((if (t?.desktop == true) "✓ " else "") + "Desktop site"), 6 to "Share page", 7 to "Add to speed dial", 8 to "Settings",
+            5 to ((if (t?.desktop == true) "✓ " else "") + "Desktop site"), 10 to "Find on this page", 6 to "Share page", 7 to "Add to speed dial", 8 to "Settings",
         )
         items.forEachIndexed { i, (id, label) -> m.menu.add(0, id, i, label) }
         m.setOnMenuItemClickListener {
@@ -891,6 +929,7 @@ class MainActivity : AppCompatActivity() {
                     Toast.makeText(this, "Added to speed dial", Toast.LENGTH_SHORT).show()
                 }
                 8 -> startActivity(Intent(this, SettingsActivity::class.java))
+                10 -> if (t != null && !t.home) openFind() else Toast.makeText(this, "Open a web page first", Toast.LENGTH_SHORT).show()
             }
             true
         }
