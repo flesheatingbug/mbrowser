@@ -294,8 +294,11 @@ function renderServerForm(card) {
 
   function showProfilePicker(profiles) {
     wrap.innerHTML = '';
-    const msg = el('p', 'note', 'Choose which server profile to use, or create a new one:');
+    const msg = el('p', 'note', profiles.length
+      ? 'Choose which server profile to use, or create a new one:'
+      : 'No profiles yet — create one to get started:');
     msg.style.marginBottom = '10px';
+
     const list = el('div', 'profile-list');
     for (const p of profiles) {
       const item = el('div', 'pitem');
@@ -310,17 +313,49 @@ function renderServerForm(card) {
       };
       list.append(item);
     }
-    const newBtn = el('button', 'btn-ghost', '+ Create new profile on server'); newBtn.style.marginTop = '8px';
-    newBtn.onclick = async () => {
-      const name = prompt('New profile name:'); if (!name) return;
+
+    // Inline create-new-profile form (replaces broken prompt())
+    const newSection = el('div'); newSection.style.marginTop = '10px';
+    const toggleBtn = el('button', 'btn-ghost', '+ Create new profile on server');
+    toggleBtn.style.padding = '6px 0';
+
+    const newForm = el('div');
+    newForm.style.cssText = 'display:none; flex-direction:column; gap:8px; margin-top:8px;';
+
+    const nameInput = el('input'); nameInput.type = 'text'; nameInput.placeholder = 'Profile name'; nameInput.value = 'Default';
+    const formRow = el('div'); formRow.style.cssText = 'display:flex; gap:8px;';
+    const createBtn = el('button', 'btn-primary', 'Create');
+    const cancelBtn = el('button', 'btn-ghost', 'Cancel');
+    formRow.append(createBtn, cancelBtn);
+    const formStatus = el('div', 'server-status');
+    newForm.append(nameInput, formRow, formStatus);
+
+    toggleBtn.onclick = () => {
+      const show = newForm.style.display === 'none';
+      newForm.style.display = show ? 'flex' : 'none';
+      if (show) setTimeout(() => nameInput.focus(), 50);
+    };
+    cancelBtn.onclick = () => { newForm.style.display = 'none'; };
+    createBtn.onclick = async () => {
+      const name = nameInput.value.trim();
+      if (!name) { formStatus.className = 'server-status err'; formStatus.textContent = 'Enter a profile name.'; return; }
+      createBtn.disabled = true; createBtn.textContent = 'Creating…'; formStatus.className = 'server-status';
       selectedServerProfile = name;
       const r = await browser.wizardConnect({ ...savedCreds, profile: name });
+      createBtn.disabled = false; createBtn.textContent = 'Create';
       if (r && r.ok) { serverConnected = true; status = await browser.wizardStatus() || status; step = 3; render(); }
-      else { showCredForm(); }
+      else { formStatus.className = 'server-status err'; formStatus.textContent = r?.error || 'Failed to create profile.'; }
     };
+    nameInput.onkeydown = (e) => { if (e.key === 'Enter') createBtn.click(); };
+
+    newSection.append(toggleBtn, newForm);
+
+    // Auto-expand create form when no profiles exist yet
+    if (!profiles.length) { newForm.style.display = 'flex'; setTimeout(() => nameInput.focus(), 50); }
+
     const backBtn = el('button', 'btn-ghost', '← Back'); backBtn.style.marginTop = '4px';
     backBtn.onclick = () => showCredForm();
-    wrap.append(msg, list, newBtn, backBtn);
+    wrap.append(msg, list, newSection, backBtn);
   }
 
   showCredForm();
