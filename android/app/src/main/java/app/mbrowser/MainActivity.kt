@@ -7,7 +7,13 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.net.Uri
+import android.graphics.Typeface
+import android.os.Build
 import android.os.Bundle
+import android.text.Editable
+import android.text.TextWatcher
+import android.view.Gravity
+import android.widget.LinearLayout
 import android.os.Environment
 import android.os.Handler
 import android.os.Looper
@@ -58,6 +64,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private val PRIVATE_PROFILE = "private"
+    private val ACTION_CLOSE_PRIVATE = "app.mbrowser.CLOSE_PRIVATE"
+    private val NOTICE_ID = 42
     private val MOBILE_FIX = "; wv"
     private val DESKTOP_UA =
         "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36"
@@ -76,6 +84,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tabCount: TextView
     private lateinit var btnReload: ImageButton
 
+    private var engineOverride: Engine? = null
     private val tabs = mutableListOf<Tab>()
     private var current = -1
     private val ui = Handler(Looper.getMainLooper())
@@ -121,6 +130,14 @@ class MainActivity : AppCompatActivity() {
                 (event != null && event.keyCode == KeyEvent.KEYCODE_ENTER && event.action == KeyEvent.ACTION_DOWN)) {
                 navigate(urlBar.text.toString()); true
             } else false
+        }
+        urlBar.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(a: CharSequence?, b: Int, c: Int, d: Int) {}
+            override fun onTextChanged(a: CharSequence?, b: Int, c: Int, d: Int) {}
+            override fun afterTextChanged(e: Editable?) { if (urlBar.hasFocus()) showSuggestions(e?.toString() ?: "") }
+        })
+        urlBar.setOnFocusChangeListener { _, focused ->
+            if (focused) showEngines() else { engineOverride = null; findViewById<View>(R.id.engineStrip).visibility = View.GONE; findViewById<View>(R.id.suggestScroll).visibility = View.GONE }
         }
         btnReload.setOnClickListener {
             val t = cur()
@@ -190,7 +207,131 @@ class MainActivity : AppCompatActivity() {
     private fun handleIntent(i: Intent?) {
         val data = i?.data
         if (i?.action == Intent.ACTION_VIEW && data != null) newTab(data.toString())
+        if (i?.action == ACTION_CLOSE_PRIVATE) closePrivateTabs()
     }
+
+    // ---------- search engine strip under the address bar ----------
+    private fun showEngines() {
+        val strip = findViewById<View>(R.id.engineStrip)
+        val row = findViewById<LinearLayout>(R.id.engineRow)
+        row.removeAllViews()
+        val engines = Settings.engines()
+        if (engines.size < 2) { strip.visibility = View.GONE; return }
+        val chosen = engineOverride ?: Settings.defaultEngine()
+        val d = resources.displayMetrics.density
+        for (e in engines) {
+            val tv = TextView(this)
+            tv.text = e.name.take(1).uppercase()
+            tv.gravity = Gravity.CENTER
+            tv.textSize = 18f
+            tv.typeface = Typeface.DEFAULT_BOLD
+            tv.setTextColor(getColor(R.color.text))
+            val bg = GradientDrawable()
+            bg.shape = GradientDrawable.OVAL
+            bg.setColor(getColor(R.color.card))
+            if (e.id == chosen.id) bg.setStroke((3 * d).toInt(), getColor(R.color.accent))
+            tv.background = bg
+            tv.contentDescription = "Search with ${e.name}"
+            val lp = LinearLayout.LayoutParams((48 * d).toInt(), (48 * d).toInt())
+            lp.marginEnd = (10 * d).toInt()
+            tv.setOnClickListener {
+                engineOverride = e
+                urlBar.hint = "Search with ${e.name}"
+                showEngines()
+                val text = urlBar.text.toString().trim()
+                if (text.isNotEmpty() && !text.contains("://") && (text.contains(' ') || !text.contains('.'))) navigate(text)
+            }
+            row.addView(tv, lp)
+        }
+        strip.visibility = View.VISIBLE
+    }
+
+    // ---------- predictive suggestions from bookmarks and history ----------
+    private fun showSuggestions(q0: String) {
+        val scroll = findViewById<View>(R.id.suggestScroll)
+        val list = findViewById<LinearLayout>(R.id.suggestList)
+        val q = q0.trim().lowercase()
+        if (q.isEmpty() || cur()?.priv == true) { scroll.visibility = View.GONE; return }
+        class Hit(val url: String, val title: String, var score: Int, val star: Boolean)
+        val hits = LinkedHashMap<String, Hit>()
+        fun bare(u: String) = u.removePrefix("https://").removePrefix("http://").removePrefix("www.")
+        fun consider(url: String, title: String, star: Boolean, recency: Int) {
+            val b = bare(url).lowercase(); val t = title.lowercase()
+            val score = when {
+                b.startsWith(q) -> 100
+                b.contains(q) -> 60
+                t.startsWith(q) -> 50
+                t.contains(q) -> 40
+                else -> return
+            } + (if (star) 25 else 0) + recency
+            val key = bare(url).trimEnd('/')
+            val h = hits[key]
+            if (h == null) hits[key] = Hit(url, title, score, star) else h.score += 4   // visited again: more likely
+        }
+        Store.bookmarkList().filter { !it.deleted }.forEach { consider(it.url, it.title, true, 0) }
+        Store.historyList().take(3000).forEachIndexed { i, v -> consider(v.url, v.title, false, if (i < 100) 10 else 0) }
+        val top = hits.values.sortedByDescending { it.score }.take(6)
+        list.removeAllViews()
+        if (top.isEmpty()) { scroll.visibility = View.GONE; return }
+        val d = resources.displayMetrics.density
+        for (h in top) {
+            val row = LinearLayout(this)
+            row.orientation = LinearLayout.VERTICAL
+            row.setPadding((16 * d).toInt(), (10 * d).toInt(), (16 * d).toInt(), (10 * d).toInt())
+            row.setBackgroundResource(android.R.drawable.list_selector_background)
+            val t1 = TextView(this); t1.text = (if (h.star) "★ " else "") + h.title.ifBlank { bare(h.url) }
+            t1.setTextColor(getColor(R.color.text)); t1.textSize = 16f; t1.maxLines = 1; t1.ellipsize = android.text.TextUtils.TruncateAt.END
+            val t2 = TextView(this); t2.text = bare(h.url)
+            t2.setTextColor(getColor(R.color.muted)); t2.textSize = 13f; t2.maxLines = 1; t2.ellipsize = android.text.TextUtils.TruncateAt.END
+            row.addView(t1); row.addView(t2)
+            row.setOnClickListener { navigate(h.url) }
+            list.addView(row, LinearLayout.LayoutParams(-1, -2))
+        }
+        scroll.visibility = View.VISIBLE
+    }
+
+    // ---------- private tab notification ----------
+    private fun updatePrivateNotice() {
+        val n = tabs.count { it.priv }
+        val nm = getSystemService(NOTIFICATION_SERVICE) as android.app.NotificationManager
+        if (n == 0) { nm.cancel(NOTICE_ID); return }
+        if (Build.VERSION.SDK_INT >= 33 &&
+            checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 7); return
+        }
+        nm.createNotificationChannel(android.app.NotificationChannel("private", "Private tabs", android.app.NotificationManager.IMPORTANCE_LOW))
+        val open = android.app.PendingIntent.getActivity(this, 0,
+            Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
+            android.app.PendingIntent.FLAG_IMMUTABLE or android.app.PendingIntent.FLAG_UPDATE_CURRENT)
+        val close = android.app.PendingIntent.getActivity(this, 1,
+            Intent(this, MainActivity::class.java).setAction(ACTION_CLOSE_PRIVATE).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
+            android.app.PendingIntent.FLAG_IMMUTABLE or android.app.PendingIntent.FLAG_UPDATE_CURRENT)
+        val b = android.app.Notification.Builder(this, "private")
+            .setSmallIcon(R.drawable.ic_tabs)
+            .setContentTitle(if (n == 1) "1 private tab open" else "$n private tabs open")
+            .setContentText("Tap to return, or close them all")
+            .setContentIntent(open)
+            .setOngoing(true)
+            .addAction(android.app.Notification.Action.Builder(null, "Close private tabs", close).build())
+        nm.notify(NOTICE_ID, b.build())
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == 7) updatePrivateNotice()
+    }
+
+    private fun closePrivateTabs() {
+        if (tabs.none { it.priv }) return
+        val wasHome = cur()?.priv == true
+        tabs.filter { it.priv }.forEach { it.web.destroy() }
+        tabs.removeAll { it.priv }
+        if (tabs.isEmpty()) newTab(null)
+        if (current >= tabs.size || wasHome) current = tabs.size - 1
+        hideSwitcher(); render(); cleanupPrivate()
+    }
+
+
 
     override fun onStart() {
         super.onStart()
@@ -205,6 +346,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        (getSystemService(NOTIFICATION_SERVICE) as android.app.NotificationManager).cancel(NOTICE_ID)
         tabs.forEach { it.web.destroy() }
         super.onDestroy()
     }
@@ -419,6 +561,7 @@ class MainActivity : AppCompatActivity() {
     private fun updateChrome() {
         val t = cur()
         tabCount.text = tabs.size.toString()
+        updatePrivateNotice()
         val isPriv = t?.priv == true
         findViewById<View>(R.id.addressPill).setBackgroundResource(if (isPriv) R.drawable.bg_pill_private else R.drawable.bg_pill)
         urlBar.hint = if (isPriv) "Private: search or type URL" else "Search or type URL"
@@ -486,7 +629,8 @@ class MainActivity : AppCompatActivity() {
         if (s.isEmpty()) return ""
         if (Regex("^[a-zA-Z][a-zA-Z0-9+.-]*://").containsMatchIn(s)) return s
         if (!s.contains(' ') && (s.contains('.') || s.startsWith("localhost"))) return "https://$s"
-        return Settings.searchUrl(s)
+        val e = engineOverride ?: Settings.defaultEngine()
+        return e.url.replace("%s", java.net.URLEncoder.encode(s, "UTF-8"))
     }
 
     private fun navigate(input: String) {

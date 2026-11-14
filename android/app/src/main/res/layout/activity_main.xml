@@ -86,6 +86,37 @@
         android:progressTint="@color/accent"
         android:visibility="invisible" />
 
+    <HorizontalScrollView
+        android:id="@+id/engineStrip"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@color/bar"
+        android:scrollbars="none"
+        android:visibility="gone">
+        <LinearLayout
+            android:id="@+id/engineRow"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:paddingStart="10dp"
+            android:paddingEnd="10dp"
+            android:paddingTop="6dp"
+            android:paddingBottom="10dp" />
+    </HorizontalScrollView>
+
+    <ScrollView
+        android:id="@+id/suggestScroll"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@color/bg"
+        android:visibility="gone">
+        <LinearLayout
+            android:id="@+id/suggestList"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical" />
+    </ScrollView>
+
     <FrameLayout
         android:id="@+id/stack"
         android:layout_width="match_parent"
