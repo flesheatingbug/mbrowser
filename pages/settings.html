@@ -461,7 +461,7 @@
     const m = $('main');
     m.style.cssText = '';
     m.textContent = '';
-    m.append(el('h1', null, CATS.find((c) => c[0] === cur)[1]));
+    if (cur !== 'server') m.append(el('h1', null, CATS.find((c) => c[0] === cur)[1]));
 
     if (cur === 'search') { searchSection(m); return; }
     if (cur === 'keyboard') { await keyboardSection(m); return; }
@@ -480,29 +480,38 @@
       return;
     }
     if (cur === 'server') {
+      m.style.cssText = 'padding:0;max-width:none;display:flex;flex-direction:column;flex:1;height:100vh;';
+      m.textContent = '';
       const serverUrl = S.sync.server ? S.sync.server.replace(/\/$/, '') : '';
       if (!serverUrl) {
+        m.style.cssText = '';
+        m.append(el('h1', null, 'Server Admin'));
         m.append(el('p', 'muted', 'No server configured. Set up a server address in Sync settings first.'));
         const btn = el('button'); btn.textContent = 'Go to Sync settings';
         btn.onclick = () => { cur = 'sync'; render(); };
         m.append(btn);
       } else {
-        const card = el('div'); card.style.cssText = 'background:var(--tab);border:1px solid var(--line);border-radius:14px;padding:22px 24px;margin-bottom:20px;';
-        const urlRow = el('div'); urlRow.style.cssText = 'display:flex;align-items:center;gap:10px;margin-bottom:14px;';
-        const urlText = el('code'); urlText.style.cssText = 'flex:1;font-size:13px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
-        urlText.textContent = serverUrl;
-        const openBtn = el('button'); openBtn.textContent = 'Open server admin';
-        openBtn.style.cssText = 'background:var(--accent);color:var(--onaccent);border:0;padding:7px 18px;border-radius:8px;font-size:14px;cursor:pointer;white-space:nowrap;';
-        openBtn.onclick = () => browser.openUrl('my://server-admin', 'tab');
-        urlRow.append(urlText, openBtn);
-        const status = el('div'); status.style.cssText = 'font-size:13px;color:var(--muted);';
-        status.textContent = 'Checking connection…';
-        card.append(urlRow, status);
-        m.append(card);
+        // slim header bar
+        const bar = el('div'); bar.style.cssText = 'display:flex;align-items:center;gap:10px;padding:6px 14px;background:var(--tab);border-bottom:1px solid var(--line);flex:none;height:38px;';
+        const dot = el('span'); dot.style.cssText = 'width:8px;height:8px;border-radius:50%;background:var(--muted);flex:none;';
+        const urlLbl = el('code'); urlLbl.style.cssText = 'flex:1;font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+        urlLbl.textContent = serverUrl;
+        const reloadBtn = el('button'); reloadBtn.textContent = '↻ Reload'; reloadBtn.style.cssText = 'padding:2px 10px;font-size:12px;';
+        const popBtn = el('button'); popBtn.textContent = '⬡ Open in tab'; popBtn.style.cssText = 'padding:2px 10px;font-size:12px;';
+        popBtn.onclick = () => browser.openUrl('my://server-admin', 'tab');
+        bar.append(dot, urlLbl, reloadBtn, popBtn);
+        // iframe fills the rest
+        const frame = el('iframe'); frame.style.cssText = 'flex:1;border:0;width:100%;';
+        frame.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms allow-popups');
+        frame.src = serverUrl;
+        frame.onload = () => { dot.style.background = '#4cc38a'; };
+        frame.onerror = () => { dot.style.background = '#e5534b'; };
+        reloadBtn.onclick = () => { frame.src = ''; frame.src = serverUrl; };
+        m.append(bar, frame);
+        // ping for dot colour
         browser.invoke('server:ping', serverUrl).then((r) => {
-          status.textContent = r.ok ? '● Connected' : ('● Server returned ' + r.status);
-          status.style.color = r.ok ? '#4cc38a' : '#e8a33d';
-        }).catch(() => { status.textContent = '● Could not reach server'; status.style.color = '#e5534b'; });
+          dot.style.background = r && r.ok ? '#4cc38a' : '#e8a33d';
+        }).catch(() => { dot.style.background = '#e5534b'; });
       }
       return;
     }
