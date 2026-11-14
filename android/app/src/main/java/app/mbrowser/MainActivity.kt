@@ -38,6 +38,7 @@ import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import java.io.ByteArrayInputStream
 
 class MainActivity : AppCompatActivity() {
@@ -59,6 +60,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var urlBar: EditText
     private lateinit var progress: ProgressBar
     private lateinit var container: FrameLayout
+    private lateinit var swipe: SwipeRefreshLayout
     private lateinit var switcher: View
     private lateinit var switcherList: RecyclerView
     private lateinit var switcherTitle: TextView
@@ -85,6 +87,16 @@ class MainActivity : AppCompatActivity() {
         urlBar = findViewById(R.id.urlBar)
         progress = findViewById(R.id.progress)
         container = findViewById(R.id.container)
+        swipe = findViewById(R.id.swipe)
+        swipe.setColorSchemeResources(R.color.accent)
+        swipe.setProgressBackgroundColorSchemeResource(R.color.card)
+        // only a web page that is scrolled to its top can be pulled down; the speed dial never refreshes
+        swipe.setOnChildScrollUpCallback { _, _ -> val t = cur(); t == null || t.home || t.web.scrollY > 0 }
+        swipe.setOnRefreshListener {
+            val t = cur()
+            if (t != null && !t.home) t.web.reload() else swipe.isRefreshing = false
+        }
+        findViewById<View>(R.id.appLogo).setOnClickListener { goHome() }
         switcher = findViewById(R.id.switcher)
         switcherList = findViewById(R.id.switcherList)
         switcherTitle = findViewById(R.id.switcherTitle)
@@ -238,7 +250,7 @@ class MainActivity : AppCompatActivity() {
                 tab.url = url
                 tab.title = view.title ?: ""
                 Store.addVisit(url, tab.title)
-                if (tab === cur()) { progress.visibility = View.INVISIBLE; updateChrome() }
+                if (tab === cur()) { progress.visibility = View.INVISIBLE; swipe.isRefreshing = false; updateChrome() }
                 ui.postDelayed({ afterLoad(tab, url) }, 1500)
             }
         }
@@ -318,6 +330,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun render() {
+        swipe.isRefreshing = false
         container.removeAllViews()
         val t = cur() ?: return
         if (t.home) {
