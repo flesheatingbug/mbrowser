@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Setup</title>
+<link rel="stylesheet" href="my://assets/theme.css">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: system-ui, sans-serif; background: var(--bg); color: var(--fg); font-size: 14px; height: 100vh; display: flex; flex-direction: column; }
+input, select { background: var(--tab); border: 1px solid var(--line); border-radius: 8px; color: var(--fg); padding: 8px 12px; font-size: 14px; width: 100%; outline: none; }
+input:focus { border-color: var(--accent); }
+button { border: none; border-radius: 8px; padding: 9px 18px; font-size: 14px; cursor: pointer; font-family: inherit; }
+.btn-primary { background: var(--accent); color: var(--onaccent); }
+.btn-primary:hover { opacity: .88; }
+.btn-primary:disabled { opacity: .45; cursor: default; }
+.btn-ghost { background: transparent; color: var(--muted); }
+.btn-ghost:hover { color: var(--fg); }
+.btn-secondary { background: var(--tab); color: var(--fg); border: 1px solid var(--line); }
+.btn-secondary:hover { border-color: var(--muted); }
+
+/* header */
+.header { padding: 20px 28px 0; display: flex; align-items: center; gap: 10px; }
+.logo { width: 32px; height: 32px; }
+.app-name { font-size: 16px; font-weight: 600; }
+.dots { margin-left: auto; display: flex; gap: 6px; align-items: center; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--line); transition: background .2s; }
+.dot.active { background: var(--accent); }
+.dot.done { background: var(--muted); }
+
+/* main content */
+.content { flex: 1; padding: 24px 28px 20px; overflow-y: auto; display: flex; flex-direction: column; }
+h2 { font-size: 22px; font-weight: 700; margin-bottom: 6px; }
+.subtitle { color: var(--muted); margin-bottom: 24px; line-height: 1.5; }
+.field { margin-bottom: 14px; }
+.field label { display: block; color: var(--muted); font-size: 12px; margin-bottom: 5px; }
+.err { color: #ff6b6b; font-size: 13px; min-height: 18px; margin-top: 4px; }
+.note { font-size: 12px; color: var(--muted); line-height: 1.5; }
+
+/* option cards */
+.cards { display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px; }
+.card { border: 2px solid var(--line); border-radius: 12px; padding: 14px 16px; cursor: pointer; transition: border-color .15s; }
+.card:hover { border-color: var(--muted); }
+.card.selected { border-color: var(--accent); }
+.card-title { font-weight: 600; margin-bottom: 2px; }
+.card-desc { font-size: 12px; color: var(--muted); line-height: 1.4; }
+.card .expand { margin-top: 14px; display: none; }
+.card.selected .expand { display: block; }
+
+/* toggle */
+.toggle-row { display: flex; align-items: center; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.toggle-row:last-child { border-bottom: none; }
+.toggle-label { flex: 1; }
+.toggle-label b { display: block; }
+.toggle-label span { font-size: 12px; color: var(--muted); }
+.toggle { width: 42px; height: 24px; border-radius: 12px; border: none; cursor: pointer; position: relative; flex-none; transition: background .15s; }
+.toggle.on { background: var(--accent); }
+.toggle.off { background: var(--line); }
+.toggle::after { content: ''; position: absolute; width: 18px; height: 18px; border-radius: 50%; background: #fff; top: 3px; transition: left .15s; }
+.toggle.on::after { left: 21px; }
+.toggle.off::after { left: 3px; }
+
+/* footer */
+.footer { padding: 16px 28px; display: flex; align-items: center; justify-content: flex-end; gap: 10px; border-top: 1px solid var(--line); }
+
+/* server status */
+.server-status { font-size: 13px; padding: 8px 0; min-height: 24px; }
+.server-status.ok { color: #4cc38a; }
+.server-status.err { color: #ff6b6b; }
+
+/* profile picker */
+.profile-list { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+.pitem { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 2px solid var(--line); border-radius: 10px; cursor: pointer; }
+.pitem:hover { border-color: var(--muted); }
+.pitem.selected { border-color: var(--accent); }
+.pdot { width: 32px; height: 32px; border-radius: 50%; flex: none; display: grid; place-items: center; color: #fff; font-weight: 700; font-size: 14px; }
+
+/* done step */
+.done-icon { width: 52px; height: 52px; border-radius: 50%; background: rgba(76,195,138,.15); display: grid; place-items: center; margin: 0 auto 14px; }
+.done-icon svg { width: 26px; height: 26px; }
+.done-title { text-align: center; font-size: 22px; font-weight: 700; margin-bottom: 6px; }
+.done-sub { text-align: center; color: var(--muted); line-height: 1.5; }
+.summary { margin-top: 14px; display: flex; flex-direction: column; gap: 7px; }
+.summary-item { display: flex; align-items: center; gap: 10px; font-size: 13px; }
+.summary-item svg { flex: none; width: 16px; height: 16px; }
+</style>
+</head>
+<body>
+<div class="header">
+  <img class="logo" src="my://assets/logo.png" alt="">
+  <span class="app-name">mbrowser</span>
+  <div class="dots" id="dots"></div>
+</div>
+<div class="content" id="content"></div>
+<div class="footer" id="footer"></div>
+
+<script>
+const TOTAL_STEPS = 4;
+let step = 1;
+let status = {};
+let serverConnected = false;
+let serverProfiles = null; // from server when needProfile
+let selectedServerProfile = null;
+let vaultChoice = 'skip'; // 'device' | 'skip'
+let openLast = false;
+let profileName = '';      // name for the existing/server profile
+let localProfileName = 'Default (local)'; // name for new standalone profile
+let standaloneMode = false; // true = create new local profile, false = use existing
+let profileRenamed = false;
+
+const $ = (id) => document.getElementById(id);
+const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+const svgCheck = `<svg viewBox="0 0 20 20" fill="none" stroke="#4cc38a" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="4,10 8,15 16,6"/></svg>`;
+
+async function init() {
+  status = await browser.wizardStatus() || {};
+  profileName = status.profileName || 'Default';
+  localProfileName = 'Default (local)';
+  openLast = status.openLastProfile || false;
+  vaultChoice = (status.safeStorageAvailable && !status.vaultExists) ? 'device' : 'skip';
+  serverConnected = status.serverConfigured;
+  standaloneMode = !serverConnected; // default: standalone if no server configured
+  render();
+}
+
+function renderDots() {
+  const d = $('dots');
+  d.innerHTML = '';
+  for (let i = 1; i <= TOTAL_STEPS; i++) {
+    const dot = el('div', 'dot' + (i === step ? ' active' : i < step ? ' done' : ''));
+    d.append(dot);
+  }
+}
+
+function renderStep1() {
+  const c = $('content');
+  c.innerHTML = '';
+  const wrap = el('div');
+  wrap.style.cssText = 'flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;padding:20px 0';
+  const img = el('img'); img.src = 'my://assets/logo.png'; img.style.cssText = 'width:72px;height:72px;margin-bottom:20px';
+  const h = el('h2', null, 'Welcome to mbrowser');
+  const sub = el('p', 'subtitle', "Let's get you set up in a few quick steps.");
+  sub.style.maxWidth = '340px';
+  wrap.append(img, h, sub);
+  c.append(wrap);
+
+  const f = $('footer');
+  f.innerHTML = '';
+  const next = el('button', 'btn-primary', 'Get started →');
+  next.onclick = () => { step = 2; render(); };
+  f.append(next);
+}
+
+function renderStep2() {
+  const c = $('content');
+  c.innerHTML = '';
+  const h = el('h2', null, 'Sync server');
+  const sub = el('p', 'subtitle', 'Connect to your self-hosted server to sync bookmarks, passwords and more. Or start standalone — you can connect later in Settings → Sync.');
+  c.append(h, sub);
+
+  // Cards
+  const cards = el('div', 'cards');
+
+  // Server card
+  const cardServer = el('div', 'card' + (serverConnected || !standaloneMode ? ' selected' : ''));
+  const serverTitle = el('div', 'card-title', 'Connect to my server');
+  const serverDesc = el('div', 'card-desc', 'Sync everything across your devices via your own Docker server.');
+  const expand = el('div', 'expand');
+
+  if (serverConnected) {
+    const acc = status.syncAccount || {};
+    const ok = el('div', 'server-status ok', `✓ Connected as ${acc.user || ''}${acc.profile ? ' · profile: ' + acc.profile : ''}`);
+    expand.append(ok);
+    const disc = el('button', 'btn-ghost', 'Disconnect'); disc.style.marginTop = '8px';
+    disc.onclick = async () => {
+      await browser.syncLogout();
+      serverConnected = false;
+      status.serverConfigured = false;
+      status = await browser.wizardStatus() || status;
+      render();
+    };
+    expand.append(disc);
+  } else {
+    expand.append(renderServerForm(cardServer));
+  }
+  cardServer.append(serverTitle, serverDesc, expand);
+  cardServer.onclick = (e) => {
+    if (e.target.closest('input, button, select')) return;
+    if (!serverConnected) {
+      cardServer.classList.add('selected'); cardStandalone.classList.remove('selected');
+      standaloneMode = false;
+    }
+  };
+
+  // Standalone card
+  const cardStandalone = el('div', 'card' + (!serverConnected && standaloneMode ? ' selected' : ''));
+  const saTitle = el('div', 'card-title', 'Start standalone');
+  const saDesc = el('div', 'card-desc', 'All data stays on this device. Connect a server later in Settings → Sync.');
+  cardStandalone.append(saTitle, saDesc);
+  cardStandalone.onclick = () => {
+    cardStandalone.classList.add('selected'); cardServer.classList.remove('selected'); serverProfiles = null;
+    standaloneMode = true;
+    // localProfileName stays fixed as 'Default (local)' — never re-appended
+  };
+
+  cards.append(cardServer, cardStandalone);
+  c.append(cards);
+
+  const f = $('footer');
+  f.innerHTML = '';
+  const back = el('button', 'btn-ghost', '← Back'); back.onclick = () => { step = 1; render(); };
+  const next = el('button', 'btn-primary', 'Next →'); next.onclick = () => { step = 3; render(); };
+  f.append(back, next);
+}
+
+function renderServerForm(card) {
+  const wrap = el('div');
+  let savedCreds = null; // set when server asks for OTP or profile pick
+
+  function showCredForm() {
+    wrap.innerHTML = '';
+    const fServer = el('div', 'field');
+    fServer.append(Object.assign(el('label', null, 'Server address')));
+    const iServer = el('input'); iServer.type = 'text'; iServer.placeholder = 'https://sync.yourdomain.com';
+    if (savedCreds) iServer.value = savedCreds.server;
+    fServer.append(iServer);
+
+    const fUser = el('div', 'field');
+    fUser.append(el('label', null, 'Username'));
+    const iUser = el('input'); iUser.type = 'text'; iUser.autocomplete = 'username';
+    if (savedCreds) iUser.value = savedCreds.username;
+    fUser.append(iUser);
+
+    const fPw = el('div', 'field');
+    fPw.append(el('label', null, 'Password'));
+    const iPw = el('input'); iPw.type = 'password'; iPw.autocomplete = 'current-password';
+    fPw.append(iPw);
+
+    const statusEl = el('div', 'server-status');
+    const connectBtn = el('button', 'btn-secondary', 'Connect'); connectBtn.style.marginTop = '4px';
+
+    connectBtn.onclick = async () => {
+      connectBtn.disabled = true; connectBtn.textContent = 'Connecting…'; statusEl.className = 'server-status';
+      const url = iServer.value.trim();
+      if (!url) { statusEl.className = 'server-status err'; statusEl.textContent = 'Enter the server address.'; connectBtn.disabled = false; connectBtn.textContent = 'Connect'; return; }
+      savedCreds = { server: url, username: iUser.value, password: iPw.value };
+      const r = await browser.wizardConnect({ ...savedCreds, profile: selectedServerProfile || '' });
+      connectBtn.disabled = false; connectBtn.textContent = 'Connect';
+      if (r && r.needTotp) { showOtpForm(); return; }
+      if (r && r.needProfile) { showProfilePicker(r.profiles); return; }
+      if (r && r.ok) {
+        serverConnected = true; status = await browser.wizardStatus() || status; step = 3; render();
+      } else {
+        statusEl.className = 'server-status err'; statusEl.textContent = r?.error || 'Connection failed.';
+      }
+    };
+    wrap.append(fServer, fUser, fPw, connectBtn, statusEl);
+  }
+
+  function showOtpForm() {
+    wrap.innerHTML = '';
+    const msg = el('p'); msg.style.cssText = 'margin-bottom:14px;line-height:1.5';
+    msg.innerHTML = '<strong>Two-factor authentication</strong><br><span style="color:var(--muted);font-size:13px">Enter the 6-digit code from your authenticator app.</span>';
+
+    const fOtp = el('div', 'field');
+    fOtp.append(el('label', null, 'Authenticator code'));
+    const iOtp = el('input'); iOtp.type = 'text'; iOtp.inputMode = 'numeric'; iOtp.placeholder = '123 456'; iOtp.autocomplete = 'one-time-code'; iOtp.maxLength = 10;
+    iOtp.style.cssText = 'letter-spacing:4px;font-size:20px;text-align:center';
+    fOtp.append(iOtp);
+
+    const statusEl = el('div', 'server-status');
+    const row = el('div'); row.style.cssText = 'display:flex;gap:8px;margin-top:8px';
+    const verifyBtn = el('button', 'btn-primary', 'Verify');
+    const backBtn = el('button', 'btn-ghost', 'Back');
+    row.append(verifyBtn, backBtn);
+
+    verifyBtn.onclick = async () => {
+      verifyBtn.disabled = true; verifyBtn.textContent = 'Verifying…'; statusEl.className = 'server-status';
+      const r = await browser.wizardConnect({ ...savedCreds, totp: iOtp.value.replace(/\s/g, ''), profile: selectedServerProfile || '' });
+      verifyBtn.disabled = false; verifyBtn.textContent = 'Verify';
+      if (r && r.needProfile) { savedCreds.totp = iOtp.value.replace(/\s/g, ''); showProfilePicker(r.profiles); return; }
+      if (r && r.ok) {
+        serverConnected = true; status = await browser.wizardStatus() || status; step = 3; render();
+      } else {
+        statusEl.className = 'server-status err'; statusEl.textContent = r?.error || 'Invalid code — try again.';
+        iOtp.select();
+      }
+    };
+    backBtn.onclick = () => showCredForm();
+    iOtp.onkeydown = (e) => { if (e.key === 'Enter') verifyBtn.click(); };
+
+    wrap.append(msg, fOtp, row, statusEl);
+    setTimeout(() => iOtp.focus(), 50);
+  }
+
+  function showProfilePicker(profiles) {
+    wrap.innerHTML = '';
+    const msg = el('p', 'note', 'Choose which server profile to use, or create a new one:');
+    msg.style.marginBottom = '10px';
+    const list = el('div', 'profile-list');
+    for (const p of profiles) {
+      const item = el('div', 'pitem');
+      const dot = el('div', 'pdot', p.name[0].toUpperCase()); dot.style.background = '#5b8cff';
+      item.append(dot, el('span', null, p.name));
+      item.onclick = async () => {
+        selectedServerProfile = String(p.id);
+        list.querySelectorAll('.pitem').forEach(x => x.classList.remove('selected')); item.classList.add('selected');
+        const r = await browser.wizardConnect({ ...savedCreds, profile: selectedServerProfile });
+        if (r && r.ok) { serverConnected = true; status = await browser.wizardStatus() || status; step = 3; render(); }
+        else { showCredForm(); }
+      };
+      list.append(item);
+    }
+    const newBtn = el('button', 'btn-ghost', '+ Create new profile on server'); newBtn.style.marginTop = '8px';
+    newBtn.onclick = async () => {
+      const name = prompt('New profile name:'); if (!name) return;
+      selectedServerProfile = name;
+      const r = await browser.wizardConnect({ ...savedCreds, profile: name });
+      if (r && r.ok) { serverConnected = true; status = await browser.wizardStatus() || status; step = 3; render(); }
+      else { showCredForm(); }
+    };
+    const backBtn = el('button', 'btn-ghost', '← Back'); backBtn.style.marginTop = '4px';
+    backBtn.onclick = () => showCredForm();
+    wrap.append(msg, list, newBtn, backBtn);
+  }
+
+  showCredForm();
+  return wrap;
+}
+
+function renderStep3() {
+  const c = $('content');
+  c.innerHTML = '';
+  const h = el('h2', null, standaloneMode ? 'New local profile' : 'Your profile');
+  const sub = el('p', 'subtitle', standaloneMode
+    ? 'A new local profile will be created. Your existing profile is kept and can be opened separately.'
+    : 'Customise how mbrowser handles profiles and passwords.');
+  c.append(h, sub);
+
+  // Profile name
+  const fName = el('div', 'field');
+  const lName = el('label', null, standaloneMode ? 'Local profile name' : 'Profile name');
+  const iName = el('input'); iName.type = 'text'; iName.value = standaloneMode ? localProfileName : profileName;
+  iName.oninput = () => { if (standaloneMode) localProfileName = iName.value; else profileName = iName.value; };
+  fName.append(lName, iName);
+  c.append(fName);
+
+  // Toggles
+  const toggles = el('div'); toggles.style.marginBottom = '20px';
+
+  // Open last profile
+  const olRow = el('div', 'toggle-row');
+  const olLabel = el('div', 'toggle-label');
+  const olTitle = el('b', null, 'Open last-used profile on launch');
+  const olDesc = el('span', null, 'Skip the profile chooser and jump straight back in.');
+  olLabel.append(olTitle, olDesc);
+  const olBtn = el('button', 'toggle ' + (openLast ? 'on' : 'off'));
+  olBtn.onclick = () => { openLast = !openLast; olBtn.className = 'toggle ' + (openLast ? 'on' : 'off'); };
+  olRow.append(olLabel, olBtn);
+  toggles.append(olRow);
+  c.append(toggles);
+
+  // Vault mode
+  const vh = el('h3', null, 'Password manager'); vh.style.marginBottom = '10px';
+  c.append(vh);
+  const vcards = el('div', 'cards');
+
+  if (status.safeStorageAvailable && !status.vaultExists) {
+    const cDev = el('div', 'card' + (vaultChoice === 'device' ? ' selected' : ''));
+    cDev.append(el('div', 'card-title', 'Auto-unlock (recommended)'));
+    cDev.append(el('div', 'card-desc', 'No master password needed. The vault key is protected by your OS account via the system keychain.'));
+    cDev.onclick = () => { vaultChoice = 'device'; cDev.classList.add('selected'); cSkip.classList.remove('selected'); };
+
+    const cSkip = el('div', 'card' + (vaultChoice === 'skip' ? ' selected' : ''));
+    cSkip.append(el('div', 'card-title', 'Set up later'));
+    cSkip.append(el('div', 'card-desc', 'You can set a master password in Settings → Passwords at any time.'));
+    cSkip.onclick = () => { vaultChoice = 'skip'; cSkip.classList.add('selected'); cDev.classList.remove('selected'); };
+
+    vcards.append(cDev, cSkip);
+  } else if (status.vaultExists) {
+    const note = el('p', 'note', status.vaultDeviceMode ? '✓ Using auto-unlock (device mode).' : '✓ Vault is already set up.');
+    vcards.append(note);
+  } else {
+    const note = el('p', 'note', 'OS keychain is not available on this system. You can set a master password later in Settings → Passwords.');
+    vcards.append(note);
+  }
+  c.append(vcards);
+
+  const f = $('footer');
+  f.innerHTML = '';
+  const errEl = el('span', 'err', ''); errEl.style.flex = '1';
+  const back = el('button', 'btn-ghost', '← Back'); back.onclick = () => { step = 2; render(); };
+  const next = el('button', 'btn-primary', 'Finish →');
+  next.onclick = async () => {
+    next.disabled = true; next.textContent = 'Saving…'; errEl.textContent = '';
+    if (standaloneMode) {
+      // Create a new local profile and set it as default
+      const name = localProfileName.trim() || 'Default (local)';
+      const r = await browser.wizardCreateProfile(name);
+      if (r && r.error) { errEl.textContent = r.error; next.disabled = false; next.textContent = 'Finish →'; return; }
+      profileRenamed = true;
+    } else {
+      // Rename existing profile if changed
+      if (profileName.trim() && profileName !== status.profileName) {
+        const r = await browser.wizardRenameProfile(profileName.trim());
+        if (r && r.error) { errEl.textContent = r.error; next.disabled = false; next.textContent = 'Finish →'; return; }
+        profileRenamed = true;
+      }
+    }
+    // Open last profile
+    await browser.wizardSetOpenLast(openLast);
+    // Vault device mode
+    if (vaultChoice === 'device' && status.safeStorageAvailable && !status.vaultExists) {
+      const r = await browser.wizardVaultDevice();
+      if (r && r.error) { errEl.textContent = 'Vault: ' + r.error; next.disabled = false; next.textContent = 'Finish →'; return; }
+    }
+    step = 4; render();
+  };
+  f.append(errEl, back, next);
+}
+
+function renderStep4() {
+  const c = $('content');
+  c.innerHTML = '';
+  c.style.alignItems = 'center';
+  c.style.justifyContent = 'center';
+  c.style.textAlign = 'center';
+
+  const icon = el('div', 'done-icon');
+  icon.innerHTML = svgCheck;
+  const title = el('div', 'done-title', "You're all set!");
+  const sub = el('div', 'done-sub', 'mbrowser is ready to use.');
+
+  const items = [];
+  if (serverConnected) items.push('Connected to sync server');
+  const shownName = standaloneMode ? localProfileName : profileName;
+  if (standaloneMode) items.push(`New local profile: ${shownName || 'Default (local)'}`);
+  else if (profileRenamed || (shownName && shownName !== status.profileName)) items.push(`Profile: ${shownName}`);
+  if (openLast) items.push('Opens last-used profile on launch');
+  if (vaultChoice === 'device' && status.safeStorageAvailable) items.push('Password vault: auto-unlock enabled');
+
+  const summary = el('div', 'summary');
+  summary.style.textAlign = 'left';
+  for (const text of items) {
+    const item = el('div', 'summary-item');
+    item.innerHTML = svgCheck + `<span>${text}</span>`;
+    summary.append(item);
+  }
+
+  const start = el('button', 'btn-primary', 'Start browsing');
+  start.style.marginTop = '20px';
+  start.onclick = async () => { await browser.wizardDone(); };
+
+  c.append(icon, title, sub, ...(items.length ? [summary] : []), start);
+
+  $('footer').innerHTML = '';
+}
+
+function render() {
+  renderDots();
+  const c = $('content');
+  c.style.alignItems = '';
+  c.style.justifyContent = '';
+  c.style.textAlign = '';
+  if (step === 1) renderStep1();
+  else if (step === 2) renderStep2();
+  else if (step === 3) renderStep3();
+  else if (step === 4) renderStep4();
+}
+
+init();
+</script>
+</body>
+</html>

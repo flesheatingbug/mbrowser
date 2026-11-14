@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Notes</title>
+<link rel="stylesheet" href="my://assets/theme.css">
+<link rel="stylesheet" href="my://assets/common.css">
+<style>
+  html, body { height: 100%; }
+  .app { display: flex; height: 100vh; }
+  aside { width: 270px; flex: none; border-right: 1px solid var(--line); display: flex; flex-direction: column; background: var(--bg); }
+  aside .head { padding: 18px 16px 10px; display: flex; align-items: center; gap: 8px; }
+  aside h1 { flex: 1; font-size: 18px; margin: 0; }
+  #list { flex: 1; overflow-y: auto; padding: 4px 8px 20px; }
+  .note-item { padding: 8px 10px; border-radius: 8px; cursor: pointer; }
+  .note-item:hover { background: var(--tab); }
+  .note-item.on { background: var(--accent); color: var(--onaccent); }
+  .note-item.bin-item { opacity: .7; }
+  .note-item .nm { font-weight: 500; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .note-item .meta { font-size: 11px; opacity: .7; margin-top: 2px; }
+  aside .bin-entry { padding: 8px 10px; border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 6px; }
+  aside .bin-entry:hover { background: var(--tab); }
+  aside .bin-entry.on { background: var(--accent); color: var(--onaccent); }
+  main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  #editor { flex: 1; display: flex; flex-direction: column; padding: 20px 24px; gap: 10px; }
+  #editor.hidden { display: none; }
+  #etitle { font-size: 20px; font-weight: 600; border: 0; background: transparent; color: var(--fg); width: 100%; outline: none; }
+  #etitle::placeholder { color: var(--muted); }
+  #etext { flex: 1; border: 0; background: transparent; color: var(--fg); font: inherit; font-size: 14px; line-height: 1.6; resize: none; outline: none; min-height: 200px; }
+  #etext::placeholder { color: var(--muted); }
+  .ebar { display: flex; gap: 8px; align-items: center; padding: 10px 24px; border-top: 1px solid var(--line); }
+  .ebar .meta { flex: 1; font-size: 12px; color: var(--muted); }
+  #empty-msg { flex: 1; display: flex; align-items: center; justify-content: center; color: var(--muted); flex-direction: column; gap: 12px; }
+  .bin-bar { padding: 10px 24px; background: var(--tab); border-bottom: 1px solid var(--line); display: none; gap: 8px; align-items: center; }
+  .bin-bar.on { display: flex; }
+  .bin-bar span { flex: 1; color: var(--muted); font-size: 13px; }
+  @media (max-width: 540px) {
+    aside { width: 200px; }
+    #editor { padding: 12px 14px; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <aside>
+    <div class="head">
+      <h1>Notes</h1>
+      <button id="newbtn" title="New note">+ New</button>
+    </div>
+    <div id="list"></div>
+    <div id="bin-entry" class="bin-entry" style="margin: 4px 8px 10px"><span>🗑</span><span id="bin-label">Recycle bin (0)</span></div>
+  </aside>
+  <main>
+    <div class="bin-bar" id="binbar">
+      <span id="bincnt">0 items in recycle bin</span>
+      <button id="emptybin" class="danger">Empty bin</button>
+    </div>
+    <div id="editor" class="hidden">
+      <input id="etitle" placeholder="Title" autocomplete="off" spellcheck="false">
+      <textarea id="etext" placeholder="Write your note here…"></textarea>
+    </div>
+    <div id="empty-msg">
+      <span>No note selected.</span>
+      <button id="empty-newbtn">+ New note</button>
+    </div>
+  </main>
+</div>
+<div class="ebar" id="ebar" style="display:none">
+  <span class="meta" id="emeta"></span>
+  <button id="delbtn" title="Move to recycle bin">🗑 Delete</button>
+</div>
+<script>
+  const $ = (id) => document.getElementById(id);
+  const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+
+  let notes = [], binNotes = [], cur = null, showBin = false, saveTimer = null;
+
+  function fmt(ts) {
+    const d = new Date(ts);
+    const now = new Date();
+    if (d.toDateString() === now.toDateString()) return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+  }
+
+  async function load() {
+    notes = await browser.notesList();
+    binNotes = await browser.notesRecycleBin();
+    render();
+  }
+
+  function renderList() {
+    const list = $('list'); list.textContent = '';
+    const items = showBin ? binNotes : notes;
+    for (const n of items) {
+      const d = el('div', 'note-item' + (n.id === cur ? ' on' : '') + (showBin ? ' bin-item' : ''));
+      d.append(el('div', 'nm', n.title || 'Untitled'));
+      d.append(el('div', 'meta', fmt(n.updated || n.binTime || 0)));
+      d.onclick = () => { cur = n.id; render(); };
+      list.append(d);
+    }
+    $('bin-label').textContent = 'Recycle bin (' + binNotes.length + ')';
+    $('bin-entry').classList.toggle('on', showBin);
+  }
+
+  function renderEditor() {
+    const items = showBin ? binNotes : notes;
+    const n = items.find((x) => x.id === cur);
+    const ed = $('editor'); const em = $('empty-msg'); const eb = $('ebar');
+    if (!n) {
+      ed.classList.add('hidden'); em.style.display = ''; eb.style.display = 'none';
+      return;
+    }
+    ed.classList.remove('hidden'); em.style.display = 'none'; eb.style.display = '';
+    if ($('etitle').dataset.id !== n.id) {
+      $('etitle').value = n.title || '';
+      $('etext').value = n.text || '';
+      $('etitle').dataset.id = n.id;
+    }
+    $('emeta').textContent = 'Last edited ' + fmt(n.updated || 0);
+    if (showBin) {
+      $('delbtn').textContent = '× Delete permanently';
+      $('delbtn').onclick = async () => { if (!confirm('Permanently delete this note?')) return; await browser.notesEmptyBin([n.id]); cur = null; load(); };
+      $('etitle').readOnly = true; $('etext').readOnly = true;
+      // show restore button
+      let rb = $('restorebtn');
+      if (!rb) { rb = el('button', null, '↩ Restore'); rb.id = 'restorebtn'; $('ebar').insertBefore(rb, $('delbtn')); }
+      rb.onclick = async () => { await browser.notesRestoreFromBin(n.id); showBin = false; cur = n.id; load(); };
+      rb.style.display = '';
+    } else {
+      $('delbtn').textContent = '🗑 Delete';
+      $('delbtn').onclick = async () => { await browser.notesDelete(n.id); cur = null; load(); };
+      $('etitle').readOnly = false; $('etext').readOnly = false;
+      const rb = $('restorebtn'); if (rb) rb.style.display = 'none';
+    }
+  }
+
+  function render() {
+    renderList();
+    renderEditor();
+    $('binbar').classList.toggle('on', showBin);
+    $('bincnt').textContent = binNotes.length + ' item(s) in recycle bin';
+  }
+
+  function scheduleSave() {
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(async () => {
+      const id = $('etitle').dataset.id;
+      if (!id) return;
+      const n = await browser.notesSave({ id, title: $('etitle').value, text: $('etext').value });
+      const idx = notes.findIndex((x) => x.id === id);
+      if (idx >= 0) notes[idx] = n; else notes.unshift(n);
+      renderList();
+    }, 600);
+  }
+
+  async function newNote() {
+    showBin = false;
+    const n = await browser.notesSave({ title: '', text: '' });
+    cur = n.id; notes = await browser.notesList(); render();
+    $('etitle').dataset.id = n.id; $('etitle').value = ''; $('etext').value = '';
+    $('etitle').focus();
+  }
+
+  $('newbtn').onclick = newNote;
+  $('empty-newbtn').onclick = newNote;
+  $('bin-entry').onclick = () => { showBin = !showBin; cur = null; render(); };
+  $('emptybin').onclick = async () => { if (!confirm('Permanently delete all ' + binNotes.length + ' note(s)?')) return; await browser.notesEmptyBin(); cur = null; load(); };
+  $('etitle').addEventListener('input', scheduleSave);
+  $('etext').addEventListener('input', scheduleSave);
+
+  window.addEventListener('focus', load);
+  load();
+</script>
+</body>
+</html>

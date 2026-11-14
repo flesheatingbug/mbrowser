@@ -40,6 +40,9 @@
   #pw .frow .ic { width:20px; text-align:center; }
   #pw .frow .l { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   #pw .frow.muted .l { color:var(--muted); font-size:12px; }
+  #pw .frow-del { display:none; width:22px; text-align:center; cursor:pointer; color:var(--muted); flex:none; border-radius:4px; font-size:15px; line-height:40px; }
+  #pw .frow:hover .frow-del { display:block; }
+  #pw .frow-del:hover { color:#e5534b; }
   #tablist { display:none; height:100%; flex-direction:column; }
   #tablist input { padding:12px 14px; border-bottom:1px solid var(--line); font-size:14px; }
   #tl-body { flex:1; overflow-y:auto; padding-bottom:6px; }
@@ -72,6 +75,14 @@
   #security .warn { color:#e8a33d; font-size:13px; margin:6px 0; }
   #security button { background:var(--tab); color:var(--fg); border:1px solid var(--line); border-radius:8px; padding:6px 12px; cursor:pointer; margin-top:6px; }
   #security button:hover { border-color:var(--accent); }
+  #card-fill, #addr-fill { display:none; padding:6px 0; }
+  .frow2 { display:flex; align-items:center; gap:10px; padding:0 14px; height:40px; cursor:default; }
+  .frow2:hover { background:var(--tab); }
+  .frow2 .ic2 { font-size:16px; width:22px; text-align:center; }
+  .frow2 .l2 { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:13px; }
+  .frow2 .d2 { font-size:11px; color:var(--muted); }
+  .frow2.hdr2 { cursor:default; height:34px; border-bottom:1px solid var(--line); padding-bottom:4px; }
+  .frow2.hdr2 .l2 { font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; font-weight:600; }
 </style>
 </head>
 <body>
@@ -94,6 +105,8 @@
     <button id="next" title="Next (Enter)">▼</button>
     <button id="close" title="Close (Esc)">×</button>
   </div>
+  <div id="card-fill"></div>
+  <div id="addr-fill"></div>
 </div>
 <script>
   const $ = (id) => document.getElementById(id);
@@ -112,6 +125,10 @@
     $('suggest').style.display = m === 'suggest' ? 'block' : 'none';
     $('tablist').style.display = m === 'tablist' ? 'flex' : 'none';
     $('pw').style.display = m === 'pw' ? 'block' : 'none';
+    $('card-fill').style.display = m === 'card' ? 'block' : 'none';
+    $('addr-fill').style.display = m === 'addr' ? 'block' : 'none';
+    if (m === 'card') renderFillList('card-fill', data || {}, '💳', (id) => api.invoke('card:pick', id));
+    if (m === 'addr') renderFillList('addr-fill', data || {}, '🏠', (id) => api.invoke('addr:pick', id));
     if (m === 'pw') renderPw(data || {});
     if (m === 'tablist') { TL = data || { open: [], closed: [] }; $('tlq').value = ''; renderTabList(); setTimeout(() => $('tlq').focus(), 0); }
     if (m === 'security') renderSecurity(data || {});
@@ -149,6 +166,30 @@
     else if (e.key === 'Escape') { api.closeOverlay(); }
   });
 
+  // ---- card / address fill lists ----
+  function renderFillList(containerId, data, icon, onPick) {
+    const box = $(containerId);
+    box.textContent = '';
+    const hdr = document.createElement('div');
+    hdr.className = 'frow2 hdr2';
+    const lbl = document.createElement('span'); lbl.className = 'l2';
+    lbl.textContent = icon + '  ' + (containerId === 'card-fill' ? 'Payment cards' : 'Saved addresses');
+    hdr.append(lbl);
+    box.append(hdr);
+    for (const item of (data.items || [])) {
+      const row = document.createElement('div');
+      row.className = 'frow2';
+      const ic = document.createElement('span'); ic.className = 'ic2'; ic.textContent = icon;
+      const l = document.createElement('span'); l.className = 'l2';
+      l.textContent = item.name || item.fullName || '';
+      const d2 = document.createElement('span'); d2.className = 'd2';
+      d2.textContent = containerId === 'card-fill' ? (item.lastFour ? '···· ' + item.lastFour : '') : (item.city || item.country || '');
+      row.append(ic, l, d2);
+      row.onmousedown = (e) => { e.preventDefault(); onPick(item.id); };
+      box.append(row);
+    }
+  }
+
   // ---- passwords: save bubble, fill list, unlock ----
   function renderPw(d) {
     const box = $('pw');
@@ -156,18 +197,24 @@
     const mk = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
 
     if (d.view === 'fill') {
+      box.onmouseenter = () => api.invoke('pw:popup-enter');
+      box.onmouseleave = () => api.invoke('pw:popup-leave');
       if (d.locked) {
         const r = mk('div', 'frow'); r.append(mk('span', 'ic', '🔒'), mk('span', 'l', 'Unlock to fill saved passwords'));
         r.onmousedown = (e) => { e.preventDefault(); api.pwAction({ action: 'unlockPrompt' }); };
         box.append(r);
       }
       for (const it of d.items || []) {
-        const r = mk('div', 'frow'); r.append(mk('span', 'ic', '👤'), mk('span', 'l', (it.name && it.name !== it.username ? it.name + ' · ' : '') + it.username));
-        r.onmousedown = (e) => { e.preventDefault(); api.pwAction({ action: 'fill', id: it.id }); };
+        const r = mk('div', 'frow');
+        r.append(mk('span', 'ic', '👤'), mk('span', 'l', (it.name && it.name !== it.username ? it.name + ' · ' : '') + it.username));
+        const del = mk('span', 'frow-del', '×'); del.title = 'Delete this login';
+        del.onmousedown = (e) => { e.preventDefault(); e.stopPropagation(); api.pwAction({ action: 'deleteEntry', id: it.id }); };
+        r.append(del);
+        r.onmousedown = (e) => { if (e.target.closest && e.target.closest('.frow-del')) return; e.preventDefault(); api.pwAction({ action: 'fill', id: it.id }); };
         box.append(r);
       }
       if (d.empty) { const e = mk('div', 'frow muted'); e.append(mk('span', 'ic', ''), mk('span', 'l', 'No saved logins for this site')); box.append(e); }
-      const m = mk('div', 'frow muted'); m.append(mk('span', 'ic', '🔑'), mk('span', 'l', 'Manage passwords…'));
+      const m = mk('div', 'frow muted'); m.append(mk('span', 'ic', '🔑'), mk('span', 'l', 'Open password manager…'));
       m.onmousedown = (e) => { e.preventDefault(); api.pwAction({ action: 'manage' }); };
       box.append(m);
       return;

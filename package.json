@@ -33,14 +33,15 @@
       "target": [
         "AppImage"
       ],
-      "icon": "build/icon.png",
+      "icon": "assets/icons/white-m.png",
       "category": "Network;WebBrowser"
     },
     "win": {
       "target": [
         "nsis",
         "zip"
-      ]
+      ],
+      "icon": "assets/icons/white-m.png"
     },
     "nsis": {
       "oneClick": false,
@@ -55,5 +56,8 @@
         "to": "assets"
       }
     ]
+  },
+  "allowScripts": {
+    "electron@33.4.11": true
   }
 }

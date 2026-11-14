@@ -7,23 +7,31 @@
 <link rel="stylesheet" href="my://assets/common.css">
 <style>
   .p { display:flex; align-items:center; gap:14px; padding:12px; border:1px solid var(--line); border-radius:12px; margin-bottom:10px; background:var(--tab); }
-  .dot { width:38px; height:38px; border-radius:50%; flex:none; display:grid; place-items:center; color:#fff; font-weight:700; }
+  .avatar { width:38px; height:38px; border-radius:50%; flex:none; display:grid; place-items:center; color:#fff; font-weight:700; font-size:18px; }
   .p .info { flex:1; min-width:0; }
   .p .info b { display:block; }
   .p .acts { display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end; }
   .p .acts button { padding:4px 10px; font-size:12px; }
   .badge { font-size:11px; border:1px solid var(--accent); color:var(--accent); border-radius:9px; padding:0 7px; margin-left:8px; }
-  .swatches { display:flex; gap:8px; margin:6px 0 12px; }
+  .swatches { display:flex; gap:8px; margin:6px 0 12px; flex-wrap:wrap; }
   .swatch { width:26px; height:26px; border-radius:50%; cursor:pointer; border:2px solid transparent; }
   .swatch.on { border-color:var(--fg); }
+  .emoji-grid { display:grid; grid-template-columns:repeat(8,1fr); gap:4px; margin:6px 0 12px; }
+  .eopt { font-size:20px; padding:4px; border-radius:6px; cursor:pointer; border:2px solid transparent; text-align:center; line-height:1.3; }
+  .eopt:hover { background:var(--tab); }
+  .eopt.on { border-color:var(--accent); background:var(--tab); }
+  .eopt.none { font-size:13px; color:var(--muted); }
   .modal { position:fixed; inset:0; background:rgba(0,0,0,.55); display:grid; place-items:center; z-index:10; }
-  .modal form { background:var(--bg); border:1px solid var(--line); border-radius:14px; padding:20px; width:min(420px, 92vw); }
+  .modal form { background:var(--bg); border:1px solid var(--line); border-radius:14px; padding:20px; width:min(420px, 92vw); max-height:90vh; overflow-y:auto; }
   .modal h3 { margin:0 0 10px; }
   .modal label { display:block; margin:10px 0 3px; color:var(--muted); font-size:13px; }
   .modal input[type=text], .modal input[type=password] { width:100%; }
   .modal .row { display:flex; gap:8px; margin-top:16px; }
   .err { color:#ff6b6b; font-size:13px; min-height:18px; margin-top:6px; }
   .note { font-size:12px; color:var(--muted); line-height:1.5; max-width:680px; margin-top:22px; }
+  .danger-zone { margin-top:32px; padding-top:18px; border-top:1px solid var(--line); }
+  .danger-zone h3 { margin:0 0 10px; color:var(--muted); font-size:14px; font-weight:600; }
+  .danger-zone .acts { display:flex; gap:8px; flex-wrap:wrap; }
 </style>
 </head>
 <body>
@@ -33,15 +41,39 @@
   <div id="list"></div>
   <p><button id="new">+ Add a profile</button></p>
   <label style="display:flex;gap:8px;align-items:center;margin-top:18px"><input type="checkbox" id="ask"> Ask which profile to use every time mbrowser starts</label>
-  <p class="note">A profile password keeps other people from opening that profile in mbrowser. It does not encrypt the profile’s files on disk; saved passwords have their own, separate master password and are encrypted. Opening a profile starts a new mbrowser window group; close the one you no longer need.</p>
+  <p class="note">A profile password keeps other people from opening that profile in mbrowser. It does not encrypt the profile's files on disk; saved passwords have their own, separate master password and are encrypted. Opening a profile starts a new mbrowser window group; close the one you no longer need.</p>
+
+  <div class="danger-zone">
+    <h3>Reset &amp; recovery</h3>
+    <div class="acts">
+      <button id="btn-wizard">Run setup wizard again</button>
+      <button id="btn-reset-app" class="danger">Reset all data…</button>
+    </div>
+  </div>
 </div>
 <script>
   const COLORS = ['#5b8cff', '#2ec4b6', '#f4a261', '#e76f51', '#c77dff', '#ef476f', '#8ac926', '#ffd166'];
+  const AVATARS = ['', '😀','😎','🦊','🐺','🦁','🐯','🐻','🐼','🐸','🐬','🦋','🌟','🔥','⚡','🌈','🎮','🎸','🎯','🚀','🌙','☀️','🍀','💎','🎩','🤖','👾','🧙','🧪','🏔️','🌊','🎨'];
   const $ = (id) => document.getElementById(id);
   const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
   let S = null;
 
-  // a small form dialog (window.prompt is not available here). fields: [{ key, label, type, value }]
+  function makeAvatar(p) {
+    const a = el('div', 'avatar');
+    if (p.avatar && p.avatar.startsWith('data:')) {
+      a.style.backgroundImage = `url("${p.avatar}")`;
+      a.style.backgroundSize = 'cover';
+      a.style.backgroundPosition = 'center';
+      a.style.backgroundColor = p.color;
+    } else if (p.avatar) {
+      a.textContent = p.avatar; a.style.backgroundColor = p.color + '55';
+    } else {
+      a.textContent = p.name.charAt(0).toUpperCase(); a.style.backgroundColor = p.color;
+    }
+    return a;
+  }
+
+  // a small form dialog. fields: [{ key, label, type, value }]
   function ask(title, fields, okText, extra) {
     return new Promise((resolve) => {
       const m = el('div', 'modal'); const f = el('form'); m.append(f);
@@ -58,6 +90,57 @@
         COLORS.forEach((c) => { const s = el('div', 'swatch' + (c === color ? ' on' : '')); s.style.background = c; s.onclick = () => { color = c; [...sw.children].forEach((x) => x.classList.toggle('on', x === s)); }; sw.append(s); });
         f.append(sw);
       }
+      let avatar = extra && extra.avatar !== undefined ? extra.avatar : undefined;
+      if (avatar !== undefined) {
+        f.append(el('label', null, 'Avatar'));
+
+        // current image preview + upload button
+        const imgRow = el('div'); imgRow.style.cssText = 'display:flex;align-items:center;gap:10px;margin-bottom:8px';
+        const preview = el('div'); preview.style.cssText = 'width:40px;height:40px;border-radius:50%;border:1px solid var(--line);background:var(--tab);display:grid;place-items:center;overflow:hidden;font-size:22px;flex:none';
+        const updatePreview = (av) => {
+          if (av && av.startsWith('data:')) { preview.textContent = ''; preview.style.backgroundImage = `url("${av}")`; preview.style.backgroundSize = 'cover'; }
+          else { preview.textContent = av || ''; preview.style.backgroundImage = ''; }
+        };
+        updatePreview(avatar);
+        const uploadBtn = el('button', 'btn-sm', '📷 Upload photo'); uploadBtn.type = 'button'; uploadBtn.style.fontSize = '12px';
+        uploadBtn.onclick = () => {
+          const inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'image/*';
+          inp.onchange = () => {
+            const file = inp.files[0]; if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+              const img = new Image();
+              img.onload = () => {
+                const canvas = document.createElement('canvas'); canvas.width = canvas.height = 64;
+                const ctx = canvas.getContext('2d');
+                const s = Math.min(img.width, img.height);
+                ctx.drawImage(img, (img.width - s) / 2, (img.height - s) / 2, s, s, 0, 0, 64, 64);
+                avatar = canvas.toDataURL('image/webp', 0.85);
+                updatePreview(avatar);
+                [...grid.children].forEach((x) => x.classList.remove('on'));
+              };
+              img.src = ev.target.result;
+            };
+            reader.readAsDataURL(file);
+          };
+          inp.click();
+        };
+        imgRow.append(preview, uploadBtn);
+        f.append(imgRow);
+
+        const grid = el('div', 'emoji-grid');
+        AVATARS.forEach((e) => {
+          const isActive = !avatar?.startsWith('data:') && e === avatar;
+          const btn = el('div', 'eopt' + (isActive ? ' on' : '') + (e === '' ? ' none' : ''));
+          btn.textContent = e === '' ? 'none' : e;
+          btn.onclick = () => {
+            avatar = e; updatePreview(e);
+            [...grid.children].forEach((x) => x.classList.toggle('on', x === btn));
+          };
+          grid.append(btn);
+        });
+        f.append(grid);
+      }
       const err = el('div', 'err'); f.append(err);
       const row = el('div', 'row'); const ok = el('button', null, okText || 'OK'); const no = el('button', null, 'Cancel'); no.type = 'button';
       row.append(ok, no); f.append(row);
@@ -68,6 +151,7 @@
         e.preventDefault();
         const vals = {}; for (const k in inputs) vals[k] = inputs[k].value;
         if (extra && 'color' in extra) vals.color = color;
+        if (avatar !== undefined) vals.avatar = avatar;
         const r = extra && extra.validate ? await extra.validate(vals) : null;
         if (r) { err.textContent = r; return; }
         m.remove(); resolve(vals);
@@ -81,7 +165,6 @@
     const list = $('list'); list.textContent = '';
     for (const p of S.profiles) {
       const row = el('div', 'p');
-      const dot = el('div', 'dot', p.name.charAt(0).toUpperCase()); dot.style.background = p.color;
       const info = el('div', 'info'); const b = el('b', null, p.name);
       if (p.id === S.current) b.append(el('span', 'badge', 'this window'));
       info.append(b, el('span', 'muted', p.locked ? 'Password protected' : 'No password'));
@@ -89,9 +172,10 @@
       const btn = (t, fn, cls) => { const x = el('button', cls || '', t); x.onclick = fn; acts.append(x); return x; };
       const open = btn('Open', async () => { await browser.profilesOpen(p.id); });
       if (p.id === S.current) open.disabled = true;
-      btn('Rename / colour', async () => {
-        const r = await ask('Rename profile', [{ key: 'name', label: 'Name', value: p.name }], 'Save', {
-          color: p.color, validate: async (v) => { const x = await browser.profilesUpdate(p.id, { name: v.name, color: v.color }); return x.error || null; },
+      btn('Rename / avatar', async () => {
+        const r = await ask('Edit profile', [{ key: 'name', label: 'Name', value: p.name }], 'Save', {
+          color: p.color, avatar: p.avatar || '',
+          validate: async (v) => { const x = await browser.profilesUpdate(p.id, { name: v.name, color: v.color, avatar: v.avatar }); return x.error || null; },
         });
         if (r) load();
       });
@@ -103,10 +187,19 @@
         });
         if (r) load();
       });
+      btn('Reset data', async () => {
+        const r = await ask(`Reset "${p.name}"?`, [{ key: 'confirm', label: 'Type RESET to erase this profile\'s local data (bookmarks, history, passwords, settings)' }], 'Reset', {
+          validate: async (v) => {
+            if (v.confirm !== 'RESET') return 'Type RESET to confirm.';
+            const x = await browser.profilesResetData(p.id); return x.error || null;
+          },
+        });
+        if (r) load();
+      });
       if (p.id !== 'default') {
         btn('Delete', async () => {
           const fields = p.locked ? [{ key: 'pw', label: 'Profile password', type: 'password' }] : [];
-          const r = await ask('Delete “' + p.name + '”?', [...fields, { key: 'confirm', label: 'Type DELETE to erase all of this profile’s data' }], 'Delete', {
+          const r = await ask('Delete "' + p.name + '"?', [...fields, { key: 'confirm', label: 'Type DELETE to erase all of this profile\'s data' }], 'Delete', {
             validate: async (v) => {
               if (v.confirm !== 'DELETE') return 'Type DELETE to confirm.';
               const x = await browser.profilesRemove(p.id, v.pw); return x.error || null;
@@ -115,7 +208,7 @@
           if (r) load();
         }, 'danger');
       }
-      row.append(dot, info, acts); list.append(row);
+      row.append(makeAvatar(p), info, acts); list.append(row);
     }
   }
 
@@ -124,12 +217,26 @@
       { key: 'name', label: 'Name', value: '' },
       { key: 'pw', label: 'Password (optional, any length)', type: 'password' },
     ], 'Create', {
-      color: COLORS[S.profiles.length % COLORS.length],
-      validate: async (v) => { const x = await browser.profilesCreate({ name: v.name, color: v.color, password: v.pw }); return x.error || null; },
+      color: COLORS[S.profiles.length % COLORS.length], avatar: '',
+      validate: async (v) => { const x = await browser.profilesCreate({ name: v.name, color: v.color, avatar: v.avatar, password: v.pw }); return x.error || null; },
     });
     if (r) load();
   };
   $('ask').onchange = () => browser.profilesAskAtStart($('ask').checked);
+
+  $('btn-wizard').onclick = () => browser.appRerunWizard();
+
+  $('btn-reset-app').onclick = async () => {
+    const r = await ask('Reset all mbrowser data?', [
+      { key: 'confirm', label: 'This deletes ALL profiles, bookmarks, history, passwords and settings. Type RESET to confirm.' },
+    ], 'Reset everything', {
+      validate: async (v) => {
+        if (v.confirm !== 'RESET') return 'Type RESET to confirm.';
+        const x = await browser.appResetAll(); return x.error || null;
+      },
+    });
+  };
+
   load();
 </script>
 </body>

@@ -36,8 +36,10 @@ def setup(ctx, req):
     return 200, {'ok': True, 'user': public_user(ctx.store.user_by_id(uid)), 'csrf': csrf}
 
 
-def _check_credentials(ctx, req, b):
-    """Shared by the web login and the browser's sign-in. Returns the user row or raises ApiError."""
+def _check_credentials(ctx, req, b, advance_totp=True):
+    """Shared by the web login and the browser's sign-in. Returns the user row or raises ApiError.
+    When advance_totp=False the verified totp step is returned as user['_totp_step'] for the caller
+    to commit later; this lets device_login re-accept the same code on its profile-selection retry."""
     name = str(b.get('username', '')).strip()
     pw = str(b.get('password', ''))
     kip, kuser = 'login-ip:' + req.ip, 'login-user:' + name.lower()
@@ -58,7 +60,11 @@ def _check_credentials(ctx, req, b):
             if step is None:
                 ctx.limiter.fail(kip); ctx.limiter.fail(kuser)
                 raise ApiError(401, 'That code is wrong or expired.', needTotp=True)
-            ctx.store.set_flags(user['id'], totp_step=step)
+            if advance_totp:
+                ctx.store.set_flags(user['id'], totp_step=step)
+            else:
+                user = dict(user)
+                user['_totp_step'] = step
         elif not ctx.store.use_recovery(user['id'], rec):
             ctx.limiter.fail(kip); ctx.limiter.fail(kuser)
             raise ApiError(401, 'That recovery code is wrong or was already used.', needTotp=True)
@@ -82,7 +88,8 @@ def logout(ctx, req):
 def device_login(ctx, req):
     """Used by the browser: sign in with an account, get back an API key for one profile."""
     b = req.json()
-    user = _check_credentials(ctx, req, b)
+    # advance_totp=False: don't burn the OTP code yet — keep it valid for the profile-selection retry
+    user = _check_credentials(ctx, req, b, advance_totp=False)
     profiles = ctx.store.list_profiles(user['id'])
     if not profiles:
         raise ApiError(409, 'This account has no profile yet. Create one in the web interface first.')
@@ -95,7 +102,11 @@ def device_login(ctx, req):
     elif len(profiles) == 1:
         chosen = profiles[0]
     else:
+        # Return needProfile without advancing totp_step so the same code works on retry
         return 200, {'needProfile': True, 'profiles': [{'id': p['id'], 'name': p['name']} for p in profiles]}
+    # Commit totp_step now that we're issuing a token (prevents replay after this point)
+    if '_totp_step' in user:
+        ctx.store.set_flags(user['id'], totp_step=user['_totp_step'])
     device = re.sub(r'\s+', ' ', str(b.get('device') or 'Browser')).strip()[:40] or 'Browser'
     _, token = ctx.store.replace_device_token(chosen['id'], device)
     return 200, {'token': token, 'profile': {'id': chosen['id'], 'name': chosen['name']}, 'user': {'username': user['username']}}

@@ -19,4 +19,4 @@ ul.plain li { padding:7px 0; border-bottom:1px solid var(--line); display:flex; 
 ul.plain li .grow { flex:1; min-width:0; }
 ul.plain li .grow a { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 ul.plain li .grow small { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.wrap { max-width:860px; margin:0 auto; padding:32px 20px 60px; }
+.wrap { max-width:900px; margin:0 auto; padding:40px 48px 80px; }

@@ -7,17 +7,17 @@
 <link rel="stylesheet" href="my://assets/common.css">
 <style>
   .layout { display:flex; min-height:100vh; }
-  nav { width:210px; padding:24px 10px; border-right:1px solid var(--line); position:sticky; top:0; height:100vh; flex:none; }
-  nav h1 { font-size:18px; padding:0 12px; margin-bottom:12px; }
-  nav button { display:block; width:100%; text-align:left; border:0; background:none; padding:9px 12px; border-radius:8px; }
+  nav { width:230px; padding:28px 12px; border-right:1px solid var(--line); position:sticky; top:0; height:100vh; flex:none; }
+  nav h1 { font-size:18px; padding:0 14px; margin-bottom:16px; }
+  nav button { display:block; width:100%; text-align:left; border:0; background:none; padding:10px 14px; border-radius:8px; }
   nav button:hover { background:var(--tab); }
   nav button.on { background:var(--accent); color:var(--onaccent); }
-  main { flex:1; max-width:760px; padding:28px 32px 80px; }
-  .row { display:flex; align-items:center; justify-content:space-between; gap:20px; padding:12px 0; border-bottom:1px solid var(--line); }
+  main { flex:1; max-width:820px; padding:40px 56px 100px; }
+  .row { display:flex; align-items:center; justify-content:space-between; gap:20px; padding:14px 0; border-bottom:1px solid var(--line); }
   .row.col { flex-direction:column; align-items:stretch; }
   .row label { flex:1; }
-  .row .help { display:block; color:var(--muted); font-size:12px; margin-top:2px; }
-  .row input[type=text], .row input[type=password], .row input[type=number], .row select { width:280px; }
+  .row .help { display:block; color:var(--muted); font-size:12px; margin-top:3px; }
+  .row input[type=text], .row input[type=password], .row input[type=number], .row select { width:300px; }
   .row textarea { width:100%; min-height:90px; font-family:ui-monospace, monospace; font-size:13px; }
   table { width:100%; border-collapse:collapse; }
   td, th { padding:6px 4px; text-align:left; border-bottom:1px solid var(--line); font-weight:normal; }
@@ -45,9 +45,9 @@
 </div>
 <script>
   const CATS = [
-    ['general', 'General'], ['appearance', 'Appearance'], ['startpage', 'Start Page'], ['panel', 'Side Panel'], ['tabs', 'Tabs'], ['search', 'Search'],
-    ['privacy', 'Privacy'], ['passwords', 'Passwords'], ['downloads', 'Downloads'], ['mouse', 'Mouse'], ['keyboard', 'Keyboard'],
-    ['sync', 'Sync'], ['import', 'Import'], ['profiles', 'Profiles'], ['about', 'About'],
+    ['general', 'General'], ['appearance', 'Appearance'], ['startpage', 'Start Page'], ['tabs', 'Tabs'], ['search', 'Search'],
+    ['privacy', 'Privacy'], ['adblocker', 'Adblocker'], ['passwords', 'Passwords'], ['downloads', 'Downloads'], ['mouse', 'Mouse'], ['keyboard', 'Keyboard'],
+    ['sync', 'Sync'], ['server', 'Server admin'], ['import', 'Import'], ['profiles', 'Profiles'], ['about', 'About'],
   ];
   const FIELDS = {
     general: [
@@ -60,19 +60,32 @@
       { path: 'appearance.nativeTitleBar', label: 'Use the system title bar', type: 'toggle', help: 'Takes effect for new windows after a restart. Off = no title bar, the tab strip carries the window buttons.' },
       { path: 'appearance.statusBar', label: 'Show the status bar', type: 'toggle', help: 'Loading progress, link addresses, zoom level and blocked trackers along the bottom.' },
       { path: 'appearance.tabBar', label: 'Tab bar position', type: 'select', options: [['top', 'Top'], ['left', 'Left (vertical tabs)']] },
+      { path: 'appearance.toolbar.back', label: 'Show Back button', type: 'toggle' },
+      { path: 'appearance.toolbar.forward', label: 'Show Forward button', type: 'toggle' },
+      { path: 'appearance.toolbar.reload', label: 'Show Reload button', type: 'toggle' },
+      { path: 'appearance.toolbar.shield', label: 'Show Tracker Blocker button', type: 'toggle' },
+      { path: 'appearance.toolbar.star', label: 'Show Bookmark button', type: 'toggle' },
+      { path: 'appearance.toolbar.profile', label: 'Show Profile button', type: 'toggle' },
     ],
     startpage: [
       { path: 'startPage.tileSize', label: 'Speed dial size (px)', type: 'number', min: 90, max: 260, help: 'Width of each speed dial tile.' },
       { path: 'startPage.thumbnails', label: 'Show page thumbnails', type: 'toggle', help: 'Thumbnails are captured automatically when you visit a speed dial site.' },
       { path: 'startPage.showSearch', label: 'Show the search box', type: 'toggle' },
-    ],
-    panel: [
-      { path: 'panel.side', label: 'Panel position', type: 'select', options: [['left', 'Left'], ['right', 'Right']] },
-      { path: 'panel.width', label: 'Panel width (px)', type: 'number', min: 240, max: 600 },
+      { path: 'startPage.showBrand', label: 'Show browser name on the start page', type: 'toggle' },
+      { path: 'startPage.showTitles', label: 'Show speed dial titles', type: 'toggle' },
+      { path: 'startPage.showAddButton', label: 'Show the "+ Add" button', type: 'toggle' },
+      { path: 'startPage.columns', label: 'Columns (0 = auto)', type: 'number', min: 0, max: 12, help: '0 lets the layout fit as many tiles as possible.' },
+      { path: 'startPage.showDashboard', label: 'Show the server dashboard tab', type: 'toggle', help: 'Links to the sync server dashboard. Only shown when a server is configured.' },
+      { path: 'startPage.extraTabs.bookmarks', label: 'Show Bookmarks tab on start page', type: 'toggle' },
+      { path: 'startPage.extraTabs.history', label: 'Show History tab on start page', type: 'toggle' },
+      { path: 'startPage.extraTabs.notes', label: 'Show Notes tab on start page', type: 'toggle' },
     ],
     tabs: [
       { path: 'tabs.newTabFocus', label: 'When opening a new tab, focus the', type: 'select', options: [['address', 'Address bar'], ['page', 'Page (search box on the start page)']] },
       { path: 'tabs.newTabPosition', label: 'Open new tabs', type: 'select', options: [['end', 'At the end of the tab bar'], ['afterCurrent', 'Next to the current tab']] },
+      { path: 'tabs.wheelScrolls', label: 'Scroll mouse wheel on the tab bar to switch tabs', type: 'toggle' },
+      { path: 'tabs.clickTabScrollsTop', label: 'Click the active tab to scroll the page to the top', type: 'toggle', help: 'When you are scrolled down a page, clicking its tab scrolls back to the top.' },
+      { path: 'tabs.lazyBackground', label: 'Only load background tabs when you switch to them', type: 'toggle', help: 'Prevents audio, videos, and network activity from tabs opened in the background until you click them.' },
     ],
     privacy: [
       { path: 'privacy.blockTrackers', label: 'Block ads and trackers', type: 'toggle', help: 'Blocks third-party requests to a built-in list of known ad and tracking domains. Click the shield in the toolbar to allow a single site.' },
@@ -85,10 +98,9 @@
       { path: 'privacy.clearOnExit.cache', label: 'Clear the cache when the browser closes', type: 'toggle' },
     ],
     passwords: [
-      { path: 'passwords.enabled', label: 'Offer to save and fill passwords', type: 'toggle', help: 'Passwords are encrypted with your master password and stored only on this computer.' },
-      { path: 'passwords.sync', label: 'Sync the password vault to your server', type: 'toggle', help: 'Only the encrypted vault is uploaded; the server cannot read it. Your master password never leaves this computer.' },
-      { path: 'passwords.autoLockMinutes', label: 'Lock the password vault after (minutes)', type: 'number', min: 0, max: 600, help: '0 = stay unlocked until the browser closes.' },
-      { path: 'passwords.neverSave', label: 'Sites where saving is switched off', type: 'lines', help: 'One address per line, for example https://example.com' },
+      { path: 'passwords.enabled', label: 'Offer to save and fill passwords', type: 'toggle' },
+      { path: 'passwords.sync', label: 'Sync the password vault to your server', type: 'toggle' },
+      { path: 'passwords.neverSave', label: 'Sites where saving is switched off', type: 'lines', help: 'One address per line.' },
     ],
     downloads: [
       { path: 'downloads.askWhere', label: 'Ask where to save each file', type: 'toggle' },
@@ -96,6 +108,12 @@
     ],
     mouse: [
       { path: 'mouse.gestures', label: 'Enable mouse gestures', type: 'toggle', help: 'Hold the right mouse button, drag, and release.' },
+    ],
+    adblocker: [
+      { path: 'privacy.blockTrackers', label: 'Enable ad and tracker blocking', type: 'toggle', help: 'Blocks third-party requests matching the built-in domain list.' },
+      { path: 'privacy.doNotTrack', label: 'Send "Do Not Track" and Global Privacy Control headers', type: 'toggle' },
+      { path: 'privacy.allowSites', label: 'Sites where blocking is off', type: 'lines', help: 'One hostname per line. Blocking is fully disabled for these sites.' },
+      { path: 'privacy.customBlocklist', label: 'Extra domains to block', type: 'textarea', help: 'One domain per line. Subdomains are included automatically.' },
     ],
     sync: [
       { path: 'sync.device', label: 'Device name', type: 'text', help: 'Shown on your other devices. Defaults to the hostname.' },
@@ -260,9 +278,14 @@
     const box = el('div', 'editor'); box.style.gridTemplateColumns = '150px 1fr';
 
     const status = el('div', 'msg'); status.style.gridColumn = '1 / -1';
-    status.textContent = S.sync.token
-      ? (acc.user ? 'Signed in as ' + acc.user + (acc.profile ? ' (profile ' + acc.profile + ')' : '') + '.' : 'An API key is set.')
-      : 'Not signed in.';
+    if (S.sync.token && acc.user) {
+      status.textContent = 'Signed in as ' + acc.user + (acc.profile ? ' (profile ' + acc.profile + ')' : '') + '.';
+      status.style.color = '#4cc38a';
+    } else if (S.sync.token) {
+      status.textContent = 'An API key is set.';
+    } else {
+      status.textContent = 'Not signed in.';
+    }
     box.append(status);
 
     const row = (label, input) => { box.append(el('label', null, label), input); return input; };
@@ -430,11 +453,13 @@
     nav.textContent = '';
     nav.append(el('h1', null, 'Settings'));
     for (const [id, name] of CATS) {
+      if (id === 'server' && !S.sync.server) continue;
       const b = el('button', id === cur ? 'on' : '', name);
       b.onclick = () => { cur = id; location.hash = id; render(); };
       nav.append(b);
     }
     const m = $('main');
+    m.style.cssText = '';
     m.textContent = '';
     m.append(el('h1', null, CATS.find((c) => c[0] === cur)[1]));
 
@@ -446,15 +471,55 @@
       return;
     }
     if (cur === 'appearance') { await themeSection(m); iconSection(m); }
-    if (cur === 'import') { const a = el('a', null, 'Open the import page'); a.href = 'my://import'; const p = el('p'); p.append(el('span', null, 'Bring in bookmarks and passwords from Vivaldi, Chrome, Edge, Brave, Firefox, Bitwarden and others. ')); p.append(a); m.append(p); return; }
-    if (cur === 'profiles') { const a = el('a', null, 'Manage profiles'); a.href = 'my://profiles'; const p = el('p'); p.append(el('span', null, 'Separate bookmarks, history, passwords and settings for work, personal and so on, each with an optional password. ')); p.append(a); m.append(p); return; }
+    if (cur === 'import' || cur === 'profiles' || cur === 'passwords') {
+      const frame = document.createElement('iframe');
+      frame.src = cur === 'passwords' ? 'my://passwords' : ('my://' + cur);
+      frame.style.cssText = 'width:100%;height:calc(100vh - 20px);border:0;display:block';
+      m.style.padding = '0';
+      m.append(frame);
+      return;
+    }
+    if (cur === 'server') {
+      const serverUrl = S.sync.server ? S.sync.server.replace(/\/$/, '') : '';
+      if (!serverUrl) {
+        m.append(el('p', 'muted', 'No server configured. Set up a server address in Sync settings first.'));
+        const btn = el('button'); btn.textContent = 'Go to Sync settings';
+        btn.onclick = () => { cur = 'sync'; render(); };
+        m.append(btn);
+      } else {
+        const card = el('div'); card.style.cssText = 'background:var(--tab);border:1px solid var(--line);border-radius:14px;padding:22px 24px;margin-bottom:20px;';
+        const urlRow = el('div'); urlRow.style.cssText = 'display:flex;align-items:center;gap:10px;margin-bottom:14px;';
+        const urlText = el('code'); urlText.style.cssText = 'flex:1;font-size:13px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+        urlText.textContent = serverUrl;
+        const openBtn = el('button'); openBtn.textContent = 'Open server admin';
+        openBtn.style.cssText = 'background:var(--accent);color:var(--onaccent);border:0;padding:7px 18px;border-radius:8px;font-size:14px;cursor:pointer;white-space:nowrap;';
+        openBtn.onclick = () => browser.openUrl(serverUrl, 'tab');
+        urlRow.append(urlText, openBtn);
+        const status = el('div'); status.style.cssText = 'font-size:13px;color:var(--muted);';
+        status.textContent = 'Checking connection…';
+        card.append(urlRow, status);
+        m.append(card);
+        browser.invoke('server:ping', serverUrl).then((r) => {
+          status.textContent = r.ok ? '● Connected' : ('● Server returned ' + r.status);
+          status.style.color = r.ok ? '#4cc38a' : '#e8a33d';
+        }).catch(() => { status.textContent = '● Could not reach server'; status.style.color = '#e5534b'; });
+      }
+      return;
+    }
     if (cur === 'sync') syncAuthSection(m);
     (FIELDS[cur] || []).forEach((d) => m.append(field(d)));
-    if (cur === 'passwords') { const a = el('a', null, 'Open the password manager'); a.href = 'my://passwords'; const p = el('p'); p.append(a); m.append(p); }
-    if (cur === 'panel') m.append(el('p', 'muted', 'Open the panel with F4 or the ▤ button. Add web panels (pinned sites such as a chat or a calendar) with the + button inside the panel.'));
     if (cur === 'startpage') m.append(el('p', 'muted', 'Add, edit, group and reorder speed dials on the start page itself. Drag a tile to reorder it, or drop it on a group tab to move it.'));
     if (cur === 'privacy') clearButtons(m);
-    if (cur === 'sync') syncExtras(m);
+    if (cur === 'sync') {
+      syncExtras(m);
+      if (S.sync.server) {
+        const adminLink = el('div'); adminLink.style.marginTop = '18px';
+        const a = el('a', null, 'Server admin →'); a.href = '#'; a.style.fontSize = '14px';
+        a.onclick = (e) => { e.preventDefault(); cur = 'server'; render(); };
+        adminLink.append(a);
+        m.append(adminLink);
+      }
+    }
     if (cur === 'mouse') {
       m.append(el('h2', null, 'Gestures'));
       const t = el('table');

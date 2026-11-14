@@ -1,7 +1,7 @@
 'use strict';
 const {
-  app, BaseWindow, WebContentsView, ipcMain, protocol, session, Menu, shell, nativeTheme, clipboard,
-  screen, nativeImage,
+  app, BaseWindow, BrowserWindow, WebContentsView, ipcMain, protocol, session, Menu, shell, nativeTheme, clipboard,
+  screen, nativeImage, safeStorage, dialog, net,
 } = require('electron');
 const crypto = require('crypto');
 const path = require('path');
@@ -19,7 +19,9 @@ const { spawn } = require('child_process');
 
 // Icons live in "assets". When installed they are also copied next to the program (extraResources) so that
 // the operating system, which cannot read inside the app archive, can load the window icon.
-const ASSETS = app.isPackaged ? path.join(process.resourcesPath, 'assets') : path.join(__dirname, 'assets');
+const ASSETS = fs.existsSync(path.join(__dirname, 'assets'))
+  ? path.join(__dirname, 'assets')
+  : path.join(process.resourcesPath, 'assets');
 const LOGO = path.join(ASSETS, 'icon.png');
 const ICON_KINDS = ['classic', 'color', 'blue', 'white', 'blue-m', 'white-m'];
 // the program icon: the classic rounded square, or one of the transparent logo variants
@@ -28,12 +30,12 @@ function iconFile(kind, forPreview = false) {
   if (k === 'classic') return path.join(ASSETS, process.platform === 'win32' && !forPreview ? 'icon.ico' : 'icon.png');
   return path.join(ASSETS, 'icons', k + '.png');
 }
-const appIconPath = () => iconFile(store ? S().appearance.icon : 'classic');
+const appIconPath = () => iconFile(store ? S().appearance.icon : 'white-m');
 // read through fs (works inside the app archive) instead of letting the system read the path
 const iconImage = (kind) => {
   try { return nativeImage.createFromBuffer(fs.readFileSync(iconFile(kind, true))); } catch { return undefined; }
 };
-const appIconImage = () => iconImage(store ? S().appearance.icon : 'classic');
+const appIconImage = () => iconImage(store ? S().appearance.icon : 'white-m');
 
 // The taskbar icon on Linux comes from the installed launcher, so update that too when one exists
 function updateLauncherIcon(kind) {
@@ -75,7 +77,15 @@ try {
 const profiles = createProfiles(app.getPath('appData'));
 const requestedProfile = (process.argv.find((a) => a.startsWith('--profile=')) || '').slice(10);
 const profileExplicit = !!(requestedProfile && profiles.get(requestedProfile));
-const profileId = profileExplicit ? requestedProfile : 'default';
+let profileId;
+if (profileExplicit) {
+  profileId = requestedProfile;
+} else if (profiles.getOpenLastProfile()) {
+  const last = profiles.getLastProfile();
+  profileId = (last && profiles.get(last)) ? last : profiles.getDefaultProfile();
+} else {
+  profileId = profiles.getDefaultProfile();
+}
 const unlockedByParent = process.env.MB_UNLOCKED_PROFILE === profileId;
 try { app.setPath('userData', profiles.dirFor(profileId)); } catch { /* keep the default folder */ }
 const gotLock = app.requestSingleInstanceLock(); // one running instance per profile
@@ -89,11 +99,11 @@ if (app.userAgentFallback) {
 app.commandLine.appendSwitch('disable-features', 'Vulkan');
 
 protocol.registerSchemesAsPrivileged([
-  { scheme: 'my', privileges: { standard: true, secure: true } },
+  { scheme: 'my', privileges: { standard: true, secure: true, corsEnabled: true, supportFetchAPI: true } },
 ]);
 
 const START = 'my://start';
-const TAB_H = 38, TOOL_H = 50, SIDE_W = 220, STATUS_H = 22, PANEL_HEAD = 46;
+const TAB_H = 38, TOOL_H = 50, TRANSLATE_H = 34, SIDE_W = 220, STATUS_H = 22, PANEL_HEAD = 46;
 const MOBILE_UA = 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36';
 
 let store, blocker, vault;
@@ -222,18 +232,21 @@ function layout() {
   const zero = { x: 0, y: 0, width: 0, height: 0 };
   const full = cur.win.isFullScreen();
   const bottom = !full && S().appearance.statusBar ? STATUS_H : 0;
+  const t = activeTab();
+  const tlH = !full && t && t.detectedLang && t.detectedLang !== app.getLocale().split('-')[0].toLowerCase() && !cur.translateDismissed ? TRANSLATE_H : 0;
+  const toolH = TOOL_H + tlH;
   let c;
   if (full) {
     cur.toolbarView.setBounds(zero); cur.tabbarView.setBounds(zero);
     c = { x: 0, y: 0, width, height };
   } else if (S().appearance.tabBar === 'left') {
-    cur.toolbarView.setBounds({ x: 0, y: 0, width, height: TOOL_H });
-    cur.tabbarView.setBounds({ x: 0, y: TOOL_H, width: SIDE_W, height: Math.max(0, height - TOOL_H - bottom) });
-    c = { x: SIDE_W, y: TOOL_H, width: Math.max(0, width - SIDE_W), height: Math.max(0, height - TOOL_H - bottom) };
+    cur.toolbarView.setBounds({ x: 0, y: 0, width, height: toolH });
+    cur.tabbarView.setBounds({ x: 0, y: toolH, width: SIDE_W, height: Math.max(0, height - toolH - bottom) });
+    c = { x: SIDE_W, y: toolH, width: Math.max(0, width - SIDE_W), height: Math.max(0, height - toolH - bottom) };
   } else {
     cur.tabbarView.setBounds({ x: 0, y: 0, width, height: TAB_H });
-    cur.toolbarView.setBounds({ x: 0, y: TAB_H, width, height: TOOL_H });
-    c = { x: 0, y: TAB_H + TOOL_H, width, height: Math.max(0, height - TAB_H - TOOL_H - bottom) };
+    cur.toolbarView.setBounds({ x: 0, y: TAB_H, width, height: toolH });
+    c = { x: 0, y: TAB_H + toolH, width, height: Math.max(0, height - TAB_H - toolH - bottom) };
   }
   // side panel (bookmarks / history / downloads / notes / web panels)
   const noBounds = { x: 0, y: 0, width: 0, height: 0 };
@@ -247,7 +260,14 @@ function layout() {
     c = onLeft ? { ...c, x: c.x + pb.width, width: Math.max(0, c.width - pb.width) } : { ...c, width: Math.max(0, c.width - pb.width) };
     cur.panelResizer.setBounds(onLeft ? { x: pb.x + pb.width - 3, y: pb.y, width: 7, height: pb.height } : { x: pb.x - 4, y: pb.y, width: 7, height: pb.height });
     const isWebPanel = cur.panelTab.startsWith('web:');
-    cur.panelView.setBounds(isWebPanel ? { ...pb, height: Math.min(PANEL_HEAD, pb.height) } : pb);
+    const isBmPanel = cur.panelTab === 'bookmarks';
+    const inlinePanel = !isWebPanel && !isBmPanel;
+    cur.panelView.setBounds(inlinePanel ? pb : { ...pb, height: Math.min(PANEL_HEAD, pb.height) });
+    if (cur.bmView) {
+      cur.bmView.setBounds(isBmPanel
+        ? { x: pb.x, y: pb.y + PANEL_HEAD, width: pb.width, height: Math.max(0, pb.height - PANEL_HEAD) }
+        : noBounds);
+    }
     if (cur.webPanel) {
       cur.webPanel.setBounds(isWebPanel
         ? { x: pb.x, y: pb.y + PANEL_HEAD, width: pb.width, height: Math.max(0, pb.height - PANEL_HEAD) }
@@ -260,8 +280,8 @@ function layout() {
   }
   cur.statusView.setBounds(bottom ? { x: 0, y: height - STATUS_H, width, height: STATUS_H } : zero);
   cur.contentRect = c;
-  const t = cur.tabs.get(cur.activeId);
-  if (t) t.view.setBounds(c);
+  const activeT = cur.tabs.get(cur.activeId);
+  if (activeT) activeT.view.setBounds(c);
   if (cur.overlayMode) cur.overlay.setBounds(overlayBounds(cur.overlayMode));
 }
 
@@ -287,7 +307,7 @@ function stateFor() {
     url,
     canBack: wc ? wc.navigationHistory.canGoBack() : false,
     canForward: wc ? wc.navigationHistory.canGoForward() : false,
-    bookmarked: bookmarks.some((b) => b.url === url && !b.deleted),
+    bookmarked: bookmarks.some((b) => b.url === url && !b.deleted && !b.recycleBin),
     tabBar: S().appearance.tabBar,
     security: securityLevel(url, host),
     frameless: !!cur.frameless,
@@ -303,22 +323,29 @@ function stateFor() {
     hover: t ? t.hover || '' : '',
     loading: wc ? wc.isLoading() : false,
     tabCount: cur.order.length,
+    wheelScrollTabs: S().tabs.wheelScrolls !== false,
+    clickTabScrollsTop: S().tabs.clickTabScrollsTop !== false,
+    toolbarButtons: S().appearance.toolbar || {},
+    detectedLang: (t && t.detectedLang) || '',
+    systemLang: app.getLocale().split('-')[0].toLowerCase(),
+    translateBarVisible: !!(t && t.detectedLang && t.detectedLang !== app.getLocale().split('-')[0].toLowerCase() && !cur.translateDismissed),
     theme: themeVars(),
     blocked: wc ? blockedCounts.get(wc.id) || 0 : 0,
     blockerOn: S().privacy.blockTrackers,
     siteAllowed: !!host && allow.some((h) => host === h || host.endsWith('.' + h)),
     private: !!(t && t.private),
+    downloads: downloads.slice(0, 5).map((d) => ({ id: d.id, name: d.name, url: d.url, path: d.path, state: d.state, received: d.received, total: d.total })),
     tabs: cur.order.map((id) => {
       const x = cur.tabs.get(id);
       return {
         id,
-        title: x.wc.getTitle() || 'New Tab',
+        title: x.deferredUrl ? (hostOf(x.deferredUrl) || x.deferredUrl) : (x.wc.getTitle() || 'New Tab'),
         favicon: x.favicon,
         pinned: x.pinned,
         private: x.private,
         audible: x.wc.isCurrentlyAudible(),
         muted: x.wc.audioMuted,
-        loading: x.wc.isLoading(),
+        loading: x.deferredUrl ? false : x.wc.isLoading(),
       };
     }),
   };
@@ -364,6 +391,7 @@ function createView(isPrivate) {
       sandbox: true,
       contextIsolation: true,
       nodeIntegration: false,
+      nodeIntegrationInSubFrames: true,
       preload: path.join(__dirname, 'page-preload.js'),
       partition: isPrivate ? 'private' : undefined,
     },
@@ -395,11 +423,17 @@ function newTab(target, opts = {}) {
   tabByWc.set(tab.wc.id, tab);
   insertOrder(id, tab, opts);
   wire(tab);
-  tab.wc.loadURL(target === undefined ? newTabUrl() : normalize(target));
-  if (opts.background) pushState(); else switchTab(id);
-  if (!opts.background && (target === undefined || target === START) && S().tabs.newTabFocus === 'address') {
-    tab.focusUrlOnLoad = true;
-    focusUrl();
+  const url = target === undefined ? newTabUrl() : normalize(target);
+  if (opts.background && S().tabs.lazyBackground !== false) {
+    tab.deferredUrl = url;
+    pushState();
+  } else {
+    tab.wc.loadURL(url);
+    if (opts.background) pushState(); else switchTab(id);
+    if (!opts.background && (target === undefined || target === START) && S().tabs.newTabFocus === 'address') {
+      tab.focusUrlOnLoad = true;
+      focusUrl();
+    }
   }
   return id;
 }
@@ -409,7 +443,7 @@ function wire(tab) {
   // every event runs in the context of the window that currently owns the tab
   const h = (fn) => (...a) => { use(tab.owner); fn(...a); };
   wc.on('page-title-updated', h(() => pushState()));
-  wc.on('did-start-loading', h(() => { tab.status = 'Connecting…'; pushState(); }));
+  wc.on('did-start-loading', h(() => { tab.status = 'Connecting…'; tab.detectedLang = ''; cur.translateDismissed = false; pushState(); }));
   wc.on('did-stop-loading', h(() => { tab.status = ''; pushState(); maybeThumb(tab); }));
   wc.on('did-finish-load', h(() => {
     if (tab.focusUrlOnLoad) {
@@ -480,6 +514,11 @@ function wire(tab) {
 function switchTab(id) {
   const next = cur.tabs.get(id);
   if (!next) return;
+  if (next.deferredUrl) {
+    const u = next.deferredUrl;
+    delete next.deferredUrl;
+    next.wc.loadURL(u);
+  }
   if (cur.overlayMode && cur.overlayMode !== 'suggest') hideOverlay(false);
   const prev = cur.tabs.get(cur.activeId);
   if (prev && prev !== next) cur.win.contentView.removeChildView(prev.view);
@@ -580,11 +619,24 @@ function toggleBookmark() {
   if (!isWeb(url)) return;
   const now = Date.now();
   const b = bookmarks.find((x) => x.url === url);
-  if (b) { b.deleted = !b.deleted; b.updated = now; b.title = wc.getTitle() || b.title; }
+  if (b && b.recycleBin) { delete b.recycleBin; delete b.binTime; b.deleted = false; b.updated = now; b.title = wc.getTitle() || b.title; }
+  else if (b && !b.deleted) { b.recycleBin = true; b.binTime = now; }
+  else if (b) { b.deleted = false; b.updated = now; b.title = wc.getTitle() || b.title; }
   else bookmarks.push({ url, title: wc.getTitle(), folder: '', added: now, updated: now, deleted: false });
   save('bookmarks.json', bookmarks);
   pushState();
   syncSoon();
+}
+
+// ---------- translate ----------
+function translateTab(tab) {
+  const wc = tab ? tab.wc : activeWc();
+  if (!wc) return;
+  let url;
+  try { url = wc.getURL(); } catch { return; }
+  if (!isWeb(url)) return;
+  const tl = app.getLocale().split('-')[0] || 'en';
+  wc.loadURL('https://translate.google.com/translate?sl=auto&tl=' + encodeURIComponent(tl) + '&u=' + encodeURIComponent(url));
 }
 
 // ---------- page actions ----------
@@ -635,6 +687,7 @@ const COMMANDS = [
   { id: 'tab-new', label: 'New Tab', keys: ['Ctrl+T'], run: () => newTab() },
   { id: 'tab-new-private', label: 'New Private Tab', keys: ['Ctrl+Shift+N'], run: () => newTab(undefined, { private: true }) },
   { id: 'window-new', label: 'New Window', keys: ['Ctrl+N'], run: () => createWindow() },
+  { id: 'window-new-private', label: 'New Private Window', keys: ['Ctrl+Shift+P'], run: () => createWindow({ private: true }) },
   { id: 'tab-new-window', label: 'Move Tab to New Window', keys: [], run: () => { const t = cur.tabs.get(cur.activeId); if (t) tearOffTab(t); } },
   { id: 'tab-close', label: 'Close Tab', keys: ['Ctrl+W'], run: () => closeTab(cur.activeId) },
   { id: 'tab-reopen', label: 'Reopen Closed Tab', keys: ['Ctrl+Shift+T'], run: reopenTab },
@@ -656,6 +709,7 @@ const COMMANDS = [
   { id: 'page-zoom-reset', label: 'Reset Zoom', keys: ['Ctrl+0'], run: () => zoom(0) },
   { id: 'page-fullscreen', label: 'Toggle Fullscreen', keys: ['F11'], run: () => { cur.win.setFullScreen(!cur.win.isFullScreen()); } },
   { id: 'page-print', label: 'Print', keys: ['Ctrl+P'], run: () => activeWc()?.print() },
+  { id: 'page-translate', label: 'Translate Page', keys: [], run: () => translateTab(null) },
   { id: 'page-source', label: 'View Page Source', keys: ['Ctrl+U'], run: () => { const u = activeWc()?.getURL(); if (u && isWeb(u)) newTab('view-source:' + u, { after: cur.activeId }); } },
   { id: 'page-devtools', label: 'Developer Tools', keys: ['F12'], run: () => activeWc()?.toggleDevTools() },
   { id: 'page-screenshot', label: 'Capture Page Screenshot', keys: ['Ctrl+Shift+S'], run: screenshot },
@@ -676,6 +730,7 @@ const COMMANDS = [
   { id: 'panel-history', label: 'Panel: History', keys: [], run: () => setPanel(true, 'history') },
   { id: 'panel-downloads', label: 'Panel: Downloads', keys: [], run: () => setPanel(true, 'downloads') },
   { id: 'panel-notes', label: 'Panel: Notes', keys: [], run: () => setPanel(true, 'notes') },
+  { id: 'app-notes', label: 'Notes', keys: [], run: () => openInternal('notes') },
   { id: 'app-import', label: 'Import Bookmarks & Passwords', keys: [], run: () => openInternal('import') },
   { id: 'app-profiles', label: 'Profiles', keys: [], run: () => openInternal('profiles') },
   { id: 'app-passwords', label: 'Password Manager', keys: [], run: () => openInternal('passwords') },
@@ -735,6 +790,12 @@ function overlayBounds(mode) {
   }
   if (mode === 'suggest') {
     return { x: 150, y: cur.contentRect.y - 2, width: Math.max(200, Math.min(760, width - 190)), height: 40 };
+  }
+  if (mode === 'card' || mode === 'addr') {
+    const d = cur.overlayData || {};
+    const rows = (d.items ? d.items.length : 0) + 1;
+    const x = Math.max(0, Math.min(width - 310, Math.round(cur.contentRect.x + (d.x || 0))));
+    return { x, y: Math.round(cur.contentRect.y + (d.y || 0)), width: 300, height: rows * 40 + 12 };
   }
   if (mode === 'pw') {
     const d = cur.overlayData || {};
@@ -871,6 +932,7 @@ function paletteRun(item) {
 // ---------- password manager ----------
 function touchVault() {
   clearTimeout(vaultTimer);
+  if (vault.isDevice()) return; // device-mode vault stays unlocked
   const m = Number(S().passwords.autoLockMinutes);
   if (vault.unlocked() && m > 0) vaultTimer = setTimeout(() => vault.lock(), m * 60000);
 }
@@ -891,21 +953,32 @@ function maybeShowPwSave(w) {
 
 function showPwFill(w, tab, rect, force = false) {
   use(w);
-  if (w.pwSuppressUntil && Date.now() < w.pwSuppressUntil) return; // just filled: do not pop up again
+  if (w.pwSuppressUntil && Date.now() < w.pwSuppressUntil) return;
   if (!vault.exists() || !S().passwords.enabled || tab.private) return;
   const origin = tabOrigin(tab);
   if (!origin) return;
   if (cur.overlayMode && !(cur.overlayMode === 'pw' && cur.overlayData && cur.overlayData.view === 'fill')) return;
+  if (!vault.unlocked()) {
+    // vault locked — don't show unlock prompt on field focus; user can unlock via key icon
+    if (force) showOverlay('pw', { view: 'fill', items: [], locked: true, x: 0, y: 0 });
+    return;
+  }
   const z = tab.wc.getZoomFactor() || 1;
   const pos = { x: (rect.left || 0) * z, y: (rect.bottom || 0) * z + 4 };
   cur.pwField = pos;
-  if (vault.unlocked()) {
-    const items = vault.findByOrigin(origin).map((e) => ({ id: e.id, name: e.name, username: e.username || '(no username)' }));
-    if (!items.length && !force) { if (cur.overlayMode === 'pw') hideOverlay(false); return; }
-    showOverlay('pw', { view: 'fill', items, empty: !items.length, ...pos });
-  } else {
-    showOverlay('pw', { view: 'fill', items: [], locked: true, ...pos });
+  const entries = vault.findByOrigin(origin);
+  const items = entries.map((e) => ({ id: e.id, name: e.name, username: e.username || '(no username)' }));
+  if (!items.length && !force) { if (cur.overlayMode === 'pw') hideOverlay(false); return; }
+  // auto-fill when exactly one login saved and not forcing (key-icon click)
+  if (items.length === 1 && !force) {
+    const pw = vault.reveal(entries[0].id);
+    if (pw) {
+      w.pwSuppressUntil = Date.now() + 3000;
+      tab.wc.send('pw:fill', { username: entries[0].username, password: pw });
+      return;
+    }
   }
+  showOverlay('pw', { view: 'fill', items, empty: !items.length, ...pos });
   if (cur.overlayMode === 'pw') cur.overlay.setBounds(overlayBounds('pw'));
 }
 
@@ -1008,6 +1081,7 @@ function showContextMenu(tab, params) {
     m.push({ role: 'copy' });
     const t = params.selectionText.trim();
     add(`Search for “${t.length > 30 ? t.slice(0, 30) + '…' : t}”`, () => newTab(searchUrl(engineById(S().search.default), t), { after: tab.id, private: tab.private }));
+    add(`Translate “${t.length > 30 ? t.slice(0, 30) + '…' : t}”`, () => newTab('https://translate.google.com/?sl=auto&tl=' + encodeURIComponent(app.getLocale().split('-')[0]) + '&text=' + encodeURIComponent(t) + '&op=translate', { after: tab.id, private: tab.private }));
     sep();
   }
   add('Back', () => wc.navigationHistory.goBack(), { enabled: wc.navigationHistory.canGoBack() });
@@ -1016,6 +1090,7 @@ function showContextMenu(tab, params) {
   sep();
   add('Bookmark This Page', toggleBookmark);
   add('Add Page to Speed Dial', () => runCommand('page-add-speeddial'));
+  add('Translate Page', () => translateTab(tab));
   add('View Page Source', () => runCommand('page-source'));
   add('Inspect Element', () => wc.inspectElement(params.x, params.y));
   popup(Menu.buildFromTemplate(m));
@@ -1040,14 +1115,24 @@ function launchProfile(id, unlocked) {
 
 function profileMenu() {
   profiles.reload();
+  const acc = S().sync.account || {};
+  const isSignedIn = !!(S().sync.token && acc.user);
+  const syncOk = isSignedIn && syncStatus.startsWith('Last synced');
+  const syncDot = isSignedIn ? (syncOk ? '🟢' : '🔴') : '⚪';
+  const syncLabel = isSignedIn
+    ? syncDot + '  ' + (syncOk ? syncStatus : 'Sync: ' + syncStatus)
+    : syncDot + '  Sync not signed in';
   const items = profiles.list().map((p) => ({
     label: (p.id === profileId ? '●  ' : '    ') + p.name + (p.locked ? '   (password)' : ''),
     enabled: p.id !== profileId,
     click: () => launchProfile(p.id, false),
   }));
   popup(Menu.buildFromTemplate([
+    { label: syncLabel, enabled: false },
+    { type: 'separator' },
     ...items, { type: 'separator' },
     { label: 'Manage profiles…', click: () => openInternal('profiles') },
+    { label: 'Settings → Sync', click: () => openInternal('settings#sync') },
     { type: 'separator' },
     { label: 'Quit this profile', click: () => app.quit() },
   ]));
@@ -1056,10 +1141,10 @@ function profileMenu() {
 function mainMenu() {
   const item = (id) => { const c = COMMANDS.find((x) => x.id === id); return { label: c.label, accelerator: undefined, click: c.run }; };
   popup(Menu.buildFromTemplate([
-    item('tab-new'), item('tab-new-private'), item('window-new'), { type: 'separator' },
-    item('app-bookmarks'), item('app-library'), item('app-downloads'), item('app-start'), item('page-add-speeddial'), { type: 'separator' },
+    item('tab-new'), item('tab-new-private'), item('window-new'), item('window-new-private'), { type: 'separator' },
+    item('app-start'), item('page-add-speeddial'), { type: 'separator' },
     item('page-find'), item('page-print'), item('page-screenshot'), item('page-fullscreen'), { type: 'separator' },
-    item('app-history'), item('app-passwords'), item('app-import'), item('app-profiles'), item('toggle-vertical-tabs'), item('app-quick-commands'), item('app-settings'), { type: 'separator' },
+    item('app-history'), item('app-bookmarks'), item('app-downloads'), item('app-passwords'), item('app-profiles'), item('toggle-vertical-tabs'), item('app-quick-commands'), item('app-settings'), { type: 'separator' },
     { label: 'Quit', click: () => app.quit() },
   ]));
 }
@@ -1110,6 +1195,7 @@ function onWillDownload(_e, item) {
     rec.received = item.getReceivedBytes();
     rec.total = item.getTotalBytes();
     rec.state = item.isPaused() ? 'paused' : state === 'interrupted' ? 'interrupted' : 'progressing';
+    pushSoon();
   });
   item.on('done', (_ev, state) => {
     rec.received = item.getReceivedBytes();
@@ -1117,24 +1203,86 @@ function onWillDownload(_e, item) {
     rec.path = item.getSavePath() || rec.path;
     if (rec.path) rec.name = path.basename(rec.path);
     dlItems.delete(rec.id);
+    pushSoon();
   });
+  // First-time: ask the user's download location preference
+  if (!S().downloads.firstTimeAsked) {
+    store.set('downloads.firstTimeAsked', true);
+    setImmediate(async () => {
+      const { response } = await dialog.showMessageBox({
+        type: 'question',
+        title: 'Download location',
+        message: 'Where do you want to save downloads?',
+        detail: 'You can change this later in Settings.',
+        buttons: ['Save to Downloads folder automatically', 'Always ask where to save'],
+        defaultId: 0,
+      });
+      store.set('downloads.askWhere', response === 1);
+    });
+  }
+  pushSoon();
 }
 
 function downloadAction(id, action) {
+  if (action === 'removeAll') {
+    for (const d of [...downloads]) { const it = dlItems.get(d.id); if (it) it.cancel(); dlItems.delete(d.id); }
+    downloads.length = 0;
+    pushSoon();
+    return true;
+  }
   const rec = downloads.find((d) => d.id === id);
   if (!rec) return false;
   const item = dlItems.get(id);
   if (action === 'open' && rec.path) shell.openPath(rec.path);
   else if (action === 'show' && rec.path) shell.showItemInFolder(rec.path);
+  else if (action === 'copyUrl' && rec.url) clipboard.writeText(rec.url);
+  else if (action === 'copyPath' && rec.path) clipboard.writeText(rec.path);
   else if (action === 'cancel' && item) item.cancel();
   else if (action === 'pause' && item) item.pause();
   else if (action === 'resume' && item && item.canResume()) item.resume();
+  else if (action === 'restart') {
+    const wc = cur && cur.activeId && cur.tabs.get(cur.activeId) ? cur.tabs.get(cur.activeId).wc : null;
+    if (wc) wc.downloadURL(rec.url);
+  }
   else if (action === 'remove') {
     if (item) item.cancel();
+    dlItems.delete(id);
     downloads.splice(downloads.indexOf(rec), 1);
+    pushSoon();
   }
   return true;
 }
+
+ipcMain.on('downloads:ctxmenu', (_e, id) => {
+  const rec = downloads.find((d) => d.id === id);
+  if (!rec) return;
+  const item = dlItems.get(id);
+  const active = rec.state === 'progressing' || rec.state === 'paused';
+  const tpl = [
+    { label: 'Open downloads page', click: () => newTab('my://downloads') },
+    { type: 'separator' },
+  ];
+  if (rec.state === 'completed') {
+    tpl.push({ label: 'Open file', click: () => shell.openPath(rec.path) });
+    tpl.push({ label: 'Show in folder', click: () => shell.showItemInFolder(rec.path) });
+  }
+  tpl.push({ label: 'Copy download address', click: () => clipboard.writeText(rec.url) });
+  if (rec.path) tpl.push({ label: 'Copy local path', click: () => clipboard.writeText(rec.path) });
+  if (active) {
+    tpl.push({ type: 'separator' });
+    if (rec.state === 'progressing') tpl.push({ label: 'Pause', click: () => item && item.pause() });
+    if (rec.state === 'paused') tpl.push({ label: 'Resume', click: () => item && item.canResume() && item.resume() });
+    tpl.push({ label: 'Cancel', click: () => { if (item) item.cancel(); } });
+  }
+  if (rec.state !== 'progressing') {
+    tpl.push({ type: 'separator' });
+    tpl.push({ label: 'Restart download', click: () => downloadAction(id, 'restart') });
+  }
+  tpl.push({ type: 'separator' });
+  tpl.push({ label: 'Remove from list', click: () => downloadAction(id, 'remove') });
+  if (downloads.length > 1) tpl.push({ label: 'Remove all downloads', click: () => downloadAction(null, 'removeAll') });
+  Menu.buildFromTemplate(tpl).popup();
+});
 
 // ---------- sync ----------
 const syncReady = () => { const c = S().sync; return !!(c.server && c.token); };
@@ -1285,10 +1433,13 @@ function allFolderPaths() {
   const set = new Set();
   const addWithParents = (p) => { const parts = p.split(SEP); for (let i = 1; i <= parts.length; i++) set.add(parts.slice(0, i).join(SEP)); };
   for (const f of bookmarkFolders) if (f) addWithParents(f);
-  for (const b of bookmarks) if (!b.deleted && b.folder) addWithParents(b.folder);
+  for (const b of bookmarks) if (!b.deleted && !b.recycleBin && b.folder) addWithParents(b.folder);
   return [...set].sort((a, b) => a.localeCompare(b));
 }
-function touchBookmarks() { save('bookmarks.json', bookmarks); pushAll(); syncSoon(); }
+function touchBookmarks() {
+  save('bookmarks.json', bookmarks); pushAll(); syncSoon();
+  for (const w of windows) { if (w.bmView) try { w.bmView.webContents.send('bookmarks:changed'); } catch { /* ignore */ } }
+}
 
 // ---------- importing bookmarks ----------
 const detectedSources = new Map();
@@ -1365,7 +1516,7 @@ const handle = (ch, fn, o) => ipcMain.handle(ch, guard(fn, o));
 const BOTH = { chrome: true, page: true };
 
 function setupIpc() {
-  on('tab:new', () => newTab());
+  on('tab:new', (_e, url) => newTab(url || undefined));
   on('tab:switch', (_e, id) => switchTab(id));
   on('tab:close', (_e, id) => closeTab(id));
   on('tab:menu', (_e, id) => tabMenu(id));
@@ -1376,9 +1527,27 @@ function setupIpc() {
   });
   on('tab:dragend', (_e, id, dropEffect, outside) => tabDragEnd(id, dropEffect, !!outside));
   on('tab:mute', (_e, id) => toggleMute(id));
+  on('tab:next', () => { const idx = cur.order.indexOf(cur.activeId); if (idx < cur.order.length - 1) switchTab(cur.order[idx + 1]); });
+  on('tab:prev', () => { const idx = cur.order.indexOf(cur.activeId); if (idx > 0) switchTab(cur.order[idx - 1]); });
+  on('tab:active-click', () => { const t = activeTab(); if (t && S().tabs.clickTabScrollsTop !== false) t.wc.executeJavaScript('window.scrollTo({top:0,behavior:"smooth"})').catch(()=>{}); });
+  on('tab:new-private', () => newTab(undefined, { private: true }));
   on('menu:main', () => mainMenu());
   on('security:show', () => { if (cur.overlayMode === 'security') hideOverlay(); else showOverlay('security', securityInfo()); });
   on('zoom:reset', () => zoom(0));
+  on('zoom:set', (_e, pct) => { const wc = activeWc(); if (!wc) return; wc.setZoomFactor(Math.min(3, Math.max(0.3, Number(pct) / 100))); pushState(); });
+  on('translate:page', () => translateTab(null));
+  on('translate:dismiss', () => { cur.translateDismissed = true; layout(); pushState(); });
+  ipcMain.on('page:lang', (e, lang) => {
+    const t = tabByWc.get(e.sender.id); if (!t) return;
+    if (typeof lang !== 'string') return;
+    t.detectedLang = lang.split('-')[0].toLowerCase();
+    use(t.owner); layout(); pushState();
+  });
+  ipcMain.on('zoom:ctrl-wheel', (e, dir) => {
+    const t = tabByWc.get(e.sender.id); if (!t) return;
+    use(t.owner); const wc = t.wc; const f = wc.getZoomFactor();
+    wc.setZoomFactor(Math.min(3, Math.max(0.25, f + dir * 0.1))); pushState();
+  });
   on('win:min', () => cur.win.minimize());
   on('win:max', () => { if (cur.win.isMaximized()) cur.win.unmaximize(); else cur.win.maximize(); });
   on('win:close', () => cur.win.close());
@@ -1495,9 +1664,62 @@ function setupIpc() {
     const t = tabByWc.get(e.sender.id);
     if (!t) return;
     const w = t.owner;
-    setTimeout(() => {
+    if (w.pwBlurTimer) clearTimeout(w.pwBlurTimer);
+    w.pwBlurTimer = setTimeout(() => {
+      w.pwBlurTimer = null;
       if (windows.has(w) && w.overlayMode === 'pw' && w.overlayData && w.overlayData.view === 'fill') { use(w); hideOverlay(false); }
-    }, 250);
+    }, 1500);
+  });
+  handle('pw:popup-enter', () => { if (cur.pwBlurTimer) { clearTimeout(cur.pwBlurTimer); cur.pwBlurTimer = null; } });
+  handle('pw:popup-leave', () => {
+    const w = cur;
+    if (w.pwBlurTimer) clearTimeout(w.pwBlurTimer);
+    w.pwBlurTimer = setTimeout(() => {
+      w.pwBlurTimer = null;
+      if (windows.has(w) && w.overlayMode === 'pw' && w.overlayData && w.overlayData.view === 'fill') { use(w); hideOverlay(false); }
+    }, 800);
+  });
+
+  ipcMain.on('card:focus', (e, rect) => {
+    const t = tabByWc.get(e.sender.id);
+    if (!t || !rect || t.id !== t.owner.activeId) return;
+    if (!vault.unlocked() || !S().passwords.enabled || t.private) return;
+    const cards = vault.listCards();
+    if (!cards.length) return;
+    use(t.owner);
+    const z = t.wc.getZoomFactor() || 1;
+    const pos = { x: (rect.left || 0) * z, y: (rect.bottom || 0) * z + 4 };
+    showOverlay('card', { items: cards, ...pos });
+  });
+
+  ipcMain.on('addr:focus', (e, rect) => {
+    const t = tabByWc.get(e.sender.id);
+    if (!t || !rect || t.id !== t.owner.activeId) return;
+    if (!vault.unlocked() || !S().passwords.enabled || t.private) return;
+    const addrs = vault.listAddresses();
+    if (!addrs.length) return;
+    use(t.owner);
+    const z = t.wc.getZoomFactor() || 1;
+    const pos = { x: (rect.left || 0) * z, y: (rect.bottom || 0) * z + 4 };
+    showOverlay('addr', { items: addrs, ...pos });
+  });
+
+  // card/addr autofill pick
+  handle('card:pick', (_e, id) => {
+    const t = activeTab();
+    if (!t) return;
+    const data = vault.revealCard(id);
+    if (data) t.wc.send('card:fill', data);
+    hideOverlay();
+    return { ok: true };
+  });
+  handle('addr:pick', (_e, id) => {
+    const t = activeTab();
+    if (!t) return;
+    const data = vault.revealAddress(id);
+    if (data) t.wc.send('addr:fill', data);
+    hideOverlay();
+    return { ok: true };
   });
 
   // the popups (save bubble, fill list, unlock) talk to the vault through this one channel
@@ -1556,6 +1778,15 @@ function setupIpc() {
       hideOverlay();
       return { ok: true };
     }
+    if (act === 'deleteEntry') {
+      if (!vault.unlocked() || !a.id) return { error: 'Locked.' };
+      vault.remove(a.id);
+      touchVault();
+      syncSoon();
+      if (t && cur.pwField) showPwFill(cur, t, { left: cur.pwField.x / (t.wc.getZoomFactor() || 1), bottom: (cur.pwField.y - 4) / (t.wc.getZoomFactor() || 1) });
+      else hideOverlay(false);
+      return { ok: true };
+    }
     return { error: 'unknown action' };
   });
 
@@ -1564,7 +1795,8 @@ function setupIpc() {
   const locked = () => { if (!vault.unlocked()) throw new Error('locked'); touchVault(); };
   handle('vault:status', () => ({
     exists: vault.exists(), unlocked: vault.unlocked(), count: vault.unlocked() ? vault.count() : null,
-    autoLock: S().passwords.autoLockMinutes,
+    autoLock: S().passwords.autoLockMinutes, deviceMode: vault.isDevice(),
+    safeStorageAvailable: safeStorage.isEncryptionAvailable(),
   }), PAGE_ONLY);
   handle('vault:syncStatus', () => ({
     enabled: !!(S().passwords.sync && syncReady()), configured: syncReady(), ...vaultSyncInfo,
@@ -1589,7 +1821,41 @@ function setupIpc() {
     touchVault();
     return { ok: true };
   }, PAGE_ONLY);
-  handle('vault:lock', () => { vault.lock(); clearTimeout(vaultTimer); return true; }, PAGE_ONLY);
+  handle('vault:lock', () => { if (!vault.isDevice()) { vault.lock(); clearTimeout(vaultTimer); } return true; }, PAGE_ONLY);
+  handle('vault:ensureDevice', () => {
+    if (vault.unlocked()) return { ok: true };
+    const keyFile = file('vault-device.key');
+    const plainFile = file('vault-device.key.plain');
+    // Try key files if vault already exists
+    if (vault.exists()) {
+      try {
+        if (safeStorage.isEncryptionAvailable() && fs.existsSync(keyFile)) {
+          const enc = fs.readFileSync(keyFile, 'utf8');
+          const keyB64 = safeStorage.decryptString(Buffer.from(enc, 'base64'));
+          vault.unlockWithKey(Buffer.from(keyB64, 'base64'));
+        } else if (fs.existsSync(plainFile)) {
+          const keyB64 = fs.readFileSync(plainFile, 'utf8').trim();
+          vault.unlockWithKey(Buffer.from(keyB64, 'base64'));
+        }
+      } catch { }
+      if (vault.unlocked()) return { ok: true };
+      // Vault exists but can't be unlocked — delete and recreate as device vault
+      try { fs.unlinkSync(file('vault.json')); } catch { }
+    }
+    // Create fresh device vault
+    try {
+      const rawKey = crypto.randomBytes(32);
+      vault.createWithKey(rawKey);
+      if (safeStorage.isEncryptionAvailable()) {
+        const enc = safeStorage.encryptString(rawKey.toString('base64'));
+        fs.writeFileSync(keyFile, enc.toString('base64'), { mode: 0o600 });
+      } else {
+        fs.writeFileSync(plainFile, rawKey.toString('base64'), { mode: 0o600 });
+      }
+      rawKey.fill(0);
+      return { ok: true };
+    } catch (err) { return { error: err.message }; }
+  }, PAGE_ONLY);
   handle('vault:list', () => { if (!vault.unlocked()) return null; touchVault(); return vault.list(); }, PAGE_ONLY);
   handle('vault:reveal', (_e, id) => { locked(); return vault.reveal(id); }, PAGE_ONLY);
   handle('vault:copy', (_e, id) => {
@@ -1626,6 +1892,26 @@ function setupIpc() {
   }, PAGE_ONLY);
   handle('vault:import', (_e, rows) => { locked(); const r = Array.isArray(rows) ? vault.importRows(rows) : { added: 0, updated: 0, skipped: 0 }; syncSoon(); return r; }, PAGE_ONLY);
 
+  // ---- vault: cards ----
+  handle('vault:listCards', () => { if (!vault.unlocked()) return null; touchVault(); return vault.listCards(); }, PAGE_ONLY);
+  handle('vault:saveCard', (_e, entry) => {
+    locked();
+    try { const id = vault.upsertCard(entry || {}); syncSoon(); return { id }; }
+    catch (e) { return { error: e.message }; }
+  }, PAGE_ONLY);
+  handle('vault:revealCard', (_e, id) => { locked(); return vault.revealCard(id); }, PAGE_ONLY);
+  handle('vault:deleteCard', (_e, id) => { locked(); vault.remove(id); syncSoon(); return true; }, PAGE_ONLY);
+
+  // ---- vault: addresses ----
+  handle('vault:listAddresses', () => { if (!vault.unlocked()) return null; touchVault(); return vault.listAddresses(); }, PAGE_ONLY);
+  handle('vault:saveAddress', (_e, entry) => {
+    locked();
+    try { const id = vault.upsertAddress(entry || {}); syncSoon(); return { id }; }
+    catch (e) { return { error: e.message }; }
+  }, PAGE_ONLY);
+  handle('vault:revealAddress', (_e, id) => { locked(); return vault.revealAddress(id); }, PAGE_ONLY);
+  handle('vault:deleteAddress', (_e, id) => { locked(); vault.remove(id); syncSoon(); return true; }, PAGE_ONLY);
+
   // ---- profiles ----
   handle('profiles:list', () => { profiles.reload(); return { profiles: profiles.list(), current: profileId, askAtStart: profiles.askAtStart() }; }, PAGE_ONLY);
   handle('profiles:create', (_e, o) => { profiles.reload(); return profiles.create(o || {}); }, PAGE_ONLY);
@@ -1654,7 +1940,7 @@ function setupIpc() {
   }, BOTH);
   on('panel:close', () => setPanel(false), BOTH);
   on('panel:open', (_e, url, mode) => {
-    if (typeof url !== 'string' || !isWeb(url)) return;
+    if (typeof url !== 'string' || (!isWeb(url) && !url.startsWith('my://'))) return;
     const t = activeTab();
     if (mode === 'tab') newTab(url, { after: cur.activeId, private: t && t.private });
     else if (mode === 'background') newTab(url, { after: cur.activeId, background: true, private: t && t.private });
@@ -1662,7 +1948,7 @@ function setupIpc() {
   }, BOTH);
 
   // notes
-  handle('notes:list', () => [...notes].sort((a, b) => b.updated - a.updated), BOTH);
+  handle('notes:list', () => [...notes].filter((x) => !x.recycleBin).sort((a, b) => b.updated - a.updated), BOTH);
   handle('notes:save', (_e, n) => {
     if (!n || typeof n !== 'object') return null;
     const title = String(n.title || '').slice(0, 200);
@@ -1673,7 +1959,18 @@ function setupIpc() {
     saveNotes();
     return rec;
   }, BOTH);
-  handle('notes:delete', (_e, id) => { notes = notes.filter((x) => x.id !== id); saveNotes(); return true; }, BOTH);
+  handle('notes:delete', (_e, id) => {
+    const n = notes.find((x) => x.id === id);
+    if (n) { n.recycleBin = true; n.binTime = Date.now(); saveNotes(); }
+    return true;
+  }, BOTH);
+  handle('notes:recycleBin', () => notes.filter((x) => x.recycleBin), BOTH);
+  handle('notes:restoreFromBin', (_e, id) => { const n = notes.find((x) => x.id === id); if (n) { delete n.recycleBin; delete n.binTime; saveNotes(); } return true; }, BOTH);
+  handle('notes:emptyBin', (_e, ids) => {
+    if (Array.isArray(ids)) notes = notes.filter((x) => !ids.includes(x.id));
+    else notes = notes.filter((x) => !x.recycleBin);
+    saveNotes(); return true;
+  }, BOTH);
   on('nav:go', (_e, text) => {
     const t = activeTab();
     if (t) { go(t, text); t.wc.focus(); }
@@ -1803,7 +2100,7 @@ function setupIpc() {
   handle('sync:logout', () => { applySetting('sync.token', ''); applySetting('sync.account', {}); return true; }, BOTH);
   handle('icon:apply', (_e, kind) => applyIcon(String(kind)), BOTH);
   handle('bookmarks:all', () => ({
-    bookmarks: bookmarks.filter((b) => !b.deleted && isWeb(b.url)).map((b) => ({ url: b.url, title: b.title || '', folder: b.folder || '', added: b.added || 0 })),
+    bookmarks: bookmarks.filter((b) => !b.deleted && !b.recycleBin && isWeb(b.url)).map((b) => ({ url: b.url, title: b.title || '', folder: b.folder || '', added: b.added || 0 })),
     folders: allFolderPaths(),
   }), BOTH);
   // add or edit: { url (existing, or empty for a new one), newUrl, title, folder }
@@ -1834,7 +2131,27 @@ function setupIpc() {
   }, BOTH);
   handle('bookmarks:remove', (_e, urls) => {
     const set = new Set(Array.isArray(urls) ? urls : []), now = Date.now();
-    for (const b of bookmarks) if (!b.deleted && set.has(b.url)) { b.deleted = true; b.updated = now; }
+    for (const b of bookmarks) if (!b.deleted && !b.recycleBin && set.has(b.url)) { b.recycleBin = true; b.binTime = now; }
+    touchBookmarks();
+    return { ok: true };
+  }, BOTH);
+  handle('bookmarks:recycleBin', () => ({
+    bookmarks: bookmarks.filter((b) => b.recycleBin && !b.deleted && isWeb(b.url)).map((b) => ({ url: b.url, title: b.title || '', folder: b.folder || '', added: b.added || 0, binTime: b.binTime || 0 })),
+  }), BOTH);
+  handle('bookmarks:restoreFromBin', (_e, urls) => {
+    const set = new Set(Array.isArray(urls) ? urls : []);
+    for (const b of bookmarks) if (b.recycleBin && set.has(b.url)) { delete b.recycleBin; delete b.binTime; }
+    touchBookmarks();
+    return { ok: true };
+  }, BOTH);
+  handle('bookmarks:emptyBin', (_e, urls) => {
+    const now = Date.now();
+    const set = urls ? new Set(Array.isArray(urls) ? urls : []) : null;
+    for (const b of bookmarks) {
+      if (!b.recycleBin) continue;
+      if (set && !set.has(b.url)) continue;
+      b.deleted = true; b.updated = now; delete b.recycleBin; delete b.binTime;
+    }
     touchBookmarks();
     return { ok: true };
   }, BOTH);
@@ -1856,14 +2173,14 @@ function setupIpc() {
     touchBookmarks();
     return { ok: true };
   }, BOTH);
-  // mode 'keep': the bookmarks move up to the parent folder; 'delete': they are deleted too
+  // mode 'keep': the bookmarks move up to the parent folder; 'delete': they go to the recycle bin
   handle('bookmarks:folderDelete', (_e, p, mode) => {
     const path = normFolder(p), now = Date.now();
     if (!path) return { error: 'Choose a folder.' };
     const parent = path.includes(SEP) ? path.slice(0, path.lastIndexOf(SEP)) : '';
     for (const b of bookmarks) {
       if (b.deleted || !b.folder || !inFolder(b.folder, path)) continue;
-      if (mode === 'delete') b.deleted = true;
+      if (mode === 'delete') { b.recycleBin = true; b.binTime = now; }
       else {
         const rel = b.folder === path ? '' : b.folder.slice(path.length + SEP.length);
         b.folder = [parent, rel].filter(Boolean).join(SEP);
@@ -1877,12 +2194,30 @@ function setupIpc() {
   }, BOTH);
   handle('bookmark:remove', (_e, url) => {
     const b = bookmarks.find((x) => x.url === url);
-    if (b) { b.deleted = true; b.updated = Date.now(); save('bookmarks.json', bookmarks); pushState(); syncSoon(); }
+    if (b) { b.recycleBin = true; b.binTime = Date.now(); save('bookmarks.json', bookmarks); pushState(); syncSoon(); }
     return true;
   }, BOTH);
   handle('data:clear', (_e, what) => (['history', 'cookies', 'cache', 'all'].includes(what) ? clearData(what) : false), BOTH);
   handle('downloads:list', () => downloads.map((d) => ({ ...d })), BOTH);
   handle('downloads:action', (_e, id, action) => downloadAction(id, action), BOTH);
+  handle('thumb:refresh', (_e, urls) => {
+    if (!Array.isArray(urls)) return false;
+    const valid = urls.filter((u) => typeof u === 'string' && isWeb(u)).slice(0, 15);
+    // Delete cached files so the protocol handler returns 404 immediately
+    for (const url of valid) {
+      const key = thumbKey(url);
+      if (!key) continue;
+      thumbTimes.delete(key);
+      const p = thumbFile(key);
+      try { if (fs.existsSync(p)) fs.unlinkSync(p); } catch {}
+    }
+    // Background captures — 2 at a time so the machine stays responsive
+    setImmediate(async () => {
+      for (let i = 0; i < valid.length; i += 2)
+        await Promise.all(valid.slice(i, i + 2).map(captureThumbBg));
+    });
+    return true;
+  }, { chrome: false, page: true });
   handle('sync:now', async () => { await syncAll(); return syncStatus; }, BOTH);
   handle('sync:status', () => syncStatus, BOTH);
   handle('cert:allow', (_e, host) => {
@@ -1892,27 +2227,74 @@ function setupIpc() {
     applySetting('privacy.certExceptions', list);
     return true;
   }, BOTH);
+
+  // --- profiles: default, open-last, reset ---
+  handle('profiles:setDefault', (_e, id) => profiles.setDefaultProfile(String(id || 'default')), BOTH);
+  handle('profiles:setOpenLast', (_e, v) => { profiles.setOpenLastProfile(!!v); return { ok: true }; }, BOTH);
+  handle('profiles:getPrefs', () => ({
+    defaultProfile: profiles.getDefaultProfile(),
+    openLastProfile: profiles.getOpenLastProfile(),
+    lastProfile: profiles.getLastProfile(),
+    current: profileId,
+  }), BOTH);
+  handle('profiles:resetData', async (_e, id) => {
+    const target = String(id || profileId);
+    const result = profiles.resetProfile(target);
+    if (target === profileId && result.ok) {
+      bookmarks = []; history = []; notes = []; bookmarkFolders = [];
+      save('bookmarks.json', []); save('history.json', []); save('notes.json', []); save('bookmark-folders.json', []);
+      if (vault.unlocked()) vault.lock();
+      await clearData('all');
+    }
+    return result;
+  }, BOTH);
+  handle('app:resetAll', async () => {
+    await clearData('all');
+    profiles.resetAll();
+    app.relaunch(); app.quit();
+    return { ok: true };
+  }, BOTH);
+  handle('app:rerunWizard', async () => {
+    const defaultBefore = profiles.getDefaultProfile();
+    profiles.clearSetupDone();
+    await showWizard();
+    const defaultAfter = profiles.getDefaultProfile();
+    if (defaultAfter !== defaultBefore && profiles.get(defaultAfter)) {
+      launchProfile(defaultAfter, false);
+    }
+    return { ok: true };
+  }, PAGE_ONLY);
+
+  handle('server:ping', async (_e, url) => {
+    if (typeof url !== 'string' || !url.startsWith('http')) return { ok: false };
+    try {
+      const r = await net.fetch(url + '/health', { method: 'GET' });
+      return { ok: r.ok, status: r.status };
+    } catch { return { ok: false }; }
+  }, PAGE_ONLY);
 }
 
 // ---------- internal pages ----------
-const PAGES = { bookmarks: 'bookmarks.html', profiles: 'profiles.html', import: 'import.html', passwords: 'passwords.html', history: 'history.html', panel: 'panel.html', error: 'error.html', start: 'start.html', settings: 'settings.html', library: 'library.html', downloads: 'downloads.html' };
+const PAGES = { bookmarks: 'bookmarks.html', profiles: 'profiles.html', import: 'import.html', passwords: 'passwords.html', history: 'history.html', panel: 'panel.html', error: 'error.html', start: 'start.html', settings: 'settings.html', library: 'library.html', downloads: 'downloads.html', welcome: 'welcome.html', notes: 'notes.html' };
+
+const CORS = { 'access-control-allow-origin': '*' };
 
 function handleMy(req) {
   const u = new URL(req.url);
   if (u.host === 'assets') {
     if (u.pathname === '/theme.css') {
-      return new Response(themeCss(), { headers: { 'content-type': 'text/css' } });
+      return new Response(themeCss(), { headers: { 'content-type': 'text/css', ...CORS } });
     }
     if (u.pathname === '/logo.png') {
       // the start page shows the chosen icon; white versions would vanish on light themes, so use blue there
       let kind = store ? S().appearance.icon : 'classic';
-      if (!themeVars().dark) kind = { white: 'blue', 'white-m': 'blue-m' }[kind] || kind;
-      return new Response(fs.readFileSync(iconFile(kind, true)), { headers: { 'content-type': 'image/png', 'cache-control': 'no-store' } });
+      if (store && !themeVars().dark) kind = { white: 'blue', 'white-m': 'blue-m' }[kind] || kind;
+      return new Response(fs.readFileSync(iconFile(kind, true)), { headers: { 'content-type': 'image/png', 'cache-control': 'no-store', ...CORS } });
     }
     const im = /^\/icon\/([a-z-]+)\.png$/.exec(u.pathname);
-    if (im) return new Response(fs.readFileSync(iconFile(im[1], true)), { headers: { 'content-type': 'image/png' } });
+    if (im) return new Response(fs.readFileSync(iconFile(im[1], true)), { headers: { 'content-type': 'image/png', ...CORS } });
     if (u.pathname === '/common.css') {
-      return new Response(fs.readFileSync(path.join(__dirname, 'pages', 'common.css')), { headers: { 'content-type': 'text/css' } });
+      return new Response(fs.readFileSync(path.join(__dirname, 'pages', 'common.css')), { headers: { 'content-type': 'text/css', ...CORS } });
     }
     return new Response('Not found', { status: 404 });
   }
@@ -1920,14 +2302,14 @@ function handleMy(req) {
     const key = thumbKey(u.searchParams.get('u') || '');
     const p = key && thumbFile(key);
     if (p && fs.existsSync(p)) {
-      return new Response(fs.readFileSync(p), { headers: { 'content-type': 'image/jpeg', 'cache-control': 'no-store' } });
+      return new Response(fs.readFileSync(p), { headers: { 'content-type': 'image/jpeg', 'cache-control': 'no-store', ...CORS } });
     }
     return new Response('', { status: 404 });
   }
   const f = PAGES[u.host];
   if (!f) return new Response('Not found', { status: 404 });
   return new Response(fs.readFileSync(path.join(__dirname, 'pages', f)), {
-    headers: { 'content-type': 'text/html; charset=utf-8' },
+    headers: { 'content-type': 'text/html; charset=utf-8', ...CORS },
   });
 }
 
@@ -1946,6 +2328,14 @@ function setupSession(ses) {
     callback(-3); // -3 = use Chromium's normal verification result
   });
   blocker.attach(ses, (wcId) => { blockedCounts.set(wcId, (blockedCounts.get(wcId) || 0) + 1); pushSoon(); });
+  // Override sec-ch-ua for Google/Gmail to avoid "browser not secure" warning
+  ses.webRequest.onBeforeSendHeaders({ urls: ['*://*.google.com/*', '*://*.gmail.com/*', '*://*.accounts.google.com/*'] }, (details, callback) => {
+    const h = details.requestHeaders;
+    h['sec-ch-ua'] = '"Google Chrome";v="131", "Chromium";v="131", "Not_A Brand";v="24"';
+    h['sec-ch-ua-mobile'] = '?0';
+    h['sec-ch-ua-platform'] = '"Linux"';
+    callback({ requestHeaders: h });
+  });
 }
 
 // ---------- speed dial thumbnails ----------
@@ -1983,6 +2373,74 @@ function maybeThumb(tab, force = false) {
       fs.writeFileSync(p, img.resize({ width: 480 }).toJPEG(80));
     } catch { thumbTimes.delete(key); }
   }, 2500);
+}
+
+// Background thumbnail capture: prefer an already-open tab, fall back to hidden window.
+function captureThumbBg(url) {
+  const key = thumbKey(url);
+  if (!key) return Promise.resolve();
+  const p = thumbFile(key);
+
+  // If the URL is already open in a visible tab, capture from it directly (best quality).
+  for (const w of windows) {
+    for (const id of w.order) {
+      const t = tabById.get(id);
+      if (!t) continue;
+      let tabUrl;
+      try { tabUrl = t.wc.getURL(); } catch { continue; }
+      if (thumbKey(tabUrl) !== key) continue;
+      return new Promise((resolve) => {
+        setTimeout(async () => {
+          try {
+            const img = await t.wc.capturePage();
+            if (!img.isEmpty()) {
+              fs.mkdirSync(file('thumbs'), { recursive: true });
+              fs.writeFileSync(p, img.resize({ width: 480 }).toJPEG(80));
+              thumbTimes.set(key, Date.now());
+            }
+          } catch {}
+          resolve();
+        }, 500);
+      });
+    }
+  }
+
+  // No open tab — load in a hidden window, wait for rendering to settle.
+  return new Promise((resolve) => {
+    let win, settled = false;
+    const done = () => {
+      if (settled) return; settled = true;
+      try { if (win && !win.isDestroyed()) win.destroy(); } catch {}
+      resolve();
+    };
+    const bail = setTimeout(done, 25000);
+    let captureTimer = null;
+    const capture = () => {
+      // Debounce: re-arm on each did-stop-loading (redirects fire it multiple times)
+      clearTimeout(captureTimer);
+      captureTimer = setTimeout(async () => {
+        try {
+          const img = await win.webContents.capturePage();
+          if (!img.isEmpty()) {
+            fs.mkdirSync(file('thumbs'), { recursive: true });
+            fs.writeFileSync(p, img.resize({ width: 480 }).toJPEG(80));
+            thumbTimes.set(key, Date.now());
+          }
+        } catch {}
+        clearTimeout(bail); done();
+      }, 5000);
+    };
+    try {
+      win = new BrowserWindow({
+        show: false, width: 1280, height: 800,
+        webPreferences: { session: session.defaultSession, nodeIntegration: false, contextIsolation: true },
+      });
+      // did-stop-loading fires after all subframes finish, later than did-finish-load
+      win.webContents.on('did-stop-loading', capture);
+      win.webContents.on('did-fail-load', (_e, code) => { if (code !== -3) { clearTimeout(captureTimer); clearTimeout(bail); done(); } });
+      win.webContents.loadURL(url);
+    } catch { clearTimeout(bail); done(); }
+  });
 }
 
 // returns true when added, false when it was already there
@@ -2071,6 +2529,12 @@ function createWindow(opts = {}) {
   chromeOwner.set(w.panelView.webContents.id, w);
   w.panelView.webContents.loadURL('my://panel');
   w.win.contentView.addChildView(w.panelView);
+  w.bmView = new WebContentsView({
+    webPreferences: { preload: path.join(__dirname, 'page-preload.js'), contextIsolation: true, sandbox: true },
+  });
+  chromeOwner.set(w.bmView.webContents.id, w);
+  w.bmView.webContents.loadURL('my://bookmarks');
+  w.win.contentView.addChildView(w.bmView);
   w.panelResizer = new WebContentsView({
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, sandbox: true },
   });
@@ -2088,12 +2552,12 @@ function createWindow(opts = {}) {
   w.overlay.setBackgroundColor('#00000000');
   w.overlay.webContents.loadFile(path.join(__dirname, 'overlay.html'));
 
-  w.win.on('resize', () => { use(w); layout(); });
+  w.win.on('resize', () => { use(w); setImmediate(() => { use(w); layout(); }); });
   w.win.on('enter-full-screen', () => { use(w); layout(); });
   w.win.on('leave-full-screen', () => { use(w); layout(); });
   w.win.on('focus', () => use(w));
-  w.win.on('maximize', () => { use(w); pushState(); });
-  w.win.on('unmaximize', () => { use(w); pushState(); });
+  w.win.on('maximize', () => { use(w); layout(); pushState(); });
+  w.win.on('unmaximize', () => { use(w); layout(); pushState(); });
   w.win.on('closed', () => onWindowClosed(w));
 
   let loaded = 0;
@@ -2102,7 +2566,7 @@ function createWindow(opts = {}) {
     use(w);
     layout();
     if (opts.first) startupTabs();
-    else if (!opts.empty) newTab();
+    else if (!opts.empty) newTab(undefined, opts.private ? { private: true } : undefined);
     pushState();
     if (opts.first) syncAll();
   };
@@ -2119,7 +2583,7 @@ function onWindowClosed(w) {
   }
   w.tabs.clear();
   w.order = [];
-  for (const v of [w.tabbarView, w.toolbarView, w.statusView, w.panelView, w.panelResizer, w.webPanel, w.overlay]) {
+  for (const v of [w.tabbarView, w.toolbarView, w.statusView, w.panelView, w.panelResizer, w.webPanel, w.bmView, w.overlay]) {
     if (!v) continue;
     let id = null;
     try { id = v.webContents.id; } catch { /* destroyed */ }
@@ -2180,19 +2644,27 @@ function reorderTab(id, beforeId) {
 // the cursor, or tear it off into a new window.
 function tabDragEnd(id, dropEffect, outside) {
   const t = tabById.get(id);
-  if (!t || dropEffect !== 'none' || !outside) return;
+  if (!t) return;
   const src = t.owner;
   const pt = screen.getCursorScreenPoint();
-  const inside = (b) => pt.x >= b.x && pt.x <= b.x + b.width && pt.y >= b.y && pt.y <= b.y + b.height;
-  const target = [...windows].find((w) => w !== src && inside(w.win.getBounds()));
+  const inBounds = (b) => pt.x >= b.x && pt.x <= b.x + b.width && pt.y >= b.y && pt.y <= b.y + b.height;
+  // move to another existing window if cursor lands on it
+  const target = [...windows].find((w) => w !== src && inBounds(w.win.getBounds()));
   if (target) { moveTabToWindow(t, target, null); return; }
-  tearOffTab(t, { x: pt.x - 120, y: pt.y - 20 });
+  // tear off to new window if cursor is outside the source window (or Wayland reports both 0)
+  const srcBounds = src.win.getBounds();
+  const inSrc = inBounds(srcBounds);
+  if (!inSrc || outside) {
+    if (src.order.length > 1) tearOffTab(t, { x: pt.x - 120, y: pt.y - 20 });
+  }
 }
 
 // ---------- app ----------
 // ---------- profile gate: password prompt / profile chooser shown before anything else opens ----------
 let gateWcId = null;
 let gateResolve = null;
+let wizardWcId = null;
+let wizardResolve = null;
 
 function showGate(mode) {
   return new Promise((resolve) => {
@@ -2232,6 +2704,129 @@ ipcMain.handle('gate:choose', async (e, id, pw, remember) => {
 });
 ipcMain.on('gate:cancel', (e) => { if (e.sender.id === gateWcId && gateResolve) gateResolve('quit'); });
 
+function showWizard() {
+  return new Promise((resolve) => {
+    const win = new BaseWindow({ width: 540, height: 600, title: 'mbrowser setup', icon: appIconImage(), resizable: false, backgroundColor: '#0a0e1f' });
+    try { if (typeof win.removeMenu === 'function') win.removeMenu(); } catch { /* ignore */ }
+    const view = new WebContentsView({
+      webPreferences: { preload: path.join(__dirname, 'page-preload.js'), contextIsolation: true, sandbox: true },
+    });
+    win.contentView.addChildView(view);
+    const fit = () => { const b = win.getContentBounds(); view.setBounds({ x: 0, y: 0, width: b.width, height: b.height }); };
+    fit();
+    win.on('resize', fit);
+    wizardWcId = view.webContents.id;
+    view.webContents.loadURL('my://welcome');
+    let done = false;
+    wizardResolve = (r) => {
+      if (done) return;
+      done = true; wizardWcId = null;
+      profiles.setSetupDone();
+      resolve(r);
+      setTimeout(() => { try { win.close(); } catch { /* closed */ } }, 0);
+    };
+    win.on('closed', () => { if (!done) { done = true; wizardWcId = null; profiles.setSetupDone(); resolve('done'); } });
+  });
+}
+
+// ----- wizard IPC (only answered for the wizard window) -----
+const isWizard = (e) => e.sender.id === wizardWcId;
+
+ipcMain.handle('wizard:status', (e) => {
+  if (!isWizard(e)) return null;
+  return {
+    profileId,
+    profileName: profiles.get(profileId)?.name || 'Default',
+    profiles: profiles.list(),
+    defaultProfile: profiles.getDefaultProfile(),
+    openLastProfile: profiles.getOpenLastProfile(),
+    serverConfigured: syncReady(),
+    syncAccount: S().sync.account || {},
+    vaultExists: vault.exists(),
+    vaultDeviceMode: vault.isDevice(),
+    safeStorageAvailable: safeStorage.isEncryptionAvailable(),
+  };
+});
+
+ipcMain.handle('wizard:test-server', async (e, url) => {
+  if (!isWizard(e)) return null;
+  try {
+    const base = String(url || '').replace(/\/+$/, '');
+    if (!base) return { error: 'Enter a server address.' };
+    const res = await fetch(base + '/api/health', { signal: AbortSignal.timeout(8000) });
+    return { ok: true, status: res.status };
+  } catch (err) { return { error: 'Cannot reach server: ' + err.message }; }
+});
+
+ipcMain.handle('wizard:connect', async (e, o) => {
+  if (!isWizard(e)) return null;
+  o = o || {};
+  const base = String(o.server || '').replace(/\/+$/, '');
+  if (!base) return { error: 'Enter the server address.' };
+  try {
+    applySetting('sync.server', base);
+    const res = await fetch(base + '/api/auth/device-login', {
+      method: 'POST', headers: { 'content-type': 'application/json' }, signal: AbortSignal.timeout(15000),
+      body: JSON.stringify({ username: String(o.username || ''), password: String(o.password || ''), totp: String(o.totp || ''), profile: o.profile || '', device: S().sync.device || os.hostname() }),
+    });
+    let data = {};
+    try { data = await res.json(); } catch { /* not JSON */ }
+    if (res.status === 404) return { error: 'Server is an older version. Update it, or use an API key in Settings.' };
+    if (!res.ok) return { error: data.error || ('Sign-in failed (HTTP ' + res.status + ')'), needTotp: !!data.needTotp };
+    if (data.needProfile) return { needProfile: true, profiles: data.profiles };
+    applySetting('sync.token', data.token);
+    applySetting('sync.account', { user: String(o.username), profile: data.profile?.name || '' });
+    syncSoon();
+    return { ok: true, profile: data.profile };
+  } catch (err) { applySetting('sync.server', ''); return { error: 'Cannot reach server: ' + err.message }; }
+});
+
+ipcMain.handle('wizard:rename-profile', (e, name) => {
+  if (!isWizard(e)) return null;
+  return profiles.update(profileId, { name: String(name || '') });
+});
+
+ipcMain.handle('wizard:create-profile', (e, name) => {
+  if (!isWizard(e)) return null;
+  const result = profiles.create({ name: String(name || '').trim() });
+  if (result.ok) profiles.setDefaultProfile(result.id);
+  return result;
+});
+
+ipcMain.handle('wizard:set-default-profile', (e, id) => {
+  if (!isWizard(e)) return null;
+  return profiles.setDefaultProfile(String(id || profileId));
+});
+
+ipcMain.handle('wizard:set-open-last', (e, v) => {
+  if (!isWizard(e)) return null;
+  profiles.setOpenLastProfile(!!v);
+  return { ok: true };
+});
+
+ipcMain.handle('wizard:vault-device', (e) => {
+  if (!isWizard(e)) return null;
+  if (vault.exists()) return { ok: true, already: true };
+  try {
+    const rawKey = crypto.randomBytes(32);
+    vault.createWithKey(rawKey);
+    if (safeStorage.isEncryptionAvailable()) {
+      const enc = safeStorage.encryptString(rawKey.toString('base64'));
+      fs.writeFileSync(file('vault-device.key'), enc.toString('base64'), { mode: 0o600 });
+    } else {
+      fs.writeFileSync(file('vault-device.key.plain'), rawKey.toString('base64'), { mode: 0o600 });
+    }
+    rawKey.fill(0);
+    return { ok: true };
+  } catch (err) { return { error: err.message }; }
+});
+
+ipcMain.handle('wizard:done', (e) => {
+  if (!isWizard(e)) return null;
+  if (wizardResolve) wizardResolve('done');
+  return { ok: true };
+});
+
 app.whenReady().then(async () => {
   if (!gotLock) return; // another instance of this profile is already running
   const me = profiles.get(profileId);
@@ -2256,6 +2851,23 @@ app.whenReady().then(async () => {
   notes = load('notes.json', []);
   bookmarkFolders = load('bookmark-folders.json', []);
   vault = createVault(file('vault.json'));
+
+  // Auto-unlock vault in device mode
+  if (vault.isDevice()) {
+    try {
+      const keyFile = file('vault-device.key');
+      const plainFile = file('vault-device.key.plain');
+      if (safeStorage.isEncryptionAvailable() && fs.existsSync(keyFile)) {
+        const enc = fs.readFileSync(keyFile, 'utf8');
+        const keyB64 = safeStorage.decryptString(Buffer.from(enc, 'base64'));
+        vault.unlockWithKey(Buffer.from(keyB64, 'base64'));
+      } else if (fs.existsSync(plainFile)) {
+        const keyB64 = fs.readFileSync(plainFile, 'utf8').trim();
+        vault.unlockWithKey(Buffer.from(keyB64, 'base64'));
+      }
+    } catch { /* key unavailable — vault stays locked */ }
+  }
+
   syncState = { ...syncState, ...load('syncstate.json', {}) };
   syncStatus = syncReady() ? 'Waiting for first sync…' : 'Sync not configured (Settings → Sync)';
 
@@ -2267,6 +2879,10 @@ app.whenReady().then(async () => {
 
   Menu.setApplicationMenu(null); // no File / Edit / View menu bar
   nativeTheme.on('updated', () => pushAll());
+
+  if (!profiles.setupDone()) await showWizard();
+
+  profiles.setLastProfile(profileId);
   createWindow({ first: true });
 
   setInterval(syncAll, 60 * 1000);

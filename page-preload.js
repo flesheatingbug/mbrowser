@@ -16,6 +16,7 @@ if (location.protocol === 'my:') {
     clearData: invoke('data:clear'),
     getDownloads: invoke('downloads:list'),
     downloadAction: invoke('downloads:action'),
+    refreshThumbs: (urls) => ipcRenderer.invoke('thumb:refresh', urls),
     syncNow: invoke('sync:now'),
     syncStatus: invoke('sync:status'),
     allowCert: invoke('cert:allow'),
@@ -29,6 +30,9 @@ if (location.protocol === 'my:') {
     bookmarksFolderAdd: invoke('bookmarks:folderAdd'),
     bookmarksFolderRename: invoke('bookmarks:folderRename'),
     bookmarksFolderDelete: invoke('bookmarks:folderDelete'),
+    bookmarksRecycleBin: invoke('bookmarks:recycleBin'),
+    bookmarksRestoreFromBin: invoke('bookmarks:restoreFromBin'),
+    bookmarksEmptyBin: invoke('bookmarks:emptyBin'),
     vaultFolders: invoke('vault:folders'),
     vaultFolderAdd: invoke('vault:folderAdd'),
     vaultFolderRename: invoke('vault:folderRename'),
@@ -51,7 +55,17 @@ if (location.protocol === 'my:') {
     panelClose: () => ipcRenderer.send('panel:close'),
     openUrl: (url, mode) => ipcRenderer.send('panel:open', url, mode),
     onPanelChanged: (cb) => ipcRenderer.on('panel:changed', () => cb()),
+    onBookmarksChanged: (cb) => ipcRenderer.on('bookmarks:changed', () => cb()),
     vaultStatus: invoke('vault:status'),
+    vaultEnsureDevice: invoke('vault:ensureDevice'),
+    vaultListCards: invoke('vault:listCards'),
+    vaultSaveCard: invoke('vault:saveCard'),
+    vaultRevealCard: invoke('vault:revealCard'),
+    vaultDeleteCard: invoke('vault:deleteCard'),
+    vaultListAddresses: invoke('vault:listAddresses'),
+    vaultSaveAddress: invoke('vault:saveAddress'),
+    vaultRevealAddress: invoke('vault:revealAddress'),
+    vaultDeleteAddress: invoke('vault:deleteAddress'),
     vaultSyncStatus: invoke('vault:syncStatus'),
     vaultSyncResolve: invoke('vault:syncResolve'),
     vaultCreate: invoke('vault:create'),
@@ -68,7 +82,43 @@ if (location.protocol === 'my:') {
     notesList: invoke('notes:list'),
     notesSave: invoke('notes:save'),
     notesDelete: invoke('notes:delete'),
+    notesRecycleBin: invoke('notes:recycleBin'),
+    notesRestoreFromBin: invoke('notes:restoreFromBin'),
+    notesEmptyBin: invoke('notes:emptyBin'),
+    profilesSetDefault: invoke('profiles:setDefault'),
+    profilesSetOpenLast: invoke('profiles:setOpenLast'),
+    profilesGetPrefs: invoke('profiles:getPrefs'),
+    profilesResetData: invoke('profiles:resetData'),
+    appResetAll: invoke('app:resetAll'),
+    appRerunWizard: invoke('app:rerunWizard'),
+    wizardStatus: invoke('wizard:status'),
+    wizardTestServer: invoke('wizard:test-server'),
+    wizardConnect: invoke('wizard:connect'),
+    wizardRenameProfile: invoke('wizard:rename-profile'),
+    wizardCreateProfile: invoke('wizard:create-profile'),
+    wizardSetDefaultProfile: invoke('wizard:set-default-profile'),
+    wizardSetOpenLast: invoke('wizard:set-open-last'),
+    wizardVaultDevice: invoke('wizard:vault-device'),
+    wizardDone: invoke('wizard:done'),
   });
+}
+
+// ---- ctrl+scroll wheel zoom ----
+window.addEventListener('wheel', (e) => {
+  if (!e.ctrlKey) return;
+  e.preventDefault();
+  ipcRenderer.send('zoom:ctrl-wheel', e.deltaY > 0 ? -1 : 1);
+}, { passive: false, capture: true });
+
+// ---- page language detection (for translate bar) ----
+if (/^https?:$/.test(location.protocol)) {
+  const sendLang = () => {
+    const lang = document.documentElement.lang || document.documentElement.getAttribute('xml:lang');
+    if (lang) ipcRenderer.send('page:lang', lang);
+  };
+  window.addEventListener('DOMContentLoaded', sendLang);
+  // Some SPAs set lang after initial render
+  window.addEventListener('load', sendLang);
 }
 
 // ---- right-button-drag mouse gestures ----
@@ -205,5 +255,65 @@ if (/^https?:$/.test(location.protocol)) {
     let user = lastField && textual(lastField) ? lastField : (pw ? userFieldFor(pw) : null);
     if (user && d.username) setValue(user, d.username);
     if (pw) setValue(pw, d.password);
+  });
+
+  // ---- payment card autofill ----
+  const isCardField = (el) => {
+    const ac = (el.getAttribute('autocomplete') || '').toLowerCase();
+    const nm = (el.name || el.id || '').toLowerCase();
+    return ac.includes('cc-number') || ac.includes('cc-csc') || ac.includes('cc-exp') ||
+      nm.includes('cardnumber') || nm.includes('card_number') || nm.includes('cc-number') ||
+      nm.includes('ccnumber') || nm.includes('card-number');
+  };
+  const isAddressField = (el) => {
+    const ac = (el.getAttribute('autocomplete') || '').toLowerCase();
+    return ac.includes('street-address') || ac.includes('address-line1') || ac === 'postal-code' || ac.includes('address-level2');
+  };
+
+  let lastCardField = null, lastAddressField = null;
+  window.addEventListener('focusin', (e) => {
+    const el = e.target;
+    if (!(el instanceof HTMLInputElement) || !isVisible(el)) return;
+    if (isCardField(el)) {
+      lastCardField = el;
+      const r = el.getBoundingClientRect();
+      ipcRenderer.send('card:focus', { left: r.left, bottom: r.bottom });
+    } else if (isAddressField(el)) {
+      lastAddressField = el;
+      const r = el.getBoundingClientRect();
+      ipcRenderer.send('addr:focus', { left: r.left, bottom: r.bottom });
+    }
+  }, true);
+
+  ipcRenderer.on('card:fill', (_e, d) => {
+    if (!d) return;
+    const fill = (ac, val) => {
+      const f = document.querySelector(`input[autocomplete="${ac}"]`) || document.querySelector(`input[autocomplete*="${ac}"]`);
+      if (f && val) setValue(f, val);
+    };
+    fill('cc-number', d.number ? d.number.replace(/(\d{4})/g, '$1 ').trim() : '');
+    fill('cc-name', d.cardName || '');
+    fill('cc-exp', d.expiry || '');
+    const expParts = (d.expiry || '').split(/[\/\-]/);
+    if (expParts.length === 2) { fill('cc-exp-month', expParts[0]); fill('cc-exp-year', expParts[1]); }
+    fill('cc-csc', d.cvv || '');
+  });
+
+  ipcRenderer.on('addr:fill', (_e, d) => {
+    if (!d) return;
+    const fill = (ac, val) => {
+      const f = document.querySelector(`input[autocomplete="${ac}"]`) || document.querySelector(`input[autocomplete*="${ac}"]`);
+      if (f && val) setValue(f, val);
+    };
+    if (d.fullName) fill('name', d.fullName);
+    if (d.street) fill('street-address', d.street);
+    if (d.street) fill('address-line1', d.street);
+    if (d.street2) fill('address-line2', d.street2);
+    if (d.city) fill('address-level2', d.city);
+    if (d.state) fill('address-level1', d.state);
+    if (d.zip) fill('postal-code', d.zip);
+    if (d.country) fill('country', d.country);
+    if (d.phone) fill('tel', d.phone);
+    if (d.email) fill('email', d.email);
   });
 }

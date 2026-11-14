@@ -13,8 +13,29 @@
   main { flex:1; min-width:0; display:flex; flex-direction:column; }
   .top { display:flex; gap:8px; padding:16px 20px 10px; align-items:center; flex-wrap:wrap; }
   .top input[type=search] { flex:1; min-width:200px; }
+  /* panel / narrow mode — hides sidebar, adds compact folder nav */
+  @media (max-width: 540px) {
+    aside { display:none; }
+    .top { padding:8px 10px 6px; }
+    .top input[type=search] { min-width:0; }
+    #add, #sort { font-size:12px; padding:4px 8px; }
+    .crumb { padding:0 10px 4px; }
+    .subs { padding:0 10px 6px; }
+    .list { padding:2px 8px 30px; }
+    .bulk { padding:5px 10px; }
+    .bin-bar { padding:5px 10px; }
+    /* compact folder nav bar shown at narrow width */
+    #panelnav { display:flex; }
+  }
+  #panelnav { display:none; align-items:center; gap:4px; padding:4px 10px 2px; font-size:12px; border-bottom:1px solid var(--line);
+    background:var(--bg); overflow-x:auto; white-space:nowrap; }
+  .pn-seg { cursor:pointer; color:var(--accent); } .pn-seg:hover { text-decoration:underline; }
+  .pn-sep { color:var(--muted); opacity:.5; }
   .crumb { padding:0 20px 8px; color:var(--muted); font-size:13px; display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
   .crumb button { padding:2px 10px; font-size:12px; }
+  .bin-bar { display:none; padding:8px 20px; background:var(--tab); border-bottom:1px solid var(--line); gap:8px; align-items:center; font-size:13px; }
+  .bin-bar.on { display:flex; }
+  .bin-bar span { flex:1; color:var(--muted); }
   .bulk { display:none; padding:8px 20px; background:var(--tab); border-top:1px solid var(--line); border-bottom:1px solid var(--line); gap:8px; align-items:center; }
   .bulk.on { display:flex; }
   .list { flex:1; overflow-y:auto; padding:4px 12px 40px; }
@@ -47,6 +68,15 @@
   .modal .r { display:flex; gap:8px; margin-top:16px; }
   .err { color:#ff6b6b; font-size:13px; min-height:18px; margin-top:6px; }
   .empty { color:var(--muted); padding:30px 10px; text-align:center; }
+  .bin-node { opacity:.7; }
+  /* context menu */
+  .ctx { position:fixed; z-index:100; background:var(--bg); border:1px solid var(--line); border-radius:10px;
+    box-shadow:0 6px 24px rgba(0,0,0,.2); padding:4px; min-width:180px; }
+  .ctx-item { padding:7px 14px; border-radius:6px; cursor:pointer; font-size:13px; white-space:nowrap; }
+  .ctx-item:hover { background:var(--accent); color:var(--onaccent); }
+  .ctx-item:hover.ctx-danger { background:#ef4444; color:#fff; }
+  .ctx-item.ctx-danger { color:#ef4444; }
+  .ctx-sep { height:1px; background:var(--line); margin:4px 2px; }
 </style>
 </head>
 <body>
@@ -57,6 +87,7 @@
     <button id="newfolder" style="margin:12px 8px 0">+ New folder</button>
   </aside>
   <main>
+    <div id="panelnav"></div>
     <div class="top">
       <input id="q" type="search" placeholder="Search bookmarks" autofocus>
       <select id="sort">
@@ -70,28 +101,56 @@
     </div>
     <div class="crumb" id="crumb"></div>
     <div class="subs" id="subs"></div>
+    <div class="bin-bar" id="binbar">
+      <span id="bincnt"></span>
+      <button id="restoreall">Restore all</button>
+      <button id="emptybin" class="danger">Empty bin</button>
+    </div>
     <div class="bulk" id="bulk"><span id="bulkn"></span><button id="bmove">Move to folder…</button><button id="bdel" class="danger">Delete</button><button id="bclear">Clear selection</button></div>
+    <div id="selbar" style="display:flex;align-items:center;gap:8px;padding:6px 20px 2px;"><input type="checkbox" id="selall" title="Select all"><label for="selall" style="font-size:13px;color:var(--muted);cursor:pointer;">Select all</label></div>
     <div class="list" id="list"></div>
   </main>
 </div>
+<div id="ctx" class="ctx" style="display:none"></div>
 <script>
   const SEP = ' / ';
+  const BIN_SEL = '__recycle_bin__';
   const $ = (id) => document.getElementById(id);
   const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
   const FOLDER = '<svg viewBox="0 0 24 24"><path d="M3.5 7a2 2 0 0 1 2-2h4l2 2.5h7a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/></svg>';
   const ALL = '<svg viewBox="0 0 24 24"><path d="M7 4h10a1 1 0 0 1 1 1v15l-6-4-6 4V5a1 1 0 0 1 1-1z"/></svg>';
 
   let D = { bookmarks: [], folders: [] };
-  let sel = null;                 // null = all, '' = unsorted, otherwise a folder path
-  let picked = new Set();         // selected bookmark addresses
-  let open = new Set();           // expanded folders
-  let drag = null;                // addresses being dragged
+  let binItems = [];
+  let sel = null;          // null=all, ''=unsorted, BIN_SEL=recycle bin, otherwise folder path
+  let picked = new Set();
+  let open = new Set();
+  let drag = null;
 
   const parentOf = (p) => (p.includes(SEP) ? p.slice(0, p.lastIndexOf(SEP)) : '');
   const leaf = (p) => (p.includes(SEP) ? p.slice(p.lastIndexOf(SEP) + SEP.length) : p);
   const countIn = (path) => D.bookmarks.filter((b) => b.folder === path || b.folder.startsWith(path + SEP)).length;
 
-  // ---- a small form dialog; fields: [{ key, label, value, list }] ----
+  // ---- context menu ----
+  const ctxEl = $('ctx');
+  document.addEventListener('click', () => closeCtx(), true);
+  function closeCtx() { ctxEl.style.display = 'none'; ctxEl.textContent = ''; }
+  function showCtx(x, y, items) {
+    ctxEl.textContent = '';
+    for (const it of items) {
+      if (it === '-') { ctxEl.append(el('div', 'ctx-sep')); continue; }
+      const d = el('div', 'ctx-item' + (it.danger ? ' ctx-danger' : ''), it.label);
+      d.onclick = (e) => { e.stopPropagation(); closeCtx(); it.fn(); };
+      ctxEl.append(d);
+    }
+    ctxEl.style.display = 'block';
+    ctxEl.style.left = '0'; ctxEl.style.top = '0';
+    const r = ctxEl.getBoundingClientRect();
+    ctxEl.style.left = Math.min(x, window.innerWidth - r.width - 6) + 'px';
+    ctxEl.style.top = Math.min(y, window.innerHeight - r.height - 6) + 'px';
+  }
+
+  // ---- a small form dialog ----
   function ask(title, fields, okText, validate) {
     return new Promise((resolve) => {
       const m = el('div', 'modal'); const f = el('form'); m.append(f);
@@ -117,7 +176,12 @@
     });
   }
 
-  async function load() { D = await browser.bookmarksAll(); render(); }
+  async function load() {
+    D = await browser.bookmarksAll();
+    const bd = await browser.bookmarksRecycleBin();
+    binItems = bd.bookmarks || [];
+    render();
+  }
 
   // ---- folder tree ----
   function treeNode(path, depth) {
@@ -125,10 +189,11 @@
     const row = el('div', 'node' + (sel === path ? ' on' : ''));
     row.style.paddingLeft = (8 + depth * 14) + 'px';
     const caret = el('span', 'caret', kids.length ? (open.has(path) ? '▾' : '▸') : '');
-    caret.onclick = (e) => { e.stopPropagation(); if (open.has(path)) open.delete(path); else open.add(path); render(); };
+    caret.onclick = (e) => { e.stopPropagation(); open.has(path) ? open.delete(path) : open.add(path); render(); };
     const ic = el('span'); ic.innerHTML = FOLDER;
     row.append(caret, ic, el('span', 'nm', leaf(path)), el('span', 'ct', String(countIn(path))));
     row.onclick = () => { sel = path; open.add(path); picked.clear(); render(); };
+    row.oncontextmenu = (e) => { e.preventDefault(); folderCtxMenu(e.clientX, e.clientY, path); };
     wireDrop(row, path);
     const wrap = el('div'); wrap.append(row);
     if (open.has(path)) kids.forEach((k) => wrap.append(treeNode(k, depth + 1)));
@@ -145,15 +210,31 @@
   function wireDrop(row, path) {
     row.ondragover = (e) => { if (drag) { e.preventDefault(); row.classList.add('drop'); } };
     row.ondragleave = () => row.classList.remove('drop');
-    row.ondrop = async (e) => {
-      e.preventDefault(); row.classList.remove('drop');
-      if (!drag) return;
-      await browser.bookmarksMove(drag, path); drag = null; picked.clear(); load();
-    };
+    row.ondrop = async (e) => { e.preventDefault(); row.classList.remove('drop'); if (!drag) return; await browser.bookmarksMove(drag, path); drag = null; picked.clear(); load(); };
+  }
+
+  function folderCtxMenu(x, y, path) {
+    const folderBookmarks = D.bookmarks.filter((b) => b.folder === path || b.folder.startsWith(path + SEP));
+    showCtx(x, y, [
+      { label: 'Add folder to Speed Dial', fn: () => addFolderToSpeedDial(path) },
+      { label: 'Add all bookmarks to Speed Dial', fn: () => addToSpeedDial(folderBookmarks) },
+      { label: 'Add folder to New Speed Dial', fn: () => addFolderToNewSpeedDial(path) },
+      '-',
+      { label: 'New subfolder', fn: async () => { const r = await ask('New subfolder in "' + leaf(path) + '"', [{key:'n',label:'Name'}], 'Create', async (v) => { const x = await browser.bookmarksFolderAdd(path + SEP + v.n); return x.error || null; }); if (r) { open.add(path); load(); } } },
+      { label: 'Rename', fn: async () => { const r = await ask('Rename folder', [{key:'n',label:'Name',value:leaf(path)}], 'Rename', async (v) => { const to = (parentOf(path) ? parentOf(path) + SEP : '') + v.n.replace(/\//g,'-'); const x = await browser.bookmarksFolderRename(path, to); if (!x.error) sel = to; return x.error || null; }); if (r) load(); } },
+      '-',
+      { label: 'Delete folder', danger: true, fn: async () => {
+        const n = countIn(path);
+        if (!confirm(n ? 'Delete "' + leaf(path) + '" and move its ' + n + ' bookmark(s) to the recycle bin?' : 'Delete empty folder "' + leaf(path) + '"?')) return;
+        await browser.bookmarksFolderDelete(path, n ? 'delete' : 'keep');
+        sel = parentOf(path) || null; picked.clear(); load();
+      }},
+    ]);
   }
 
   // ---- list ----
   function visible() {
+    if (sel === BIN_SEL) return [];
     const terms = $('q').value.toLowerCase().split(/\s+/).filter(Boolean);
     let items = D.bookmarks.filter((b) => {
       if (terms.length) { const s = (b.title + ' ' + b.url + ' ' + b.folder).toLowerCase(); return terms.every((t) => s.includes(t)); }
@@ -165,87 +246,272 @@
   }
 
   function render() {
+    // panel nav (narrow mode breadcrumb instead of sidebar)
+    const pn = $('panelnav'); pn.textContent = '';
+    const addPnSeg = (label, onclick) => { const s = el('span', onclick ? 'pn-seg' : '', label); if (onclick) s.onclick = onclick; pn.append(s); };
+    const addPnSep = () => pn.append(el('span', 'pn-sep', ' › '));
+    if (sel === BIN_SEL) {
+      addPnSeg('All', () => { sel = null; picked.clear(); render(); }); addPnSep(); addPnSeg('🗑 Bin');
+    } else if (sel === null) {
+      addPnSeg('All bookmarks');
+      // show root folders as chips in panel nav
+      if (!$('q').value.trim()) D.folders.filter((f) => !f.includes(SEP)).forEach((f) => { pn.append(el('span', null, ' ')); addPnSeg('📁 ' + leaf(f), () => { sel = f; open.add(f); picked.clear(); render(); }); });
+    } else if (sel === '') {
+      addPnSeg('All', () => { sel = null; picked.clear(); render(); }); addPnSep(); addPnSeg('Unsorted');
+    } else {
+      addPnSeg('All', () => { sel = null; picked.clear(); render(); });
+      const parts = sel.split(SEP);
+      parts.forEach((part, i) => {
+        addPnSep();
+        const path = parts.slice(0, i + 1).join(SEP);
+        addPnSeg(part, i < parts.length - 1 ? () => { sel = path; open.add(path); picked.clear(); render(); } : null);
+      });
+    }
+    // recycle bin link in panel nav (only shown when not already there)
+    if (sel !== BIN_SEL) { pn.append(el('span', null, '  ')); addPnSeg('🗑 (' + binItems.length + ')', () => { sel = BIN_SEL; picked.clear(); render(); }); }
+
+    // tree
     const tree = $('tree'); tree.textContent = '';
     tree.append(special('All bookmarks', ALL, null, D.bookmarks.length));
     tree.append(special('Unsorted', FOLDER, '', D.bookmarks.filter((b) => !b.folder).length));
     D.folders.filter((f) => !f.includes(SEP)).forEach((f) => tree.append(treeNode(f, 0)));
+    // recycle bin entry
+    const binRow = el('div', 'node bin-node' + (sel === BIN_SEL ? ' on' : ''));
+    binRow.style.paddingLeft = '8px';
+    const binIc = el('span'); binIc.innerHTML = '<svg viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></svg>';
+    binRow.append(el('span', 'caret'), binIc, el('span', 'nm', 'Recycle bin'), el('span', 'ct', String(binItems.length)));
+    binRow.onclick = () => { sel = BIN_SEL; picked.clear(); render(); };
+    tree.append(binRow);
 
-    // breadcrumb with folder actions
+    // breadcrumb
     const crumb = $('crumb'); crumb.textContent = '';
     const searching = $('q').value.trim();
-    if (searching) crumb.append(el('span', null, 'Search results'));
+    if (sel === BIN_SEL) { crumb.append(el('span', null, '🗑 Recycle bin')); }
+    else if (searching) crumb.append(el('span', null, 'Search results'));
     else if (sel === null) crumb.append(el('span', null, 'All bookmarks'));
     else if (sel === '') crumb.append(el('span', null, 'Unsorted'));
     else {
       crumb.append(el('span', null, sel.split(SEP).join('  ›  ')));
-      const mk = (t, fn, cls) => { const b = el('button', cls || '', t); b.onclick = fn; crumb.append(b); };
-      mk('New subfolder', async () => { const r = await ask('New subfolder in “' + leaf(sel) + '”', [{ key: 'n', label: 'Name' }], 'Create', async (v) => { const x = await browser.bookmarksFolderAdd(sel + SEP + v.n); return x.error || null; }); if (r) { open.add(sel); load(); } });
-      mk('Rename', async () => { const r = await ask('Rename folder', [{ key: 'n', label: 'Name', value: leaf(sel) }], 'Rename', async (v) => { const to = (parentOf(sel) ? parentOf(sel) + SEP : '') + v.n.replace(/\//g, '-'); const x = await browser.bookmarksFolderRename(sel, to); if (!x.error) sel = to; return x.error || null; }); if (r) load(); });
+      const mk = (t, fn, cls) => { const b = el('button', cls||'', t); b.onclick = fn; crumb.append(b); };
+      mk('New subfolder', async () => { const r = await ask('New subfolder in "' + leaf(sel) + '"', [{key:'n',label:'Name'}], 'Create', async (v) => { const x = await browser.bookmarksFolderAdd(sel + SEP + v.n); return x.error || null; }); if (r) { open.add(sel); load(); } });
+      mk('Rename', async () => { const r = await ask('Rename folder', [{key:'n',label:'Name',value:leaf(sel)}], 'Rename', async (v) => { const to = (parentOf(sel) ? parentOf(sel) + SEP : '') + v.n.replace(/\//g,'-'); const x = await browser.bookmarksFolderRename(sel, to); if (!x.error) sel = to; return x.error || null; }); if (r) load(); });
       mk('Delete', async () => {
         const n = countIn(sel);
-        const del = confirm(n ? 'Delete the folder “' + leaf(sel) + '” and also its ' + n + ' bookmark(s)?\n\nPress Cancel to keep the bookmarks (they move up one level).' : 'Delete the empty folder “' + leaf(sel) + '”?');
-        if (n && !del && !confirm('Delete only the folder and keep its bookmarks?')) return;
-        await browser.bookmarksFolderDelete(sel, n && del ? 'delete' : 'keep'); sel = parentOf(sel) || null; picked.clear(); load();
+        if (!confirm(n ? 'Delete "' + leaf(sel) + '" and move its ' + n + ' bookmark(s) to the recycle bin?' : 'Delete empty folder "' + leaf(sel) + '"?')) return;
+        await browser.bookmarksFolderDelete(sel, n ? 'delete' : 'keep'); sel = parentOf(sel) || null; picked.clear(); load();
       }, 'danger');
     }
 
-    // sub folders as chips
+    // sub folder chips
     const subs = $('subs'); subs.textContent = '';
-    if (!searching && sel !== null && sel !== '') D.folders.filter((f) => parentOf(f) === sel).forEach((f) => { const c = el('div', 'chip'); const i = el('span'); i.innerHTML = FOLDER; i.firstChild.style.cssText = 'width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2'; c.append(i, el('span', null, leaf(f) + ' (' + countIn(f) + ')')); c.onclick = () => { sel = f; open.add(f); render(); }; subs.append(c); });
-    if (!searching && sel === null) D.folders.filter((f) => !f.includes(SEP)).forEach((f) => { const c = el('div', 'chip'); c.append(el('span', null, '📁 ' + leaf(f) + ' (' + countIn(f) + ')')); c.onclick = () => { sel = f; open.add(f); render(); }; subs.append(c); });
-
-    const list = $('list'); list.textContent = '';
-    const items = visible();
-    for (const b of items) {
-      const row = el('div', 'row'); row.draggable = true;
-      const cb = el('input'); cb.type = 'checkbox'; cb.checked = picked.has(b.url);
-      cb.onchange = () => { if (cb.checked) picked.add(b.url); else picked.delete(b.url); bulk(); };
-      const fi = el('div', 'fi', (b.title || b.url).replace(/^https?:\/\/(www\.)?/, '').charAt(0).toUpperCase());
-      const t = el('div', 't'); const a = el('a'); a.href = b.url; a.textContent = b.title || b.url;
-      const sm = el('small', 'muted', b.url); t.append(a, sm);
-      row.append(cb, fi, t);
-      if ((sel === null || searching) && b.folder) row.append(el('span', 'tag', b.folder));
-      const acts = el('div', 'acts');
-      const ed = el('button', null, 'Edit'); ed.onclick = () => edit(b);
-      const del = el('button', 'danger', 'Delete'); del.onclick = async () => { await browser.bookmarksRemove([b.url]); picked.delete(b.url); load(); };
-      acts.append(ed, del); row.append(acts);
-      row.ondragstart = (e) => { drag = picked.has(b.url) ? [...picked] : [b.url]; e.dataTransfer.setData('text/plain', b.url); e.dataTransfer.effectAllowed = 'move'; };
-      row.ondragend = () => { drag = null; };
-      list.append(row);
+    if (!searching && sel !== null && sel !== '' && sel !== BIN_SEL) {
+      D.folders.filter((f) => parentOf(f) === sel).forEach((f) => {
+        const c = el('div', 'chip'); const i = el('span'); i.innerHTML = FOLDER; i.firstChild.style.cssText = 'width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2';
+        c.append(i, el('span', null, leaf(f) + ' (' + countIn(f) + ')'));
+        c.onclick = () => { sel = f; open.add(f); render(); };
+        c.oncontextmenu = (e) => { e.preventDefault(); folderCtxMenu(e.clientX, e.clientY, f); };
+        subs.append(c);
+      });
     }
-    if (!items.length) list.append(el('div', 'empty', searching ? 'No bookmarks match your search.' : 'Nothing here yet. Press Ctrl+D on a page, drag bookmarks here, or import them.'));
+    if (!searching && sel === null) {
+      D.folders.filter((f) => !f.includes(SEP)).forEach((f) => {
+        const c = el('div', 'chip');
+        c.append(el('span', null, '📁 ' + leaf(f) + ' (' + countIn(f) + ')'));
+        c.onclick = () => { sel = f; open.add(f); render(); };
+        c.oncontextmenu = (e) => { e.preventDefault(); folderCtxMenu(e.clientX, e.clientY, f); };
+        subs.append(c);
+      });
+    }
+
+    // recycle bin bar
+    $('binbar').classList.toggle('on', sel === BIN_SEL);
+    $('bincnt').textContent = binItems.length + ' item(s) in recycle bin';
+    $('add').style.display = sel === BIN_SEL ? 'none' : '';
+    $('sort').style.display = sel === BIN_SEL ? 'none' : '';
+
+    // list
+    const list = $('list'); list.textContent = '';
+    if (sel === BIN_SEL) {
+      if (!binItems.length) { list.append(el('div', 'empty', 'The recycle bin is empty.')); bulk(); return; }
+      const sortedBin = [...binItems].sort((a, b) => (b.binTime || 0) - (a.binTime || 0));
+      for (const b of sortedBin) {
+        const row = el('div', 'row');
+        const cb = el('input'); cb.type = 'checkbox'; cb.checked = picked.has(b.url);
+        cb.onchange = () => { cb.checked ? picked.add(b.url) : picked.delete(b.url); bulk(); };
+        const fi = el('div', 'fi', (b.title || b.url).replace(/^https?:\/\/(www\.)?/, '').charAt(0).toUpperCase());
+        const t = el('div', 't'); const a = el('a'); a.href = b.url; a.textContent = b.title || b.url;
+        const sm = el('small', 'muted', b.url); t.append(a, sm);
+        row.append(cb, fi, t);
+        const acts = el('div', 'acts');
+        const rst = el('button', null, 'Restore'); rst.onclick = async () => { await browser.bookmarksRestoreFromBin([b.url]); load(); };
+        const del = el('button', 'danger', 'Delete permanently'); del.onclick = async () => { if (!confirm('Permanently delete this bookmark?')) return; await browser.bookmarksEmptyBin([b.url]); load(); };
+        acts.append(rst, del); row.append(acts);
+        row.oncontextmenu = (e) => { e.preventDefault(); showCtx(e.clientX, e.clientY, [
+          { label: 'Restore', fn: async () => { await browser.bookmarksRestoreFromBin([b.url]); load(); } },
+          { label: 'Delete permanently', danger: true, fn: async () => { if (!confirm('Permanently delete?')) return; await browser.bookmarksEmptyBin([b.url]); load(); } },
+        ]); };
+        list.append(row);
+      }
+    } else {
+      const items = visible();
+      for (const b of items) {
+        const row = el('div', 'row'); row.draggable = true;
+        const cb = el('input'); cb.type = 'checkbox'; cb.checked = picked.has(b.url);
+        cb.onchange = () => { if (cb.checked) picked.add(b.url); else picked.delete(b.url); bulk(); };
+        const fi = el('div', 'fi', (b.title || b.url).replace(/^https?:\/\/(www\.)?/, '').charAt(0).toUpperCase());
+        const t = el('div', 't'); const a = el('a'); a.href = b.url; a.textContent = b.title || b.url;
+        const sm = el('small', 'muted', b.url); t.append(a, sm);
+        row.append(cb, fi, t);
+        if ((sel === null || $('q').value.trim()) && b.folder) row.append(el('span', 'tag', b.folder));
+        const acts = el('div', 'acts');
+        const ed = el('button', null, 'Edit'); ed.onclick = () => edit(b);
+        const del = el('button', 'danger', '🗑'); del.title = 'Move to recycle bin'; del.onclick = async () => { await browser.bookmarksRemove([b.url]); picked.delete(b.url); load(); };
+        acts.append(ed, del); row.append(acts);
+        row.ondragstart = (e) => { drag = picked.has(b.url) ? [...picked] : [b.url]; e.dataTransfer.setData('text/plain', b.url); e.dataTransfer.effectAllowed = 'move'; };
+        row.ondragend = () => { drag = null; };
+        row.oncontextmenu = (e) => { e.preventDefault(); showCtx(e.clientX, e.clientY, [
+          { label: 'Open in new tab', fn: () => browser.go(b.url) },
+          { label: 'Copy URL', fn: () => { try { navigator.clipboard.writeText(b.url); } catch { /* silent */ } } },
+          '-',
+          { label: 'Add to Speed Dial', fn: () => addToSpeedDial([b]) },
+          { label: 'Add to New Speed Dial', fn: () => addToNewSpeedDial([b]) },
+          { label: 'Edit', fn: () => edit(b) },
+          { label: 'Move to folder…', fn: async () => { const r = await ask('Move bookmark', [{key:'folder',label:'Folder (leave empty for Unsorted)',value:b.folder||'',list:D.folders}], 'Move'); if (r !== null) { await browser.bookmarksMove([b.url], r.folder); load(); } } },
+          '-',
+          { label: '🗑 Delete (recycle bin)', danger: true, fn: async () => { await browser.bookmarksRemove([b.url]); picked.delete(b.url); load(); } },
+        ]); };
+        list.append(row);
+      }
+      if (!items.length) list.append(el('div', 'empty', $('q').value.trim() ? 'No bookmarks match your search.' : 'Nothing here yet. Press Ctrl+D on a page, drag bookmarks here, or import them.'));
+    }
     bulk();
   }
 
   function bulk() {
     const n = picked.size;
-    $('bulk').classList.toggle('on', n > 0);
+    $('bulk').classList.toggle('on', n > 0 && sel !== BIN_SEL);
     $('bulkn').textContent = n + ' selected';
+    const all = sel === BIN_SEL ? D.bookmarks.filter((b) => b.recycleBin) : visible();
+    const sa = $('selall');
+    sa.indeterminate = n > 0 && n < all.length;
+    sa.checked = all.length > 0 && n >= all.length;
   }
+
+  $('selall').onchange = function() {
+    const all = sel === BIN_SEL ? D.bookmarks.filter((b) => b.recycleBin) : visible();
+    if (this.checked) all.forEach((b) => picked.add(b.url));
+    else picked.clear();
+    render();
+  };
 
   async function edit(b) {
     const r = await ask(b ? 'Edit bookmark' : 'Add bookmark', [
-      { key: 'title', label: 'Title', value: b ? b.title : '' },
-      { key: 'url', label: 'Address', value: b ? b.url : '' },
-      { key: 'folder', label: 'Folder (type a new one to create it)', value: b ? b.folder : (typeof sel === 'string' ? sel : ''), list: D.folders },
-    ], 'Save', async (v) => { const x = await browser.bookmarksSave({ url: b ? b.url : '', newUrl: v.url, title: v.title, folder: v.folder }); return x.error || null; });
+      { key:'title', label:'Title', value:b ? b.title : '' },
+      { key:'url', label:'Address', value:b ? b.url : '' },
+      { key:'folder', label:'Folder (type a new one to create it)', value:b ? b.folder : (typeof sel === 'string' && sel !== BIN_SEL ? sel : ''), list:D.folders },
+    ], 'Save', async (v) => { const x = await browser.bookmarksSave({ url:b ? b.url : '', newUrl:v.url, title:v.title, folder:v.folder }); return x.error || null; });
     if (r) load();
+  }
+
+  // ---- add to speed dial ----
+  async function addToSpeedDial(bms) {
+    const S = await browser.getSettings();
+    const group = S.startPage.groups[0];
+    let added = 0;
+    for (const b of bms) {
+      if (!b.url || b.recycleBin) continue;
+      if (!group.dials.some((d) => d.url === b.url)) {
+        group.dials.push({ title: b.title || b.url, url: b.url });
+        added++;
+      }
+    }
+    if (added) {
+      await browser.setSetting('startPage.groups', S.startPage.groups);
+      alert(added + ' bookmark(s) added to Speed Dial.');
+    } else {
+      alert('All selected bookmarks are already in Speed Dial.');
+    }
+  }
+
+  async function addFolderToSpeedDial(folderPath) {
+    const S = await browser.getSettings();
+    const group = S.startPage.groups[0];
+    const folderName = leaf(folderPath);
+    const bms = D.bookmarks.filter((b) => b.folder === folderPath);
+    // find existing folder dial or create one
+    let fdial = group.dials.find((d) => d.type === 'folder' && d.title === folderName);
+    if (!fdial) { fdial = { title: folderName, type: 'folder', items: [] }; group.dials.push(fdial); }
+    let added = 0;
+    for (const b of bms) {
+      if (!b.url || b.recycleBin) continue;
+      if (!fdial.items.some((d) => d.url === b.url)) { fdial.items.push({ title: b.title || b.url, url: b.url }); added++; }
+    }
+    // recurse into sub-folders
+    const subs = D.folders.filter((f) => f.startsWith(folderPath + SEP));
+    for (const sub of subs) {
+      const subName = leaf(sub);
+      let sdial = fdial.items.find((d) => d.type === 'folder' && d.title === subName);
+      if (!sdial) { sdial = { title: subName, type: 'folder', items: [] }; fdial.items.push(sdial); }
+      for (const b of D.bookmarks.filter((bk) => bk.folder === sub)) {
+        if (!b.url) continue;
+        if (!sdial.items.some((d) => d.url === b.url)) { sdial.items.push({ title: b.title || b.url, url: b.url }); added++; }
+      }
+    }
+    if (added) {
+      await browser.setSetting('startPage.groups', S.startPage.groups);
+      alert('"' + folderName + '" folder added to Speed Dial (' + added + ' bookmark(s)).');
+    } else {
+      alert('All bookmarks in this folder are already in Speed Dial.');
+    }
+  }
+
+  async function addToNewSpeedDial(bms) {
+    const name = prompt('Name for the new Speed Dial:', 'Speed dial');
+    if (!name) return;
+    const S = await browser.getSettings();
+    const newGroup = { name, dials: [] };
+    for (const b of bms) {
+      if (!b.url || b.recycleBin) continue;
+      newGroup.dials.push({ title: b.title || b.url, url: b.url });
+    }
+    S.startPage.groups.push(newGroup);
+    await browser.setSetting('startPage.groups', S.startPage.groups);
+    alert(newGroup.dials.length + ' bookmark(s) added to new Speed Dial "' + name + '".');
+  }
+
+  async function addFolderToNewSpeedDial(folderPath) {
+    const folderName = leaf(folderPath);
+    const name = prompt('Name for the new Speed Dial:', folderName);
+    if (!name) return;
+    const S = await browser.getSettings();
+    const newGroup = { name, dials: [] };
+    const bms = D.bookmarks.filter((b) => b.folder === folderPath || b.folder.startsWith(folderPath + SEP));
+    for (const b of bms) {
+      if (!b.url || b.recycleBin) continue;
+      newGroup.dials.push({ title: b.title || b.url, url: b.url });
+    }
+    S.startPage.groups.push(newGroup);
+    await browser.setSetting('startPage.groups', S.startPage.groups);
+    alert(newGroup.dials.length + ' bookmark(s) added to new Speed Dial "' + name + '".');
   }
 
   $('add').onclick = () => edit(null);
   $('newfolder').onclick = async () => {
-    const base = typeof sel === 'string' && sel ? sel + SEP : '';
-    const r = await ask('New folder' + (base ? ' inside “' + leaf(sel) + '”' : ''), [{ key: 'n', label: 'Name' }], 'Create', async (v) => { const x = await browser.bookmarksFolderAdd(base + v.n.replace(/\//g, '-')); return x.error || null; });
+    const base = typeof sel === 'string' && sel && sel !== BIN_SEL ? sel + SEP : '';
+    const r = await ask('New folder' + (base ? ' inside "' + leaf(sel) + '"' : ''), [{key:'n',label:'Name'}], 'Create', async (v) => { const x = await browser.bookmarksFolderAdd(base + v.n.replace(/\//g,'-')); return x.error || null; });
     if (r) { if (base) open.add(sel); load(); }
   };
-  $('bdel').onclick = async () => { if (!confirm('Delete ' + picked.size + ' bookmark(s)?')) return; await browser.bookmarksRemove([...picked]); picked.clear(); load(); };
+  $('bdel').onclick = async () => { if (!confirm('Move ' + picked.size + ' bookmark(s) to the recycle bin?')) return; await browser.bookmarksRemove([...picked]); picked.clear(); load(); };
   $('bclear').onclick = () => { picked.clear(); render(); };
   $('bmove').onclick = async () => {
-    const r = await ask('Move ' + picked.size + ' bookmark(s)', [{ key: 'folder', label: 'Folder (leave empty for Unsorted; type a new name to create it)', list: D.folders }], 'Move', null);
+    const r = await ask('Move ' + picked.size + ' bookmark(s)', [{key:'folder',label:'Folder (leave empty for Unsorted; type a new name to create it)',list:D.folders}], 'Move', null);
     if (r) { await browser.bookmarksMove([...picked], r.folder); picked.clear(); load(); }
   };
+  $('restoreall').onclick = async () => { await browser.bookmarksRestoreFromBin(binItems.map((b) => b.url)); load(); };
+  $('emptybin').onclick = async () => { if (!confirm('Permanently delete all ' + binItems.length + ' item(s) in the recycle bin?')) return; await browser.bookmarksEmptyBin(); load(); };
   $('q').oninput = render; $('sort').onchange = render;
   window.addEventListener('focus', load);
+  if (typeof browser !== 'undefined' && browser.onBookmarksChanged) browser.onBookmarksChanged(() => load());
   load();
 </script>
 </body>

@@ -2,248 +2,683 @@
 <html>
 <head>
 <meta charset="utf-8">
-<title>Start Page</title>
+<title>Start</title>
 <link rel="stylesheet" href="my://assets/theme.css">
 <link rel="stylesheet" href="my://assets/common.css">
 <style>
-  :root { --tile:150px; }
-  body { display:flex; justify-content:center; }
-  .box { width:min(1100px, 94vw); padding-top:9vh; text-align:center; position:relative; }
-  #brand { display:flex; align-items:center; justify-content:center; gap:14px; margin-bottom:26px; }
-  #brand img { width:56px; height:56px; }
-  #brand span { font-size:34px; font-weight:600; letter-spacing:-.5px; }
-  #search { width:min(640px, 100%); font-size:18px; padding:14px 22px; border-radius:30px; }
-  #gear { position:fixed; top:14px; right:16px; background:var(--tab); border:1px solid var(--line); border-radius:16px;
-    padding:5px 14px; font-size:13px; color:var(--muted); }
-  #gear:hover { color:var(--fg); border-color:var(--accent); }
-  #panel { display:none; position:fixed; top:48px; right:16px; width:260px; text-align:left; background:var(--tab);
-    border:1px solid var(--line); border-radius:12px; padding:14px; z-index:5; }
-  #panel label { display:flex; justify-content:space-between; align-items:center; gap:10px; margin:8px 0; font-size:14px; }
-  #panel input[type=range] { width:100%; padding:0; }
+  :root { --tile: 150px; }
+  body { min-height: 100vh; }
+  .box { width: min(1200px, 96vw); margin: 0 auto; padding: 14px 0 60px; }
 
-  #groups { display:flex; gap:6px; justify-content:center; flex-wrap:wrap; margin-top:34px; }
-  .gbtn { background:none; border:1px solid transparent; color:var(--muted); border-radius:16px; padding:5px 14px; cursor:pointer; }
-  .gbtn:hover { color:var(--fg); }
-  .gbtn.on { background:var(--tab); color:var(--fg); border-color:var(--line); }
-  .gbtn.drop { border-color:var(--accent); color:var(--fg); }
-  #gtools { margin-top:6px; font-size:12px; }
-  #gtools a { color:var(--muted); margin:0 6px; cursor:pointer; }
-  #gtools a:hover { color:var(--fg); }
+  #brand { display: flex; align-items: center; justify-content: center; gap: 14px; margin-bottom: 18px; }
+  #brand img { width: 48px; height: 48px; }
+  #brand span { font-size: 30px; font-weight: 600; letter-spacing: -.5px; }
+  body.hide-brand #brand { display: none; }
 
-  .grid { display:grid; grid-template-columns:repeat(auto-fill, var(--tile)); gap:16px; justify-content:center; margin-top:22px; }
-  .tile { position:relative; display:flex; flex-direction:column; width:var(--tile); color:var(--fg); }
-  .tile:hover { text-decoration:none; }
-  .thumb { height:calc(var(--tile) * 0.62); border-radius:10px; background:var(--tab); border:1px solid var(--line);
-    overflow:hidden; display:grid; place-items:center; }
-  .tile:hover .thumb { border-color:var(--accent); }
-  .thumb img { width:100%; height:100%; object-fit:cover; object-position:top; display:block; }
-  .thumb .big { width:calc(var(--tile) * 0.3); height:calc(var(--tile) * 0.3); border-radius:12px; background:var(--accent); color:var(--onaccent);
-    font-size:calc(var(--tile) * 0.15); font-weight:600; display:grid; place-items:center; }
-  .nm { margin-top:6px; font-size:13px; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
-  .tile .acts { position:absolute; top:5px; right:5px; display:none; gap:4px; }
-  .tile:hover .acts { display:flex; }
-  .acts button { background:var(--bg); border:1px solid var(--line); border-radius:6px; padding:0 6px; height:22px; font-size:12px; color:var(--fg); }
-  .tile.over .thumb { border-color:var(--accent); border-style:dashed; }
-  .tile.add .thumb { border-style:dashed; color:var(--muted); font-size:28px; cursor:pointer; background:none; }
-  .tile.add { cursor:pointer; }
+  #sf { text-align: center; margin-bottom: 18px; }
+  #search { width: min(560px, 100%); font-size: 16px; padding: 11px 20px; border-radius: 28px; }
+  body.hide-search #sf { display: none; }
 
-  #edit { display:none; margin:20px auto 0; max-width:520px; text-align:left; background:var(--tab); border:1px solid var(--line);
-    border-radius:12px; padding:14px; }
-  #edit .r { display:flex; gap:8px; margin:8px 0; align-items:center; }
-  #edit .r label { width:70px; color:var(--muted); font-size:13px; }
-  #edit .r input, #edit .r select { flex:1; }
+  /* tab bar */
+  #tab-bar { display: flex; align-items: center; margin-bottom: 18px; gap: 4px; }
+  #tab-center { flex: 1; display: flex; gap: 2px; align-items: center; flex-wrap: wrap; justify-content: center; }
+  .tbtn { background: none; border: 1px solid transparent; color: var(--muted); border-radius: 14px;
+    padding: 4px 12px; cursor: pointer; display: inline-flex; align-items: center; gap: 5px;
+    font-size: 13px; white-space: nowrap; }
+  .tbtn:hover { color: var(--fg); }
+  .tbtn.on { background: var(--tab); color: var(--fg); border-color: var(--line); }
+  .tbtn.drop { border-color: var(--accent); color: var(--fg); }
+  .tbtn svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2;
+    stroke-linecap: round; stroke-linejoin: round; flex: none; display: block; }
+  .tbtn-ic { padding: 5px 8px; }
+  .tbtn-ic svg { width: 16px; height: 16px; }
+  #tab-sep { width: 1px; height: 18px; background: var(--line); margin: 0 4px; flex: none; }
+
+  /* breadcrumb */
+  #breadcrumb { margin-bottom: 14px; font-size: 16px; color: var(--muted); display: none; text-align: center; }
+  #breadcrumb.show { display: block; }
+  .bc-link { cursor: pointer; color: var(--accent); }
+  .bc-link:hover { text-decoration: underline; }
+
+  /* grid */
+  .grid { display: grid; gap: 22px; justify-content: center; }
+  .grid.auto-cols { grid-template-columns: repeat(auto-fill, var(--tile)); }
+  .tile { position: relative; display: flex; flex-direction: column; width: var(--tile);
+    color: var(--fg); text-decoration: none; cursor: pointer;
+    transition: transform .18s cubic-bezier(.34,1.56,.64,1), opacity .15s; }
+  a.tile:hover { text-decoration: none; }
+  .tile:hover { transform: translateY(-3px); }
+  .tile.dragging { opacity: .4; transform: scale(.95); }
+  .tile.drag-over { transform: translateX(6px); }
+  .thumb { height: var(--tile); border-radius: 12px; background: var(--tab);
+    border: 1px solid var(--line); overflow: hidden; display: grid; place-items: center;
+    transition: border-color .15s, box-shadow .15s; }
+  .tile:hover .thumb { border-color: var(--accent); box-shadow: 0 4px 18px rgba(0,0,0,.35); }
+  .thumb img { width: 100%; height: 100%; object-fit: cover; object-position: top; display: block; }
+  .thumb .big { width: calc(var(--tile) * 0.3); height: calc(var(--tile) * 0.3); border-radius: 10px;
+    background: var(--accent); color: var(--onaccent); font-size: calc(var(--tile) * 0.14);
+    font-weight: 600; display: grid; place-items: center; }
+  .nm { margin-top: 6px; font-size: 12px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+    text-align: center; display: flex; align-items: center; justify-content: center; gap: 4px;
+    padding: 2px 6px; border-radius: 6px;
+    background: color-mix(in srgb, var(--bg) 70%, transparent); backdrop-filter: blur(4px); }
+  .nm svg { flex: none; opacity: .6; }
+  body.hide-titles .nm { display: none; }
+
+  /* folder */
+  .tile.folder .thumb { padding: 5px; background: var(--tab); }
+  .fpreview { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; width: 100%; height: 100%; }
+  .fcell { overflow: hidden; border-radius: 7px; background: var(--bg); position: relative;
+    display: grid; place-items: center; }
+  .fcell img { width: 100%; height: 100%; object-fit: cover; object-position: top; position: absolute; inset: 0; }
+  .fcell-big { font-size: 10px; font-weight: 700; color: var(--onaccent); background: var(--accent);
+    width: 100%; height: 100%; display: grid; place-items: center; }
+  .fic-wrap { width: calc(var(--tile) * 0.28); height: calc(var(--tile) * 0.28);
+    display: flex; align-items: center; justify-content: center; }
+  .fic-wrap svg { width: 100%; height: 100%; }
+
+  .tile.add .thumb { border-style: dashed; color: var(--muted); font-size: 24px; background: none; }
+  .tile.over .thumb { border-color: var(--accent); border-style: dashed; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent); }
+  .tile.folder-target .thumb { border-color: var(--accent); border-style: solid;
+    background: color-mix(in srgb, var(--accent) 18%, var(--tab)); }
+
+  /* context menu */
+  #ctx { position: fixed; background: var(--active); border: 1px solid var(--line); border-radius: 10px;
+    padding: 4px 0; z-index: 500; min-width: 190px; box-shadow: 0 4px 20px rgba(0,0,0,.4); display: none; }
+  .cxi { padding: 7px 16px; cursor: pointer; font-size: 13px; }
+  .cxi:hover { background: var(--tab); }
+  .cxs { height: 1px; background: var(--line); margin: 4px 0; }
+  .cxd { color: #e5534b; }
+
+  /* modal */
+  #modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.55);
+    z-index: 400; align-items: center; justify-content: center; }
+  #modal.on { display: flex; }
+  #mbox { background: var(--tab); border: 1px solid var(--line); border-radius: 14px; padding: 22px;
+    width: min(400px, 90vw); max-height: 90vh; overflow-y: auto; }
+  #mbox h3 { margin: 0 0 14px; }
+  .mr { display: flex; gap: 8px; margin: 10px 0; align-items: center; }
+  .mr label { width: 70px; color: var(--muted); font-size: 13px; flex: none; }
+  .mr input, .mr select { flex: 1; min-width: 0; }
+  .mbtns { display: flex; gap: 8px; margin-top: 16px; }
+
+  /* customize panel */
+  #panel { display: none; position: fixed; top: 48px; right: 16px; width: min(290px, calc(100vw - 32px));
+    max-height: calc(100vh - 64px); overflow-y: auto; background: var(--tab); border: 1px solid var(--line);
+    border-radius: 12px; padding: 14px; z-index: 299;
+    box-shadow: 0 8px 32px rgba(0,0,0,.45), 0 0 0 1px rgba(255,255,255,.04); }
+  #panel .ph { font-size: 11px; text-transform: uppercase; letter-spacing: .05em;
+    color: var(--muted); margin: 12px 0 4px; }
+  #panel .ph:first-child { margin-top: 0; }
+  #panel label { display: flex; justify-content: space-between; align-items: center;
+    gap: 10px; margin: 6px 0; font-size: 13px; }
+  #panel input[type=range] { width: 100px; padding: 0; }
+  #panel input[type=number] { width: 56px; }
+  #panel input[type=color] { width: 32px; height: 28px; padding: 2px; border-radius: 4px; cursor: pointer; flex: none; }
+  .bgrow { display: flex; gap: 6px; align-items: center; margin-top: 4px; }
+  .bgrow input[type=text] { flex: 1; min-width: 0; font-size: 12px; }
+  .swatches { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 6px; }
+  .swatch { width: 26px; height: 26px; border-radius: 6px; border: 2px solid transparent;
+    cursor: pointer; flex: none; padding: 0; }
+  .swatch:hover { border-color: var(--fg); }
+  #panel .link { text-align: center; margin-top: 12px; font-size: 12px; }
+  #panel .link a { color: var(--muted); cursor: pointer; }
+  #panel .link a:hover { color: var(--fg); }
 </style>
 </head>
 <body>
-<button id="gear" title="Customize the start page">⚙ Customize</button>
-<div id="panel">
-  <label>Tile size <span id="sizev"></span></label>
-  <input type="range" id="size" min="90" max="260" step="10">
-  <label>Page thumbnails <input type="checkbox" id="thumbs"></label>
-  <label>Search box <input type="checkbox" id="showsearch"></label>
-  <label><a href="my://settings#startpage">All settings…</a></label>
-</div>
 <div class="box">
   <div id="brand"><img src="my://assets/logo.png" alt=""><span>mbrowser</span></div>
-  <form id="f"><input id="search" placeholder="Search or enter address" autocomplete="off" spellcheck="false"></form>
-  <div id="groups"></div>
-  <div id="gtools"></div>
-  <form id="edit">
-    <div class="r"><label id="l1">Title</label><input id="f1" type="text"></div>
-    <div class="r" id="r2"><label>Address</label><input id="f2" type="text" placeholder="https://…"></div>
-    <div class="r" id="r3"><label>Group</label><select id="f3"></select></div>
-    <div class="r"><button type="submit">Save</button><button type="button" id="cancel">Cancel</button></div>
-  </form>
+  <div id="sf"><input id="search" placeholder="Search or enter address" autocomplete="off" spellcheck="false"></div>
+  <div id="tab-bar"></div>
+  <div id="breadcrumb"></div>
   <div class="grid" id="grid"></div>
 </div>
+<div id="panel"></div>
+<div id="ctx"></div>
+<div id="modal"><div id="mbox"></div></div>
 <script>
-  const $ = (id) => document.getElementById(id);
-  let SP = null;          // the startPage settings object
-  let drag = null;        // { gi, di } of the tile being dragged
-  let editing = null;     // { kind:'dial'|'group', gi, di|-1 }
-  const save = () => browser.setSetting('startPage', SP);
-  const isWeb = (u) => /^https?:\/\//i.test(u);
-  const activeIdx = () => Math.max(0, SP.groups.findIndex((g) => g.id === SP.activeGroup));
+const $ = (id) => document.getElementById(id);
+const svgi = (d) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
+const IC = {
+  bm:     svgi('<path d="M7 4h10a1 1 0 0 1 1 1v15l-6-4-6 4V5a1 1 0 0 1 1-1z"/>'),
+  hist:   svgi('<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>'),
+  note:   svgi('<path d="M6 3.8h8.5L18 7.3V20H6z"/><path d="M9 11.5h6M9 15.5h6"/>'),
+  dash:   svgi('<rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="3" width="8" height="8" rx="1.5"/><rect x="3" y="13" width="8" height="8" rx="1.5"/><rect x="13" y="13" width="8" height="8" rx="1.5"/>'),
+  folder: svgi('<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>'),
+  gear:   svgi('<circle cx="12" cy="12" r="3"/><path d="M12 2v2m0 16v2M4.22 4.22l1.42 1.42m12.72 12.72 1.42 1.42M2 12h2m16 0h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>'),
+};
 
-  $('f').onsubmit = (e) => { e.preventDefault(); const v = $('search').value.trim(); if (v) browser.go(v); };
+const SAMPLE_BGS = [
+  ['Dark blue',  'linear-gradient(135deg,#1a1a2e 0%,#0f3460 100%)'],
+  ['Deep space', 'radial-gradient(ellipse at top,#1b2a4a 0%,#080808 70%)'],
+  ['Purple',     'linear-gradient(135deg,#2d1b4e 0%,#1a0533 100%)'],
+  ['Forest',     'linear-gradient(135deg,#0a2e18 0%,#1a4a2e 100%)'],
+  ['Ocean',      'linear-gradient(160deg,#0d1f37 0%,#0a4a6b 100%)'],
+  ['Dusk',       'linear-gradient(160deg,#2d1b00 0%,#4a1414 100%)'],
+  ['Slate',      'linear-gradient(135deg,#1c1f26 0%,#2a2d38 100%)'],
+];
 
-  // ---- customise panel ----
-  $('gear').onclick = () => { const p = $('panel'); p.style.display = p.style.display === 'block' ? 'none' : 'block'; };
-  $('size').oninput = () => { SP.tileSize = Number($('size').value); $('sizev').textContent = SP.tileSize + 'px'; applyLook(); };
-  $('size').onchange = save;
-  $('thumbs').onchange = () => { SP.thumbnails = $('thumbs').checked; save(); render(); };
-  $('showsearch').onchange = () => { SP.showSearch = $('showsearch').checked; save(); applyLook(); };
+let SP = null, syncServer = '';
+let drag = null;
+let folderPath = [];
+let thumbVer = 0;
+let thumbPoll = null;
 
-  function applyLook() {
-    document.documentElement.style.setProperty('--tile', SP.tileSize + 'px');
-    $('f').style.display = SP.showSearch ? '' : 'none';
+function refreshThumbs() {
+  // Collect visible URLs to refresh
+  const urls = [];
+  const collect = (items) => items.forEach((d) => {
+    if (!d.type && isWeb(d.url)) urls.push(d.url);
+    else if (d.type === 'folder') collect(d.items || []);
+  });
+  collect(folderPath.length ? currentItems() : (SP.groups[activeIdx()].dials || []));
+
+  // Clear old thumbnails immediately (shows letter fallbacks)
+  thumbVer = Date.now(); renderGrid();
+
+  // Fire background capture and poll every 3 s to pick up results
+  if (urls.length) {
+    browser.refreshThumbs(urls);
+    clearInterval(thumbPoll);
+    let n = 0;
+    thumbPoll = setInterval(() => { thumbVer = Date.now(); renderGrid(); if (++n >= 10) clearInterval(thumbPoll); }, 3000);
   }
+}
 
-  // ---- edit form ----
-  function openForm(mode) {
-    editing = mode;
-    const isDial = mode.kind === 'dial';
-    $('edit').style.display = 'block';
-    $('l1').textContent = isDial ? 'Title' : 'Group name';
-    $('r2').style.display = isDial ? 'flex' : 'none';
-    $('r3').style.display = isDial ? 'flex' : 'none';
-    const g = SP.groups[mode.gi];
-    const d = isDial && mode.di >= 0 ? g.dials[mode.di] : null;
-    $('f1').value = isDial ? (d ? d.title : '') : (mode.di === -1 && mode.isNew ? '' : g.name);
-    $('f2').value = d ? d.url : '';
-    const sel = $('f3');
-    sel.textContent = '';
-    SP.groups.forEach((x, i) => { const o = document.createElement('option'); o.value = i; o.textContent = x.name; sel.append(o); });
-    sel.value = mode.gi;
-    ($('f1').value || !isDial ? $('f1') : $('f2')).focus();
-  }
-  $('cancel').onclick = () => { $('edit').style.display = 'none'; editing = null; };
-  $('edit').onsubmit = async (e) => {
-    e.preventDefault();
-    if (!editing) return;
-    if (editing.kind === 'group') {
-      const name = $('f1').value.trim() || 'Group';
-      if (editing.isNew) {
-        const id = 'g' + Date.now();
-        SP.groups.push({ id, name, dials: [] });
-        SP.activeGroup = id;
-      } else SP.groups[editing.gi].name = name;
-    } else {
-      let url = $('f2').value.trim();
-      if (!url) return;
-      if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
-      const dial = { title: $('f1').value.trim() || url.replace(/^https?:\/\//i, ''), url };
-      const to = Number($('f3').value);
-      if (editing.di >= 0) {
-        const from = SP.groups[editing.gi].dials;
-        if (to === editing.gi) from[editing.di] = dial;
-        else { from.splice(editing.di, 1); SP.groups[to].dials.push(dial); }
-      } else SP.groups[to].dials.push(dial);
-      SP.activeGroup = SP.groups[to].id;
+const save = () => browser.setSetting('startPage', SP);
+const isWeb = (u) => /^https?:\/\//i.test(u);
+const activeIdx = () => Math.max(0, SP.groups.findIndex((g) => g.id === SP.activeGroup));
+const currentItems = () => folderPath.length
+  ? (folderPath[folderPath.length - 1].items || [])
+  : (SP.groups[activeIdx()].dials || []);
+
+$('sf').onsubmit = (e) => { e.preventDefault(); };
+$('search').addEventListener('keydown', (e) => { if (e.key === 'Enter') { const v = $('search').value.trim(); if (v) browser.go(v); } });
+
+// --- context menu ---
+const ctx = $('ctx');
+function showCtx(e, type, data) {
+  e.preventDefault(); e.stopPropagation();
+  ctx.textContent = '';
+  const ci = (label, fn, danger) => {
+    const el = document.createElement('div');
+    el.className = 'cxi' + (danger ? ' cxd' : '');
+    el.textContent = label;
+    el.onclick = () => { hideCtx(); fn(); };
+    ctx.append(el);
+  };
+  const cs = () => { const s = document.createElement('div'); s.className = 'cxs'; ctx.append(s); };
+
+  if (type === 'tile') {
+    const { d, idx } = data;
+    ci('Open', () => browser.go(d.url));
+    ci('Open in new tab', () => browser.openUrl(d.url, 'tab'));
+    cs();
+    ci('Edit', () => showModal('dial', data));
+    ci('Refresh thumbnail', () => refreshThumbs());
+    cs();
+    ci('Delete', async () => { currentItems().splice(idx, 1); await save(); render(); }, true);
+  } else if (type === 'folder') {
+    const { d, idx } = data;
+    ci('Open folder', () => openFolder(d));
+    if ((d.items || []).some((x) => isWeb(x.url)))
+      ci('Open all in new tabs', () => (d.items || []).filter((x) => isWeb(x.url)).forEach((x) => browser.openUrl(x.url, 'tab')));
+    cs();
+    ci('Rename folder', () => showModal('folder', data));
+    cs();
+    ci('Delete folder', async () => { currentItems().splice(idx, 1); await save(); render(); }, true);
+  } else if (type === 'blank') {
+    if (folderPath.length) {
+      const cur = folderPath[folderPath.length - 1];
+      ci('Rename this folder', () => showModal('folder', { d: cur, self: true }));
+      cs();
     }
-    $('edit').style.display = 'none'; editing = null;
-    await save(); render();
+    ci('Add speed dial', () => showModal('dial', { d: null, idx: -1 }));
+    ci('New folder', () => showModal('folder', { d: null, idx: -1 }));
+    cs();
+    ci('Refresh all thumbnails', () => refreshThumbs());
+  } else if (type === 'tab') {
+    const { gi } = data;
+    ci('Rename', () => showModal('group', { gi }));
+    if (SP.groups.length > 1) {
+      cs();
+      ci('Delete', async () => {
+        const g = SP.groups[gi];
+        if ((g.dials || []).length && !confirm(`Delete "${g.name}" and its ${g.dials.length} speed dial(s)?`)) return;
+        SP.groups.splice(gi, 1); SP.activeGroup = SP.groups[0].id; folderPath = [];
+        await save(); render();
+      }, true);
+    }
+  }
+
+  ctx.style.display = 'block';
+  const h = ctx.offsetHeight, w = ctx.offsetWidth;
+  ctx.style.left = Math.min(e.clientX, window.innerWidth - w - 8) + 'px';
+  ctx.style.top = (e.clientY + h > window.innerHeight ? e.clientY - h : e.clientY + 2) + 'px';
+}
+function hideCtx() { ctx.style.display = 'none'; }
+document.addEventListener('click', hideCtx);
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') { hideCtx(); hideModal(); }
+  if (e.key === 'F5') { e.preventDefault(); refreshThumbs(); }
+});
+
+// --- modal ---
+const modal = $('modal'), mbox = $('mbox');
+function showModal(kind, data) {
+  mbox.textContent = '';
+  const h3 = document.createElement('h3');
+  const form = document.createElement('form');
+  const mr = (lbl, ctrl) => {
+    const r = document.createElement('div'); r.className = 'mr';
+    const l = document.createElement('label'); l.textContent = lbl;
+    r.append(l, ctrl); form.append(r); return ctrl;
+  };
+  const inp = (type, val, ph) => Object.assign(document.createElement('input'), { type, value: val || '', placeholder: ph || '' });
+  const btns = document.createElement('div'); btns.className = 'mbtns';
+  const ok = document.createElement('button'); ok.type = 'submit'; ok.textContent = 'Save';
+  const cancel = document.createElement('button'); cancel.type = 'button'; cancel.textContent = 'Cancel';
+  cancel.onclick = hideModal;
+  btns.append(ok, cancel);
+
+  if (kind === 'dial') {
+    h3.textContent = data.d ? 'Edit speed dial' : 'Add speed dial';
+    const ftitle = mr('Title', inp('text', data.d ? data.d.title : '', 'Title'));
+    const furl = mr('Address', inp('url', data.d ? data.d.url : '', 'https://'));
+    let fgroup = null;
+    if (!folderPath.length) {
+      const sel = document.createElement('select');
+      SP.groups.forEach((g, i) => { const o = document.createElement('option'); o.value = i; o.textContent = g.name; sel.append(o); });
+      sel.value = activeIdx(); fgroup = mr('Group', sel);
+    }
+    form.append(btns);
+    form.onsubmit = async (e) => {
+      e.preventDefault();
+      let url = furl.value.trim(); if (!url) return;
+      if (!isWeb(url)) url = 'https://' + url;
+      const title = ftitle.value.trim() || (() => { try { return new URL(url).hostname; } catch { return url; } })();
+      const toGi = fgroup ? +fgroup.value : activeIdx();
+      if (data.d && data.idx >= 0) {
+        if (!folderPath.length && toGi !== activeIdx()) {
+          currentItems().splice(data.idx, 1);
+          SP.groups[toGi].dials.push({ title, url });
+          SP.activeGroup = SP.groups[toGi].id;
+        } else {
+          currentItems()[data.idx] = { ...data.d, title, url };
+        }
+      } else {
+        (folderPath.length ? currentItems() : SP.groups[toGi].dials).push({ title, url });
+        if (!folderPath.length) SP.activeGroup = SP.groups[toGi].id;
+      }
+      hideModal(); await save(); render();
+    };
+    setTimeout(() => (ftitle.value ? furl : ftitle).focus(), 50);
+  } else if (kind === 'folder') {
+    h3.textContent = data.d ? 'Rename folder' : 'New folder';
+    const fname = mr('Name', inp('text', data.d ? data.d.title : '', 'Folder name'));
+    form.append(btns);
+    form.onsubmit = async (e) => {
+      e.preventDefault();
+      const title = fname.value.trim() || 'Folder';
+      if (data.self) data.d.title = title;
+      else if (data.d && data.idx >= 0) currentItems()[data.idx].title = title;
+      else currentItems().push({ title, type: 'folder', items: [] });
+      hideModal(); await save(); render();
+    };
+    setTimeout(() => fname.focus(), 50);
+  } else if (kind === 'group') {
+    h3.textContent = data.isNew ? 'New speed dial tab' : 'Rename tab';
+    const fname = mr('Name', inp('text', data.isNew ? '' : SP.groups[data.gi].name, 'Speed dial'));
+    form.append(btns);
+    form.onsubmit = async (e) => {
+      e.preventDefault();
+      const name = fname.value.trim() || 'Speed dial';
+      if (data.isNew) { const id = 'g' + Date.now().toString(36); SP.groups.push({ id, name, dials: [] }); SP.activeGroup = id; }
+      else SP.groups[data.gi].name = name;
+      hideModal(); await save(); render();
+    };
+    setTimeout(() => fname.focus(), 50);
+  }
+
+  mbox.append(h3, form);
+  modal.classList.add('on');
+}
+function hideModal() { modal.classList.remove('on'); }
+modal.addEventListener('click', (e) => { if (e.target === modal) hideModal(); });
+
+// --- folder navigation ---
+function openFolder(folderItem) { folderPath = [...folderPath, folderItem]; render(); }
+function navTo(depth) { folderPath = folderPath.slice(0, depth); render(); }
+
+// --- look & feel ---
+function applyLook() {
+  document.documentElement.style.setProperty('--tile', SP.tileSize + 'px');
+  document.body.classList.toggle('hide-brand', SP.showBrand === false);
+  document.body.classList.toggle('hide-search', SP.showSearch === false);
+  document.body.classList.toggle('hide-titles', SP.showTitles === false);
+  const g = SP.groups[activeIdx()];
+  document.body.style.background = (g && g.background) || SP.background || '';
+}
+
+// --- tab bar ---
+function renderTabBar() {
+  const tb = $('tab-bar'); tb.textContent = '';
+  const ai = activeIdx();
+
+  // Centered content wrapper
+  const tc = document.createElement('div'); tc.id = 'tab-center'; tb.append(tc);
+
+  SP.groups.forEach((g, gi) => {
+    const b = document.createElement('button');
+    b.className = 'tbtn' + (gi === ai ? ' on' : '');
+    b.textContent = g.name;
+    b.title = 'Double-click to rename';
+    b.onclick = () => { folderPath = []; SP.activeGroup = g.id; save(); render(); };
+    b.ondblclick = (e) => { e.preventDefault(); showModal('group', { gi }); };
+    b.oncontextmenu = (e) => showCtx(e, 'tab', { gi });
+    b.ondragover = (e) => { if (drag) { e.preventDefault(); b.classList.add('drop'); } };
+    b.ondragleave = () => b.classList.remove('drop');
+    b.ondrop = async (e) => {
+      e.preventDefault(); b.classList.remove('drop');
+      if (!drag || folderPath.length || drag.gi === gi) return;
+      const [d] = SP.groups[drag.gi].dials.splice(drag.di, 1);
+      g.dials.push(d); drag = null; await save(); render();
+    };
+    tc.append(b);
+  });
+
+  const addG = document.createElement('button'); addG.className = 'tbtn'; addG.textContent = '+ New page';
+  addG.onclick = () => showModal('group', { gi: activeIdx(), isNew: true });
+  tc.append(addG);
+
+  // Built-in tabs (icon-only), open in new tab
+  const et = SP.extraTabs || {};
+  const showBm = et.bookmarks !== false, showHist = et.history !== false, showNotes = et.notes !== false;
+  const showDash = !!SP.showDashboard && !!syncServer;
+  if (showBm || showHist || showNotes || showDash) {
+    const sep = document.createElement('div'); sep.id = 'tab-sep'; tc.append(sep);
+  }
+  const bt = (label, icon, fn) => {
+    const b = document.createElement('button'); b.className = 'tbtn tbtn-ic';
+    b.innerHTML = icon; b.title = label; b.onclick = fn; tc.append(b);
+  };
+  if (showBm)    bt('Bookmarks',        IC.bm,   () => browser.openUrl('my://bookmarks', 'tab'));
+  if (showHist)  bt('History',          IC.hist,  () => browser.openUrl('my://history',   'tab'));
+  if (showNotes) bt('Notes',            IC.note,  () => browser.openUrl('my://notes', 'tab'));
+  if (showDash)  bt('Server dashboard', IC.dash,  () => browser.openUrl(syncServer.replace(/\/+$/, ''), 'tab'));
+
+  // Gear button — outside the centered wrapper, sits at far right
+  const gear = document.createElement('button'); gear.id = 'tab-gear'; gear.className = 'tbtn tbtn-ic'; gear.title = 'Customize';
+  gear.innerHTML = IC.gear;
+  gear.onclick = (e) => {
+    e.stopPropagation();
+    const p = $('panel');
+    if (p.style.display !== 'block') { renderPanel(); p.style.display = 'block'; }
+    else p.style.display = 'none';
+  };
+  tb.append(gear);
+}
+
+// --- folder 2×2 preview ---
+function makeFolderThumb(d) {
+  const th = document.createElement('div'); th.className = 'thumb';
+  const cells = (d.items || []).slice(0, 4);
+  if (!cells.length) {
+    // empty folder: show icon
+    const wrap = document.createElement('div'); wrap.className = 'fic-wrap'; wrap.innerHTML = IC.folder; th.append(wrap);
+  } else {
+    const preview = document.createElement('div'); preview.className = 'fpreview';
+    for (let i = 0; i < 4; i++) {
+      const cell = document.createElement('div'); cell.className = 'fcell';
+      const item = cells[i];
+      if (item && item.type !== 'folder' && isWeb(item.url)) {
+        const big = document.createElement('div'); big.className = 'fcell-big';
+        big.textContent = (item.title || item.url).charAt(0).toUpperCase();
+        cell.append(big);
+        if (SP.thumbnails) {
+          const img = document.createElement('img');
+          img.src = 'my://thumb/x?u=' + encodeURIComponent(item.url) + '&v=' + thumbVer;
+          img.onload = () => { big.style.display = 'none'; cell.append(img); };
+        }
+      } else if (item && item.type === 'folder') {
+        cell.innerHTML = svgi('<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>');
+        cell.style.cssText = 'display:grid;place-items:center;color:var(--muted);padding:2px';
+      }
+      preview.append(cell);
+    }
+    th.append(preview);
+  }
+  return th;
+}
+
+// --- grid ---
+function renderGrid() {
+  const grid = $('grid'); grid.textContent = '';
+  const ai = activeIdx();
+  const cols = +(SP.columns) || 0;
+  if (cols > 0) {
+    grid.style.gridTemplateColumns = `repeat(${cols}, var(--tile))`;
+    grid.classList.remove('auto-cols');
+  } else {
+    grid.style.gridTemplateColumns = '';
+    grid.classList.add('auto-cols');
+  }
+
+  const bc = $('breadcrumb');
+  if (folderPath.length) {
+    bc.className = 'show'; bc.textContent = '';
+    const seg = (txt, fn) => {
+      const s = document.createElement('span');
+      if (fn) { s.className = 'bc-link'; s.onclick = fn; }
+      s.textContent = txt; bc.append(s);
+    };
+    const slash = () => { const s = document.createElement('span'); s.style.cssText = 'margin:0 5px;opacity:.4'; s.textContent = '›'; bc.append(s); };
+    seg('Home', () => navTo(0));
+    folderPath.forEach((f, i) => { slash(); seg(f.title, i < folderPath.length - 1 ? () => navTo(i + 1) : null); });
+  } else { bc.className = ''; bc.textContent = ''; }
+
+  const items = currentItems();
+  items.forEach((d, idx) => {
+    const isFolder = d.type === 'folder';
+    const tile = isFolder ? document.createElement('div') : document.createElement('a');
+    tile.className = 'tile' + (isFolder ? ' folder' : '');
+    if (!isFolder) {
+      tile.href = d.url;
+      tile.onclick = (e) => { e.preventDefault(); if (e.ctrlKey || e.metaKey) browser.openUrl(d.url, 'tab'); else browser.go(d.url); };
+      tile.onauxclick = (e) => { if (e.button === 1) { e.preventDefault(); browser.openUrl(d.url, 'background'); } };
+    } else {
+      tile.onclick = (e) => { e.preventDefault(); openFolder(d); };
+    }
+    tile.oncontextmenu = (e) => showCtx(e, isFolder ? 'folder' : 'tile', { d, idx });
+
+    const th = isFolder ? makeFolderThumb(d) : (() => {
+      const t = document.createElement('div'); t.className = 'thumb';
+      const big = document.createElement('div'); big.className = 'big';
+      big.textContent = (d.title || d.url).charAt(0).toUpperCase(); t.append(big);
+      if (SP.thumbnails && isWeb(d.url)) {
+        const img = document.createElement('img');
+        img.src = 'my://thumb/x?u=' + encodeURIComponent(d.url) + '&v=' + thumbVer;
+        img.onload = () => { big.remove(); t.prepend(img); };
+      }
+      return t;
+    })();
+
+    const nm = document.createElement('div'); nm.className = 'nm';
+    nm.textContent = d.title || (isFolder ? 'Folder' : d.url);
+    tile.append(th, nm);
+
+    if (!folderPath.length) {
+      tile.draggable = true;
+      tile.ondragstart = (e) => {
+        drag = { gi: ai, di: idx, isFolder };
+        e.dataTransfer.setData('text/plain', isFolder ? d.title : d.url);
+        e.dataTransfer.effectAllowed = 'move';
+        requestAnimationFrame(() => tile.classList.add('dragging'));
+      };
+      tile.ondragend = () => { drag = null; tile.classList.remove('dragging'); };
+      tile.ondragover = (e) => {
+        if (!drag || drag.gi !== ai || drag.di === idx) return;
+        e.preventDefault();
+        const r = tile.getBoundingClientRect();
+        const cx = (e.clientX - r.left) / r.width, cy = (e.clientY - r.top) / r.height;
+        const center = !drag.isFolder && cx > 0.2 && cx < 0.8 && cy > 0.2 && cy < 0.8;
+        tile.classList.toggle('over', !center);
+        tile.classList.toggle('folder-target', center);
+      };
+      tile.ondragleave = () => tile.classList.remove('over', 'folder-target');
+      tile.ondrop = async (e) => {
+        e.preventDefault();
+        const wasCenter = tile.classList.contains('folder-target');
+        tile.classList.remove('over', 'folder-target');
+        if (!drag || drag.gi !== ai || drag.di === idx) return;
+        const list = items;
+        const draggedItem = list[drag.di];
+        if (wasCenter && !drag.isFolder) {
+          if (isFolder) {
+            list.splice(drag.di, 1);
+            d.items = [...(d.items || []), draggedItem];
+            folderPath = [...folderPath, d];
+          } else {
+            const folder = { title: 'New folder', type: 'folder', items: [d, draggedItem] };
+            list.splice(drag.di, 1);
+            list.splice(drag.di < idx ? idx - 1 : idx, 1, folder);
+            folderPath = [...folderPath, folder];
+          }
+        } else {
+          const [moved] = list.splice(drag.di, 1);
+          list.splice(idx, 0, moved);
+        }
+        drag = null; await save(); render();
+      };
+    }
+    grid.append(tile);
+  });
+
+  if (SP.showAddButton !== false) {
+    const add = document.createElement('div'); add.className = 'tile add';
+    add.innerHTML = '<div class="thumb">+</div><div class="nm">Add</div>';
+    add.onclick = () => showModal('dial', { d: null, idx: -1 });
+    grid.append(add);
+  }
+
+  grid.oncontextmenu = (e) => { if (e.target === grid) showCtx(e, 'blank', {}); };
+}
+
+function render() { applyLook(); renderTabBar(); renderGrid(); }
+
+// --- customize panel ---
+function renderPanel() {
+  const p = $('panel'); p.textContent = '';
+  const ph = (t) => { const h = document.createElement('div'); h.className = 'ph'; h.textContent = t; p.append(h); };
+  const row = (txt, ctrl) => {
+    const l = document.createElement('label'); const s = document.createElement('span'); s.textContent = txt;
+    l.append(s, ctrl); p.append(l); return ctrl;
+  };
+  const cb = (val, fn) => {
+    const c = Object.assign(document.createElement('input'), { type: 'checkbox', checked: !!val });
+    c.onchange = () => fn(c.checked); return c;
   };
 
-  // ---- rendering ----
-  function render() {
-    applyLook();
-    $('size').value = SP.tileSize; $('sizev').textContent = SP.tileSize + 'px';
-    $('thumbs').checked = SP.thumbnails; $('showsearch').checked = SP.showSearch;
-    const ai = activeIdx();
-    SP.activeGroup = SP.groups[ai].id;
+  ph('Tiles');
+  const szLbl = document.createElement('span'); szLbl.textContent = 'Size ' + SP.tileSize + 'px';
+  const szR = Object.assign(document.createElement('input'), { type: 'range', min: 90, max: 260, step: 10, value: SP.tileSize });
+  szR.style.width = '100px';
+  szR.oninput = () => { SP.tileSize = +szR.value; szLbl.textContent = 'Size ' + SP.tileSize + 'px'; applyLook(); };
+  szR.onchange = save;
+  const szRow = document.createElement('label'); szRow.append(szLbl, szR); p.append(szRow);
 
-    const gb = $('groups'); gb.textContent = '';
-    SP.groups.forEach((g, i) => {
-      const b = document.createElement('button');
-      b.className = 'gbtn' + (i === ai ? ' on' : '');
-      b.textContent = g.name;
-      b.onclick = () => { SP.activeGroup = g.id; save(); render(); };
-      b.ondragover = (e) => { if (drag) { e.preventDefault(); b.classList.add('drop'); } };
-      b.ondragleave = () => b.classList.remove('drop');
-      b.ondrop = async (e) => {
-        e.preventDefault(); b.classList.remove('drop');
-        if (!drag || drag.gi === i) return;
-        const [d] = SP.groups[drag.gi].dials.splice(drag.di, 1);
-        SP.groups[i].dials.push(d);
-        drag = null; await save(); render();
-      };
-      gb.appendChild(b);
-    });
-    const addG = document.createElement('button');
-    addG.className = 'gbtn'; addG.textContent = '+ Group';
-    addG.onclick = () => openForm({ kind: 'group', gi: ai, di: -1, isNew: true });
-    gb.appendChild(addG);
+  const colI = Object.assign(document.createElement('input'), { type: 'number', min: 0, max: 12, value: SP.columns || 0 });
+  colI.style.width = '56px';
+  colI.onchange = () => { SP.columns = Math.max(0, +colI.value || 0); save(); renderGrid(); };
+  row('Columns (0 = auto)', colI);
+  row('Thumbnails',  cb(SP.thumbnails, (v) => { SP.thumbnails = v; save(); renderGrid(); }));
+  row('Search bar',  cb(SP.showSearch !== false, (v) => { SP.showSearch = v; save(); applyLook(); }));
+  row('Logo & name', cb(SP.showBrand  !== false, (v) => { SP.showBrand  = v; save(); applyLook(); }));
+  row('Tile titles', cb(SP.showTitles !== false, (v) => { SP.showTitles = v; save(); applyLook(); }));
+  row('Add button',  cb(SP.showAddButton !== false, (v) => { SP.showAddButton = v; save(); renderGrid(); }));
 
-    const tools = $('gtools'); tools.textContent = '';
-    const link = (t, fn) => { const a = document.createElement('a'); a.textContent = t; a.onclick = fn; tools.appendChild(a); };
-    link('Rename group', () => openForm({ kind: 'group', gi: ai, di: -1 }));
-    if (SP.groups.length > 1) {
-      link('Delete group', async () => {
-        if (SP.groups[ai].dials.length && !confirm('Delete this group and its ' + SP.groups[ai].dials.length + ' speed dials?')) return;
-        SP.groups.splice(ai, 1); SP.activeGroup = SP.groups[0].id; await save(); render();
-      });
-    }
+  ph('Tabs');
+  const et = SP.extraTabs || {};
+  row('Bookmarks',         cb(et.bookmarks !== false, (v) => { SP.extraTabs = { ...et, bookmarks: v }; save(); renderTabBar(); }));
+  row('History',           cb(et.history   !== false, (v) => { SP.extraTabs = { ...et, history:   v }; save(); renderTabBar(); }));
+  row('Notes',             cb(et.notes     !== false, (v) => { SP.extraTabs = { ...et, notes:     v }; save(); renderTabBar(); }));
+  if (syncServer) row('Server dashboard', cb(!!SP.showDashboard, (v) => { SP.showDashboard = v; save(); renderTabBar(); }));
 
-    const grid = $('grid'); grid.textContent = '';
-    SP.groups[ai].dials.forEach((d, di) => {
-      if (!isWeb(d.url)) return;
-      const a = document.createElement('a');
-      a.className = 'tile'; a.href = d.url; a.draggable = true;
-      const th = document.createElement('div'); th.className = 'thumb';
-      const big = document.createElement('div'); big.className = 'big'; big.textContent = (d.title || d.url).charAt(0).toUpperCase();
-      th.append(big);
-      if (SP.thumbnails) {
-        const img = document.createElement('img');
-        img.src = 'my://thumb/x?u=' + encodeURIComponent(d.url);
-        img.onload = () => { big.remove(); th.append(img); };
-        // (stays hidden until it loads, so a missing thumbnail simply keeps the letter tile)
-      }
-      const nm = document.createElement('div'); nm.className = 'nm'; nm.textContent = d.title || d.url;
-      const acts = document.createElement('div'); acts.className = 'acts';
-      const ed = document.createElement('button'); ed.textContent = '✎'; ed.title = 'Edit';
-      ed.onclick = (e) => { e.preventDefault(); openForm({ kind: 'dial', gi: ai, di }); };
-      const rm = document.createElement('button'); rm.textContent = '×'; rm.title = 'Remove';
-      rm.onclick = async (e) => { e.preventDefault(); SP.groups[ai].dials.splice(di, 1); await save(); render(); };
-      acts.append(ed, rm);
-      a.append(th, nm, acts);
+  ph('Background (this group)');
+  const ai = activeIdx();
+  const curBg = SP.groups[ai].background || '';
 
-      a.ondragstart = (e) => { drag = { gi: ai, di }; e.dataTransfer.setData('text/plain', d.url); e.dataTransfer.effectAllowed = 'move'; };
-      a.ondragend = () => { drag = null; };
-      a.ondragover = (e) => { if (drag && drag.gi === ai) { e.preventDefault(); a.classList.add('over'); } };
-      a.ondragleave = () => a.classList.remove('over');
-      a.ondrop = async (e) => {
-        e.preventDefault(); a.classList.remove('over');
-        if (!drag || drag.gi !== ai || drag.di === di) return;
-        const list = SP.groups[ai].dials;
-        const [moved] = list.splice(drag.di, 1);
-        list.splice(di, 0, moved);
-        drag = null; await save(); render();
-      };
-      grid.appendChild(a);
-    });
-    const add = document.createElement('div');
-    add.className = 'tile add';
-    add.innerHTML = '<div class="thumb">+</div><div class="nm">Add speed dial</div>';
-    add.onclick = () => openForm({ kind: 'dial', gi: ai, di: -1 });
-    grid.appendChild(add);
+  const bgRowEl = document.createElement('div'); bgRowEl.className = 'bgrow';
+  const bgI = Object.assign(document.createElement('input'), { type: 'text', value: curBg, placeholder: 'CSS or url(…)' });
+  const bgC = Object.assign(document.createElement('input'), { type: 'color', value: /^#[0-9a-f]{6}/i.test(curBg) ? curBg : '#1e1f22' });
+  bgC.oninput = () => { bgI.value = bgC.value; SP.groups[ai].background = bgC.value; save(); applyLook(); };
+  bgI.onchange = () => { SP.groups[ai].background = bgI.value; if (/^#[0-9a-f]{6}/i.test(bgI.value)) bgC.value = bgI.value; save(); applyLook(); };
+  bgRowEl.append(bgI, bgC); p.append(bgRowEl);
+
+  // Sample gradient swatches
+  const swatches = document.createElement('div'); swatches.className = 'swatches';
+  SAMPLE_BGS.forEach(([name, bg]) => {
+    const s = document.createElement('button'); s.className = 'swatch'; s.title = name;
+    s.style.background = bg;
+    s.onclick = () => { SP.groups[ai].background = bg; bgI.value = bg; save(); applyLook(); };
+    swatches.append(s);
+  });
+  p.append(swatches);
+
+  // Upload image
+  const upBtn = document.createElement('button'); upBtn.textContent = 'Upload image…';
+  upBtn.style.cssText = 'width:100%;margin-top:8px;font-size:12px';
+  const fileIn = document.createElement('input'); fileIn.type = 'file'; fileIn.accept = 'image/*'; fileIn.style.display = 'none';
+  fileIn.onchange = () => {
+    const file = fileIn.files[0]; if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const bg = `url("${reader.result}")`;
+      SP.groups[ai].background = bg; bgI.value = '(uploaded image)'; save(); applyLook();
+    };
+    reader.readAsDataURL(file);
+  };
+  upBtn.onclick = () => fileIn.click();
+  p.append(upBtn, fileIn);
+
+  // Clear button
+  const clr = document.createElement('button'); clr.textContent = 'Clear background';
+  clr.style.cssText = 'width:100%;margin-top:4px;font-size:12px';
+  clr.onclick = () => { SP.groups[ai].background = ''; bgI.value = ''; save(); applyLook(); };
+  p.append(clr);
+
+  const lnk = document.createElement('div'); lnk.className = 'link';
+  lnk.innerHTML = '<a onclick="browser.go(\'my://settings#startpage\')">All settings…</a>';
+  p.append(lnk);
+}
+
+document.addEventListener('click', (e) => {
+  const p = $('panel');
+  if (p.style.display === 'block' && !p.contains(e.target)) {
+    const gear = document.getElementById('tab-gear');
+    if (!gear || !gear.contains(e.target)) p.style.display = 'none';
   }
+});
 
-  (async () => {
-    try {
-      if (typeof browser === 'undefined') throw new Error('the browser API is not available on this page');
-      const st = await browser.getSettings();
-      SP = st.startPage;
-      if (!SP || !Array.isArray(SP.groups) || !SP.groups.length) throw new Error('start page settings are missing');
-      render();
-      if (st.tabs.newTabFocus === 'page') $('search').focus();
-    } catch (err) {
-      const d = document.createElement('div');
-      d.style.cssText = 'padding:24px;color:var(--fg)';
-      d.textContent = 'The start page could not load: ' + err.message + '. You can still type an address in the address bar. Settings: my://settings';
-      document.body.append(d);
-    }
-  })();
+// --- init ---
+(async () => {
+  try {
+    if (typeof browser === 'undefined') throw new Error('browser API unavailable');
+    const st = await browser.getSettings();
+    SP = st.startPage;
+    syncServer = (st.sync && st.sync.server) || '';
+    if (!SP || !Array.isArray(SP.groups) || !SP.groups.length) throw new Error('settings missing');
+    // One-time migration: rename legacy default group name
+    let migrated = false;
+    SP.groups.forEach((g) => { if (g.name === 'Favorites' || g.name === 'Favourites') { g.name = 'Speed dial'; migrated = true; } });
+    if (migrated) await save();
+    render();
+    if (st.tabs.newTabFocus === 'page') $('search').focus();
+  } catch (err) {
+    document.body.innerHTML = `<div style="padding:24px;color:var(--fg)">Start page error: ${err.message}. <a style="color:var(--accent)" href="my://settings">Settings</a></div>`;
+  }
+})();
 </script>
 </body>
 </html>
