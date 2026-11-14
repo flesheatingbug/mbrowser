@@ -135,6 +135,19 @@ class MainActivity : AppCompatActivity() {
         findViewById<View>(R.id.btnForward).setOnClickListener { cur()?.let { if (it.web.canGoForward()) it.web.goForward() } }
         btnStar.setOnClickListener { toggleBookmark() }
         findViewById<View>(R.id.btnTabs).setOnClickListener { if (switcher.visibility == View.VISIBLE) hideSwitcher() else showSwitcher() }
+        findViewById<View>(R.id.btnTabs).setOnLongClickListener { v ->
+            val m = PopupMenu(this, v)
+            m.menu.add(0, 1, 0, "New tab"); m.menu.add(0, 2, 1, "New private tab"); m.menu.add(0, 3, 2, "Close this tab")
+            m.setOnMenuItemClickListener {
+                when (it.itemId) {
+                    1 -> { hideSwitcher(); newTab(null) }
+                    2 -> { hideSwitcher(); newTab(null, true) }
+                    3 -> closeTab(current)
+                }
+                true
+            }
+            m.show(); true
+        }
 
         findViewById<View>(R.id.switcherNew).setOnClickListener { hideSwitcher(); newTab(null) }
         findViewById<View>(R.id.switcherCloseAll).setOnClickListener {
