@@ -29,3 +29,4 @@ Password vault and settings sync, folders, speed-dial editing, tracker blocking,
 ## Layout
 `app/src/main/java/app/mbrowser/`: `MainActivity` (browser UI), `Store` (local bookmarks/history JSON), `Sync` + `Api` (server client),
 `ItemsActivity` (lists), `SettingsActivity`, `Prefs`.
+
