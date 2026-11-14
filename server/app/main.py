@@ -20,7 +20,7 @@ STATIC_FILES = {'/': 'index.html', '/index.html': 'index.html', '/app.js': 'app.
                 '/logo.png': 'logo.png', '/favicon.png': 'logo.png'}
 TYPES = {'.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.png': 'image/png'}
 CSP = ("default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; "
-       "object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'")
+       "object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors *")
 
 
 class Config:

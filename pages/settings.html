@@ -502,7 +502,6 @@
         bar.append(dot, urlLbl, reloadBtn, popBtn);
         // iframe fills the rest
         const frame = el('iframe'); frame.style.cssText = 'flex:1;border:0;width:100%;';
-        frame.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms allow-popups');
         frame.src = serverUrl;
         frame.onload = () => { dot.style.background = '#4cc38a'; };
         frame.onerror = () => { dot.style.background = '#e5534b'; };
