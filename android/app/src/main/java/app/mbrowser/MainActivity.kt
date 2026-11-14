@@ -39,7 +39,6 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import java.io.ByteArrayInputStream
-import java.net.URLEncoder
 
 class MainActivity : AppCompatActivity() {
 
@@ -110,6 +109,7 @@ class MainActivity : AppCompatActivity() {
             if (t != null && !t.home) { if (progress.visibility == View.VISIBLE) t.web.stopLoading() else t.web.reload() }
         }
         findViewById<View>(R.id.btnBack).setOnClickListener { goBack() }
+        findViewById<View>(R.id.btnHome).setOnClickListener { goHome() }
         findViewById<View>(R.id.btnForward).setOnClickListener { cur()?.let { if (it.web.canGoForward()) it.web.goForward() } }
         btnStar.setOnClickListener { toggleBookmark() }
         findViewById<View>(R.id.btnTabs).setOnClickListener { if (switcher.visibility == View.VISIBLE) hideSwitcher() else showSwitcher() }
@@ -142,7 +142,7 @@ class MainActivity : AppCompatActivity() {
         handleIntent(intent)
         if (!prefs.firstRunDone) {
             prefs.firstRunDone = true
-            if (!prefs.syncConfigured) startActivity(Intent(this, SettingsActivity::class.java))
+            startActivity(Intent(this, WelcomeActivity::class.java))
         }
     }
 
@@ -279,7 +279,7 @@ class MainActivity : AppCompatActivity() {
         val shot = capture(tab, 360) ?: return
         tab.thumb = shot
         val host = Thumbs.hostOf(url)
-        val known = Store.bookmarkList().any { Thumbs.hostOf(it.url) == host }
+        val known = host in Settings.dialHosts() || Store.bookmarkList().any { Thumbs.hostOf(it.url) == host }
         val root = Uri.parse(url).path.let { it.isNullOrEmpty() || it == "/" }
         if (known && (root || Thumbs.ageMs(this, host) == Long.MAX_VALUE) && Thumbs.ageMs(this, host) > 6 * 3600_000L) {
             Thumbs.saveThumb(this, host, shot)
@@ -400,7 +400,7 @@ class MainActivity : AppCompatActivity() {
         if (s.isEmpty()) return ""
         if (Regex("^[a-zA-Z][a-zA-Z0-9+.-]*://").containsMatchIn(s)) return s
         if (!s.contains(' ') && (s.contains('.') || s.startsWith("localhost"))) return "https://$s"
-        return prefs.searchUrl + URLEncoder.encode(s, "UTF-8")
+        return Settings.searchUrl(s)
     }
 
     private fun navigate(input: String) {
@@ -415,6 +415,13 @@ class MainActivity : AppCompatActivity() {
         (getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager).hideSoftInputFromWindow(urlBar.windowToken, 0)
     }
 
+    private fun goHome() {
+        val t = cur() ?: return
+        hideSwitcher()
+        t.home = true; t.url = ""; t.title = ""
+        render()
+    }
+
     private fun goBack() {
         val t = cur() ?: return
         if (!t.home && t.web.canGoBack()) t.web.goBack()
@@ -425,7 +432,7 @@ class MainActivity : AppCompatActivity() {
         val t = cur() ?: return
         if (t.home || t.url.isEmpty()) return
         val on = Store.toggleBookmark(t.url, t.title)
-        Toast.makeText(this, if (on) "Added to ${prefs.defaultDialName}" else "Removed", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, if (on) "Bookmarked" else "Bookmark removed", Toast.LENGTH_SHORT).show()
         if (on) tab_thumbFor(t)
         updateChrome()
     }
@@ -440,7 +447,7 @@ class MainActivity : AppCompatActivity() {
         val m = PopupMenu(this, anchor)
         val items = listOf(
             "New tab", "Bookmarks", "History", "Tabs from other devices", "Sync now",
-            (if (t?.desktop == true) "✓ " else "") + "Desktop site", "Share page", "Settings",
+            (if (t?.desktop == true) "✓ " else "") + "Desktop site", "Share page", "Add to speed dial", "Settings",
         )
         items.forEachIndexed { i, s -> m.menu.add(0, i, i, s) }
         m.setOnMenuItemClickListener {
@@ -453,7 +460,12 @@ class MainActivity : AppCompatActivity() {
                 5 -> if (t != null) { t.desktop = !t.desktop; applyUa(t); if (!t.home) t.web.reload() }
                 6 -> if (t != null && !t.home) startActivity(Intent.createChooser(
                     Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, t.url), "Share"))
-                7 -> startActivity(Intent(this, SettingsActivity::class.java))
+                7 -> if (t != null && !t.home) {
+                    Settings.addToGroup(prefs.currentDial, t.title.ifBlank { Thumbs.hostOf(t.url) }, t.url)
+                    tab_thumbFor(t)
+                    Toast.makeText(this, "Added to speed dial", Toast.LENGTH_SHORT).show()
+                }
+                8 -> startActivity(Intent(this, SettingsActivity::class.java))
             }
             true
         }

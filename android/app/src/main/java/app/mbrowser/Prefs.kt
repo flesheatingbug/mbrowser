@@ -3,16 +3,6 @@ package app.mbrowser
 import android.content.Context
 import android.os.Build
 
-object Engines {
-    val names = listOf("DuckDuckGo", "Google", "Brave", "Bing", "Startpage", "Ecosia", "Custom")
-    private val urls = listOf(
-        "https://duckduckgo.com/?q=", "https://www.google.com/search?q=", "https://search.brave.com/search?q=",
-        "https://www.bing.com/search?q=", "https://www.startpage.com/do/search?q=", "https://www.ecosia.org/search?q=",
-    )
-    fun url(index: Int, custom: String): String =
-        if (index in urls.indices) urls[index] else custom.ifBlank { urls[0] }
-}
-
 class Prefs(ctx: Context) {
     private val p = ctx.applicationContext.getSharedPreferences("mb", Context.MODE_PRIVATE)
 
@@ -42,6 +32,9 @@ class Prefs(ctx: Context) {
     var syncHistory: Boolean
         get() = bool("syncHistory", true)
         set(v) = putB("syncHistory", v)
+    var syncSettings: Boolean
+        get() = bool("syncSettings", true)
+        set(v) = putB("syncSettings", v)
     var syncTabs: Boolean
         get() = bool("syncTabs", true)
         set(v) = putB("syncTabs", v)
@@ -54,15 +47,6 @@ class Prefs(ctx: Context) {
     var otherTabs: String
         get() = str("otherTabs", "[]")
         set(v) = put("otherTabs", v)
-
-    // search
-    var engine: Int
-        get() = int("engine", 0)
-        set(v) = putI("engine", v)
-    var customSearch: String
-        get() = str("customSearch", "")
-        set(v) = put("customSearch", v.trim())
-    val searchUrl: String get() = Engines.url(engine, customSearch)
 
     // appearance: 0 system, 1 light, 2 dark
     var themeMode: Int

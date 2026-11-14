@@ -62,7 +62,41 @@ object Sync {
         prefs.otherTabs = (api.tabsGet().optJSONArray("devices") ?: JSONArray()).toString()
         }
 
+        if (prefs.syncSettings) syncSettings(api)
+
         return "Synced"
+    }
+
+    /** Merges the managed settings groups with the server's document. The newest change to a group wins. */
+    private fun syncSettings(api: Api) {
+        for (attempt in 0 until 3) {
+            val remote = api.request("GET", "/api/settings")
+            val version = remote.optLong("version")
+            val doc = remote.optJSONObject("doc")
+            val rgroups = doc?.optJSONObject("groups") ?: JSONObject()
+            val merged = JSONObject()
+            var push = doc == null
+            // groups this app doesn't manage (the desktop has more) are passed through untouched
+            for (k in rgroups.keys()) if (k !in Settings.MANAGED) merged.put(k, rgroups.get(k))
+            for (key in Settings.MANAGED) {
+                val lu = Settings.updated(key)
+                val local = JSONObject().put("updated", lu).put("value", Settings.value(key))
+                val r = rgroups.optJSONObject(key)
+                val valid = r != null && r.has("updated") && r.optJSONObject("value") != null
+                if (!valid) { merged.put(key, local); push = true; continue }
+                val ru = r!!.optLong("updated")
+                if (ru > lu) { Settings.applyRemote(key, r.getJSONObject("value"), ru); merged.put(key, r) }
+                else if (ru < lu) { merged.put(key, local); push = true }
+                else merged.put(key, r)
+            }
+            if (!push) return
+            try {
+                api.request("PUT", "/api/settings", JSONObject().put("base", version).put("doc", JSONObject().put("groups", merged)))
+                return
+            } catch (e: ApiException) {
+                if (e.code != 409) throw e   // 409: the server changed meanwhile, so merge again
+            }
+        }
     }
 
     fun test(ctx: Context): String {

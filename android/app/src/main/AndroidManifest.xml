@@ -31,6 +31,7 @@
             </intent-filter>
         </activity>
         <activity android:name=".SettingsActivity" android:exported="false" />
+        <activity android:name=".WelcomeActivity" android:exported="false" />
         <activity android:name=".ItemsActivity" android:exported="false" />
     </application>
 </manifest>

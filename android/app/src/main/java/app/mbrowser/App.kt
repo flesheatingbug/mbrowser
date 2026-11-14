@@ -6,6 +6,8 @@ import androidx.appcompat.app.AppCompatDelegate
 class App : Application() {
     override fun onCreate() {
         super.onCreate()
+        Store.init(this)
+        Settings.init(this)
         applyTheme(Prefs(this).themeMode)
     }
 

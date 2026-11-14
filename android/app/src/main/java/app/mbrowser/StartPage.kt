@@ -14,8 +14,12 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import org.json.JSONArray
+import org.json.JSONObject
 
-/** The speed dial page: dial tabs along the top, a grid of cards, an Add pill. Dials are bookmark folders. */
+/**
+ * The speed dial page: dial tabs along the top, a grid of cards, an Add pill.
+ * The dials live in the synced "startPage" settings group, so they match your other devices.
+ */
 class StartPage(
     private val act: AppCompatActivity,
     val root: View,
@@ -27,117 +31,156 @@ class StartPage(
     private val grid: RecyclerView = root.findViewById(R.id.grid)
     private val ADD = Any()
 
+    private class Dial(val title: String, val url: String)
+
     init {
         root.findViewById<ImageButton>(R.id.btnTune).setOnClickListener { tuneMenu() }
     }
 
-    private fun extras(): MutableList<String> {
-        val a = try { JSONArray(prefs.extraDials) } catch (_: Exception) { JSONArray() }
-        return MutableList(a.length()) { a.getString(it) }
+    // ---------- data ----------
+    private fun groupsOf(sp: JSONObject): JSONArray = sp.optJSONArray("groups") ?: JSONArray().also { sp.put("groups", it) }
+
+    private fun currentId(sp: JSONObject): String {
+        val g = groupsOf(sp)
+        val want = prefs.currentDial
+        for (i in 0 until g.length()) if (g.getJSONObject(i).optString("id") == want) return want
+        return if (g.length() > 0) g.getJSONObject(0).optString("id") else "main"
     }
 
-    private fun saveExtras(l: List<String>) { prefs.extraDials = JSONArray(l.distinct()).toString() }
-
-    private fun dialNames(): List<String> {
-        val def = prefs.defaultDialName
-        val others = (Store.topFolders() + extras()).filter { it != def }.distinct().sorted()
-        return listOf(def) + others
+    private fun dialsOf(sp: JSONObject, id: String): List<Dial> {
+        val g = groupsOf(sp)
+        for (i in 0 until g.length()) {
+            val o = g.getJSONObject(i)
+            if (o.optString("id") != id) continue
+            val d = o.optJSONArray("dials") ?: return emptyList()
+            return (0 until d.length()).map { Dial(d.getJSONObject(it).optString("title"), d.getJSONObject(it).optString("url")) }
+        }
+        return emptyList()
     }
 
-    private fun currentDial(names: List<String>): String =
-        prefs.currentDial.takeIf { it in names } ?: names[0]
+    /** Reads the startPage group, lets [change] modify it, and saves it (which marks it newer for sync). */
+    private fun edit(change: (JSONObject) -> Unit) {
+        val sp = Settings.value("startPage")
+        change(sp)
+        Settings.set("startPage", sp)
+    }
+
+    private fun group(sp: JSONObject, id: String): JSONObject? {
+        val g = groupsOf(sp)
+        for (i in 0 until g.length()) if (g.getJSONObject(i).optString("id") == id) return g.getJSONObject(i)
+        return null
+    }
+
+    private fun dialArray(g: JSONObject): JSONArray = g.optJSONArray("dials") ?: JSONArray().also { g.put("dials", it) }
 
     fun refresh() {
-        val names = dialNames()
-        val cur = currentDial(names)
-        val def = prefs.defaultDialName
+        val sp = Settings.value("startPage")
+        val cur = currentId(sp)
         tabsRow.removeAllViews()
-        for (n in names) {
+        val g = groupsOf(sp)
+        for (i in 0 until g.length()) {
+            val o = g.getJSONObject(i)
+            val id = o.optString("id")
             val tv = TextView(act)
-            tv.text = n
+            tv.text = o.optString("name", "Speed Dial")
             tv.textSize = 16f
             tv.setPadding(act.dp(14), act.dp(14), act.dp(14), act.dp(12))
-            if (n == cur) {
+            if (id == cur) {
                 tv.setTextColor(act.getColor(R.color.accent)); tv.setBackgroundResource(R.drawable.bg_tab_selected)
             } else tv.setTextColor(act.getColor(R.color.muted))
-            tv.setOnClickListener { prefs.currentDial = n; refresh() }
+            tv.setOnClickListener { prefs.currentDial = id; refresh() }
             tabsRow.addView(tv)
         }
-
-        val items = ArrayList<Any>(Store.inDial(cur, cur == def, def))
+        val items = ArrayList<Any>(dialsOf(sp, cur))
         if (prefs.showAdd) items.add(ADD)
         val cols = prefs.dialCols.coerceIn(2, 5)
         grid.layoutManager = GridLayoutManager(act, cols)
-        grid.adapter = Adapter(items, cols, cur)
+        grid.adapter = Adapter(items, cols, cur, sp.optBoolean("thumbnails", true))
     }
 
     // ---------- actions ----------
-    private fun folderFor(dial: String): String = if (dial == prefs.defaultDialName) "" else dial
-
-    private fun addItem(dial: String) {
-        promptFields(act, "Add to $dial", listOf("Address", "Title (optional)"), listOf("https://", ""), "Add") { v ->
+    private fun addItem(groupId: String) {
+        promptFields(act, "Add to speed dial", listOf("Address", "Title (optional)"), listOf("https://", ""), "Add") { v ->
             var url = v[0]
             if (url.isEmpty() || url == "https://") return@promptFields
             if (!Regex("^[a-zA-Z][a-zA-Z0-9+.-]*://").containsMatchIn(url)) url = "https://$url"
-            Store.upsert(url, v[1].ifBlank { Thumbs.hostOf(url) }, folderFor(dial))
+            edit { sp -> group(sp, groupId)?.let { dialArray(it).put(JSONObject().put("title", v[1].ifBlank { Thumbs.hostOf(url) }).put("url", url)) } }
             refresh()
         }
     }
 
-    private fun itemMenu(b: Bookmark, dial: String) {
+    private fun itemMenu(index: Int, d: Dial, groupId: String) {
         val opts = arrayOf("Open in new tab", "Edit", "Move to another dial", "Remove")
-        AlertDialog.Builder(act).setTitle(b.title.ifBlank { b.url }).setItems(opts) { _, i ->
+        AlertDialog.Builder(act).setTitle(d.title.ifBlank { d.url }).setItems(opts) { _, i ->
             when (i) {
-                0 -> open(b.url, true)
-                1 -> promptFields(act, "Edit", listOf("Address", "Title"), listOf(b.url, b.title)) { v ->
-                    if (v[0].isNotEmpty()) { Store.upsert(v[0], v[1], b.folder, b.url); refresh() }
+                0 -> open(d.url, true)
+                1 -> promptFields(act, "Edit", listOf("Address", "Title"), listOf(d.url, d.title)) { v ->
+                    if (v[0].isNotEmpty()) {
+                        edit { sp -> group(sp, groupId)?.let { dialArray(it).put(index, JSONObject().put("title", v[1]).put("url", v[0])) } }
+                        refresh()
+                    }
                 }
-                2 -> {
-                    val names = dialNames()
-                    AlertDialog.Builder(act).setTitle("Move to").setItems(names.toTypedArray()) { _, k ->
-                        Store.upsert(b.url, b.title, folderFor(names[k])); refresh()
-                    }.show()
-                }
-                3 -> { Store.removeBookmark(b.url); refresh() }
+                2 -> moveItem(index, d, groupId)
+                3 -> { removeAt(groupId, index); refresh() }
             }
         }.show()
     }
 
+    private fun removeAt(groupId: String, index: Int) {
+        edit { sp -> group(sp, groupId)?.let { g -> val a = dialArray(g); val n = JSONArray()
+            for (k in 0 until a.length()) if (k != index) n.put(a.get(k)); g.put("dials", n) } }
+    }
+
+    private fun moveItem(index: Int, d: Dial, groupId: String) {
+        val sp = Settings.value("startPage")
+        val g = groupsOf(sp)
+        val ids = ArrayList<String>(); val names = ArrayList<String>()
+        for (i in 0 until g.length()) {
+            val o = g.getJSONObject(i)
+            if (o.optString("id") != groupId) { ids.add(o.optString("id")); names.add(o.optString("name")) }
+        }
+        if (ids.isEmpty()) return
+        AlertDialog.Builder(act).setTitle("Move to").setItems(names.toTypedArray()) { _, k ->
+            edit { s ->
+                group(s, groupId)?.let { src -> val a = dialArray(src); val n = JSONArray()
+                    for (q in 0 until a.length()) if (q != index) n.put(a.get(q)); src.put("dials", n) }
+                group(s, ids[k])?.let { dialArray(it).put(JSONObject().put("title", d.title).put("url", d.url)) }
+            }
+            refresh()
+        }.show()
+    }
+
     private fun tuneMenu() {
-        val names = dialNames()
-        val cur = currentDial(names)
-        val isDef = cur == prefs.defaultDialName
-        val opts = arrayListOf(
-            "Add speed dial", "Rename “$cur”",
-            if (isDef) "Delete dial (not available for the first dial)" else "Delete “$cur”",
+        val sp = Settings.value("startPage")
+        val cur = currentId(sp)
+        val curName = group(sp, cur)?.optString("name") ?: "Speed Dial"
+        val onlyOne = groupsOf(sp).length() <= 1
+        val thumbs = sp.optBoolean("thumbnails", true)
+        val opts = arrayOf(
+            "Add speed dial", "Rename “$curName”",
+            if (onlyOne) "Delete dial (needs at least two)" else "Delete “$curName”",
             "Columns: ${prefs.dialCols}",
             (if (prefs.showTitles) "✓ " else "") + "Show titles",
-            (if (prefs.showThumbs) "✓ " else "") + "Show thumbnails",
+            (if (thumbs) "✓ " else "") + "Show thumbnails",
             (if (prefs.showAdd) "✓ " else "") + "Show Add button",
             "More settings…",
         )
-        AlertDialog.Builder(act).setTitle("Speed dial").setItems(opts.toTypedArray()) { _, i ->
+        AlertDialog.Builder(act).setTitle("Speed dial").setItems(opts) { _, i ->
             when (i) {
                 0 -> promptFields(act, "New speed dial", listOf("Name"), listOf(""), "Create") { v ->
-                    val n = v[0].replace("/", " ").trim()
-                    if (n.isNotEmpty() && n !in dialNames()) {
-                        saveExtras(extras() + n); prefs.currentDial = n; refresh()
-                    }
+                    if (v[0].isEmpty()) return@promptFields
+                    val id = "g" + System.currentTimeMillis()
+                    edit { s -> groupsOf(s).put(JSONObject().put("id", id).put("name", v[0]).put("dials", JSONArray())) }
+                    prefs.currentDial = id; refresh()
                 }
-                1 -> promptFields(act, "Rename dial", listOf("Name"), listOf(cur), "Rename") { v ->
-                    val n = v[0].replace("/", " ").trim()
-                    if (n.isEmpty() || n == cur || n in dialNames()) return@promptFields
-                    if (isDef) prefs.defaultDialName = n
-                    else {
-                        Store.renameTopFolder(cur, n)
-                        saveExtras(extras().map { if (it == cur) n else it })
-                    }
-                    prefs.currentDial = n; refresh()
+                1 -> promptFields(act, "Rename dial", listOf("Name"), listOf(curName), "Rename") { v ->
+                    if (v[0].isNotEmpty()) { edit { s -> group(s, cur)?.put("name", v[0]) }; refresh() }
                 }
-                2 -> if (!isDef) AlertDialog.Builder(act)
-                    .setMessage("Delete “$cur” and the sites in it?")
+                2 -> if (!onlyOne) AlertDialog.Builder(act).setMessage("Delete “$curName” and the sites in it?")
                     .setPositiveButton("Delete") { _, _ ->
-                        Store.deleteTopFolder(cur); saveExtras(extras().filter { it != cur })
+                        edit { s -> val g = groupsOf(s); val n = JSONArray()
+                            for (k in 0 until g.length()) if (g.getJSONObject(k).optString("id") != cur) n.put(g.get(k))
+                            s.put("groups", n) }
                         prefs.currentDial = ""; refresh()
                     }.setNegativeButton("Cancel", null).show()
                 3 -> {
@@ -148,7 +191,7 @@ class StartPage(
                         }.show()
                 }
                 4 -> { prefs.showTitles = !prefs.showTitles; refresh() }
-                5 -> { prefs.showThumbs = !prefs.showThumbs; refresh() }
+                5 -> { Settings.setThumbnails(!thumbs); refresh() }
                 6 -> { prefs.showAdd = !prefs.showAdd; refresh() }
                 7 -> openSettings()
             }
@@ -156,7 +199,8 @@ class StartPage(
     }
 
     // ---------- grid ----------
-    private inner class Adapter(val items: List<Any>, val cols: Int, val dial: String) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
+    private inner class Adapter(val items: List<Any>, val cols: Int, val groupId: String, val thumbsOn: Boolean) :
+        RecyclerView.Adapter<RecyclerView.ViewHolder>() {
         private val inflater = LayoutInflater.from(act)
 
         inner class CardVH(v: View) : RecyclerView.ViewHolder(v) {
@@ -174,29 +218,25 @@ class StartPage(
 
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
             return if (viewType == 1) AddVH(inflater.inflate(R.layout.item_add, parent, false))
-            else CardVH(inflater.inflate(R.layout.item_card, parent, false)).also {
-                it.card.clipToOutline = true
-            }
+            else CardVH(inflater.inflate(R.layout.item_card, parent, false)).also { it.card.clipToOutline = true }
         }
 
         override fun onBindViewHolder(h: RecyclerView.ViewHolder, pos: Int) {
             if (h is AddVH) {
-                h.itemView.setOnClickListener { addItem(dial) }
-                h.itemView.findViewById<View>(R.id.addPill).setOnClickListener { addItem(dial) }
+                h.itemView.findViewById<View>(R.id.addPill).setOnClickListener { addItem(groupId) }
                 return
             }
             h as CardVH
-            val b = items[pos] as Bookmark
-            val host = Thumbs.hostOf(b.url)
-            val label = b.title.ifBlank { host.ifEmpty { b.url } }
+            val d = items[pos] as Dial
+            val host = Thumbs.hostOf(d.url)
+            val label = d.title.ifBlank { host.ifEmpty { d.url } }
 
-            // thumbnail height scales with the column count
             val widthPx = act.resources.displayMetrics.widthPixels - act.dp(20 + 12 * cols)
             val th = ((widthPx / cols) * 0.62f).toInt()
             h.thumb.layoutParams.height = th
             h.letter.layoutParams.height = th
 
-            val bmp = if (prefs.showThumbs) Thumbs.thumb(act, host) else null
+            val bmp = if (thumbsOn) Thumbs.thumb(act, host) else null
             if (bmp != null) {
                 h.thumb.setImageBitmap(bmp); h.thumb.visibility = View.VISIBLE; h.letter.visibility = View.GONE
             } else {
@@ -213,8 +253,8 @@ class StartPage(
             h.title.text = label
             h.row.visibility = if (prefs.showTitles) View.VISIBLE else View.GONE
 
-            h.itemView.setOnClickListener { open(b.url, false) }
-            h.itemView.setOnLongClickListener { itemMenu(b, dial); true }
+            h.itemView.setOnClickListener { open(d.url, false) }
+            h.itemView.setOnLongClickListener { itemMenu(pos, d, groupId); true }
         }
     }
 }

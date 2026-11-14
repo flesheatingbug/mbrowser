@@ -69,16 +69,13 @@ class SettingsActivity : AppCompatActivity() {
             }
         }
         switchRow("Sync automatically", "When the app opens and closes", { prefs.autoSync }, { prefs.autoSync = it })
-        switchRow("Sync bookmarks and speed dials", null, { prefs.syncBookmarks }, { prefs.syncBookmarks = it })
+        switchRow("Sync bookmarks", null, { prefs.syncBookmarks }, { prefs.syncBookmarks = it })
+        switchRow("Sync settings and speed dials", "Search engines, speed dials and other settings shared with your desktop browser", { prefs.syncSettings }, { prefs.syncSettings = it })
         switchRow("Sync history", null, { prefs.syncHistory }, { prefs.syncHistory = it })
         switchRow("Sync open tabs", "Lets your other devices see this phone's tabs", { prefs.syncTabs }, { prefs.syncTabs = it })
 
         header("Search")
-        choiceRow("Search engine", Engines.names, { prefs.engine }, { prefs.engine = it; build() })
-        if (prefs.engine == Engines.names.size - 1) {
-            textRow("Custom search address", "The search words are added to the end", { prefs.customSearch }, { prefs.customSearch = it },
-                "https://example.com/search?q=")
-        }
+        searchRows()
 
         header("Appearance")
         choiceRow("Theme", listOf("Follow system", "Light", "Dark"), { prefs.themeMode }, { prefs.themeMode = it; App.applyTheme(it) })
@@ -86,9 +83,8 @@ class SettingsActivity : AppCompatActivity() {
         header("Speed dial")
         choiceRow("Columns", listOf("2", "3", "4", "5"), { (prefs.dialCols - 2).coerceIn(0, 3) }, { prefs.dialCols = it + 2 })
         switchRow("Show titles", null, { prefs.showTitles }, { prefs.showTitles = it })
-        switchRow("Show thumbnails", "Page previews, captured as you browse", { prefs.showThumbs }, { prefs.showThumbs = it })
+        switchRow("Show thumbnails", "Page previews, captured as you browse", { Settings.thumbnails() }, { Settings.setThumbnails(it) })
         switchRow("Show Add button", null, { prefs.showAdd }, { prefs.showAdd = it })
-        textRow("First dial name", null, { prefs.defaultDialName }, { prefs.defaultDialName = it }, "Speed Dial")
 
         header("Browsing")
         switchRow("Request desktop sites", "For new tabs", { prefs.desktopSite }, { prefs.desktopSite = it })
@@ -111,6 +107,24 @@ class SettingsActivity : AppCompatActivity() {
 
         header("About")
         actionRow("mbrowser for Android", "Version 0.2.0. Syncs with your own mbrowser server.") { }
+    }
+
+    private fun searchRows() {
+        val engines = Settings.engines()
+        val names = engines.map { it.name }
+        choiceRow("Search engine", names, { engines.indexOfFirst { it.id == Settings.defaultEngine().id }.coerceAtLeast(0) },
+            { Settings.setDefaultEngine(engines[it].id) })
+        actionRow("Add search engine", "Use %s where the search words go") {
+            promptFields(this, "Add search engine", listOf("Name", "Address, e.g. https://example.com/?q=%s"), listOf("", ""), "Add") { v ->
+                if (v[0].isNotEmpty() && v[1].contains("%s")) { Settings.addEngine(v[0], v[1]); build() }
+                else toast("Enter a name and an address containing %s")
+            }
+        }
+        if (engines.size > 1) actionRow("Remove a search engine", null) {
+            AlertDialog.Builder(this).setTitle("Remove").setItems(names.toTypedArray()) { _, i ->
+                Settings.removeEngine(engines[i].id); build()
+            }.show()
+        }
     }
 
     // ---------- row helpers ----------
