@@ -7,4 +7,5 @@
     <color name="muted">#5F6368</color>
     <color name="accent">#2F6FEB</color>
     <color name="line">#D8DCE1</color>
+    <color name="pill_private">#DCCFF2</color>
 </resources>

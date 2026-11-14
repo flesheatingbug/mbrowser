@@ -15,6 +15,7 @@
         android:padding="10dp">
 
         <LinearLayout
+            android:id="@+id/addressPill"
             android:layout_width="0dp"
             android:layout_weight="1"
             android:layout_height="52dp"

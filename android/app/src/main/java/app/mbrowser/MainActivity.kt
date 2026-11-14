@@ -39,6 +39,9 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+import androidx.webkit.ProfileStore
+import androidx.webkit.WebViewCompat
+import androidx.webkit.WebViewFeature
 import java.io.ByteArrayInputStream
 
 class MainActivity : AppCompatActivity() {
@@ -50,8 +53,11 @@ class MainActivity : AppCompatActivity() {
         var thumb: Bitmap? = null
         var icon: Bitmap? = null
         var desktop = false
+        var priv = false                // private tab: no history, thumbnails or syncing
+        var isolated = false            // private tab with its own separate cookies and storage
     }
 
+    private val PRIVATE_PROFILE = "private"
     private val MOBILE_FIX = "; wv"
     private val DESKTOP_UA =
         "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36"
@@ -150,6 +156,7 @@ class MainActivity : AppCompatActivity() {
             }
         })
 
+        cleanupPrivate()   // drop private storage left over if the app was killed with private tabs open
         newTab(null)
         handleIntent(intent)
         if (!prefs.firstRunDone) {
@@ -208,17 +215,29 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun newTab(url: String?): Tab {
+    private fun newTab(url: String?, priv: Boolean = false): Tab {
         val w = WebView(this)
+        var isolated = false
+        if (priv) {
+            // a separate cookie jar and storage for private tabs, where this device's WebView supports it
+            try {
+                if (WebViewFeature.isFeatureSupported(WebViewFeature.MULTI_PROFILE)) {
+                    WebViewCompat.setProfile(w, PRIVATE_PROFILE); isolated = true
+                }
+            } catch (_: Throwable) { isolated = false }
+        }
         val s = w.settings
+        if (priv) { s.cacheMode = android.webkit.WebSettings.LOAD_NO_CACHE; s.setGeolocationEnabled(false) }
         s.javaScriptEnabled = true
         s.domStorageEnabled = true
         s.setSupportMultipleWindows(false)
         s.builtInZoomControls = true
         s.displayZoomControls = false
         s.textZoom = prefs.textZoom
-        CookieManager.getInstance().setAcceptThirdPartyCookies(w, true)
+        if (!priv) CookieManager.getInstance().setAcceptThirdPartyCookies(w, true)
+        else if (isolated) try { ProfileStore.getInstance().getProfile(PRIVATE_PROFILE)?.cookieManager?.setAcceptThirdPartyCookies(w, true) } catch (_: Throwable) { }
         val tab = Tab(w)
+        tab.priv = priv; tab.isolated = isolated
         tab.desktop = prefs.desktopSite
         applyUa(tab)
 
@@ -248,7 +267,7 @@ class MainActivity : AppCompatActivity() {
                 if (url.startsWith("about:")) return
                 tab.url = url
                 tab.title = view.title ?: ""
-                Store.addVisit(url, tab.title)
+                if (!tab.priv) Store.addVisit(url, tab.title)
                 if (tab === cur()) { progress.visibility = View.INVISIBLE; swipe.isRefreshing = false; updateChrome() }
                 ui.postDelayed({ afterLoad(tab, url) }, 1500)
             }
@@ -261,7 +280,7 @@ class MainActivity : AppCompatActivity() {
             override fun onReceivedIcon(view: WebView, icon: Bitmap?) {
                 if (icon == null) return
                 tab.icon = icon
-                Thumbs.saveIcon(applicationContext, Thumbs.hostOf(tab.url), icon)
+                if (!tab.priv) Thumbs.saveIcon(applicationContext, Thumbs.hostOf(tab.url), icon)
                 if (tab === cur()) updateChrome()
             }
         }
@@ -290,6 +309,7 @@ class MainActivity : AppCompatActivity() {
         if (tab !== cur() || tab.home || tab.url != url || switcher.visibility == View.VISIBLE) return
         val shot = capture(tab, 360) ?: return
         tab.thumb = shot
+        if (tab.priv) return
         val host = Thumbs.hostOf(url)
         val known = host in Settings.dialHosts() || Store.bookmarkList().any { Thumbs.hostOf(it.url) == host }
         val root = Uri.parse(url).path.let { it.isNullOrEmpty() || it == "/" }
@@ -318,6 +338,13 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun closeTab(i: Int) {
+        if (tabs.size <= 1 && tabs[0].priv) {
+            // closing the only tab, and it is private: swap in a normal tab and discard the private one
+            val old = tabs[0]
+            val fresh = newTab(null)
+            tabs.remove(old); old.web.destroy()
+            current = tabs.indexOf(fresh); render(); cleanupPrivate(); return
+        }
         if (tabs.size <= 1) {
             val t = tabs[0]
             t.home = true; t.url = ""; t.title = ""; t.thumb = null; t.icon = null
@@ -326,13 +353,39 @@ class MainActivity : AppCompatActivity() {
         val t = tabs.removeAt(i)
         t.web.destroy()
         switchTo(if (current >= tabs.size) tabs.size - 1 else if (i < current) current - 1 else current)
+        if (t.priv) cleanupPrivate()
+    }
+
+    /** When the last private tab is gone, throw away the separate private storage. */
+    private fun cleanupPrivate() {
+        if (tabs.any { it.priv }) return
+        try {
+            if (WebViewFeature.isFeatureSupported(WebViewFeature.MULTI_PROFILE)) ProfileStore.getInstance().deleteProfile(PRIVATE_PROFILE)
+        } catch (_: Throwable) { }
+    }
+
+    private val privateInfo: View by lazy {
+        TextView(this).also {
+            it.gravity = android.view.Gravity.CENTER
+            it.setPadding(dp(32), dp(32), dp(32), dp(32))
+            it.setTextColor(getColor(R.color.text))
+            it.textSize = 15f
+        }
     }
 
     private fun render() {
         swipe.isRefreshing = false
         container.removeAllViews()
         val t = cur() ?: return
-        if (t.home) {
+        if (t.home && t.priv) {
+            (privateInfo.parent as? ViewGroup)?.removeView(privateInfo)
+            (privateInfo as TextView).text = "Private tab\n\nHistory, thumbnails and tab syncing are off for this tab. " +
+                (if (t.isolated) "Cookies and site data are kept apart from your normal tabs and are deleted when you close your private tabs."
+                else "This phone's browser engine can't keep private cookies separate, so sites you sign in to here share cookies with your normal tabs.")
+            container.addView(privateInfo, FrameLayout.LayoutParams(-1, -1))
+            urlBar.setText("")
+            progress.visibility = View.INVISIBLE
+        } else if (t.home) {
             (startPage.root.parent as? ViewGroup)?.removeView(startPage.root)
             container.addView(startPage.root, FrameLayout.LayoutParams(-1, -1))
             urlBar.setText("")
@@ -349,6 +402,9 @@ class MainActivity : AppCompatActivity() {
     private fun updateChrome() {
         val t = cur()
         tabCount.text = tabs.size.toString()
+        val isPriv = t?.priv == true
+        findViewById<View>(R.id.addressPill).setBackgroundResource(if (isPriv) R.drawable.bg_pill_private else R.drawable.bg_pill)
+        urlBar.hint = if (isPriv) "Private: search or type URL" else "Search or type URL"
         val starred = t != null && !t.home && Store.isBookmarked(t.url)
         btnStar.setImageResource(if (starred) R.drawable.ic_star_filled else R.drawable.ic_star)
         btnStar.imageTintList = getColorStateList(if (starred) R.color.accent else R.color.text)
@@ -380,7 +436,7 @@ class MainActivity : AppCompatActivity() {
             override fun onBindViewHolder(h: RecyclerView.ViewHolder, pos: Int) {
                 val t = tabs[pos]
                 val v = h.itemView
-                val label = if (t.home) "Speed Dial" else t.title.ifBlank { t.url }
+                val label = (if (t.priv) "Private · " else "") + (if (t.home) (if (t.priv) "New tab" else "Speed Dial") else t.title.ifBlank { t.url })
                 v.findViewById<TextView>(R.id.title).text = label
                 val thumb = v.findViewById<ImageView>(R.id.thumb)
                 val letter = v.findViewById<TextView>(R.id.letter)
@@ -460,13 +516,14 @@ class MainActivity : AppCompatActivity() {
         val t = cur()
         val m = PopupMenu(this, anchor)
         val items = listOf(
-            "New tab", "Bookmarks", "History", "Tabs from other devices", "Sync now",
-            (if (t?.desktop == true) "✓ " else "") + "Desktop site", "Share page", "Add to speed dial", "Settings",
+            0 to "New tab", 9 to "New private tab", 1 to "Bookmarks", 2 to "History", 3 to "Tabs from other devices", 4 to "Sync now",
+            5 to ((if (t?.desktop == true) "✓ " else "") + "Desktop site"), 6 to "Share page", 7 to "Add to speed dial", 8 to "Settings",
         )
-        items.forEachIndexed { i, s -> m.menu.add(0, i, i, s) }
+        items.forEachIndexed { i, (id, label) -> m.menu.add(0, id, i, label) }
         m.setOnMenuItemClickListener {
             when (it.itemId) {
                 0 -> newTab(null)
+                9 -> newTab(null, true)
                 1 -> picker.launch(Intent(this, ItemsActivity::class.java).putExtra("mode", "bookmarks"))
                 2 -> picker.launch(Intent(this, ItemsActivity::class.java).putExtra("mode", "history"))
                 3 -> picker.launch(Intent(this, ItemsActivity::class.java).putExtra("mode", "devices"))
@@ -491,7 +548,7 @@ class MainActivity : AppCompatActivity() {
             if (verbose) Toast.makeText(this, "Set up a sync server in Settings first", Toast.LENGTH_LONG).show()
             return
         }
-        val open = tabs.filter { !it.home }.map { it.url to it.title }
+        val open = tabs.filter { !it.home && !it.priv }.map { it.url to it.title }
         Sync.runAsync(this, { open }) { msg ->
             ui.post {
                 if (verbose || msg != "Synced") Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
