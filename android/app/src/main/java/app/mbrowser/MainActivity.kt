@@ -221,7 +221,18 @@ class MainActivity : AppCompatActivity() {
         val d = resources.displayMetrics.density
         for (e in engines) {
             val tv = TextView(this)
-            tv.text = e.name.take(1).uppercase()
+            val host = Thumbs.hostOf(e.url.replace("%s", "x"))
+            val ic = Thumbs.icon(this, host)
+            if (ic != null) {
+                val dr = android.graphics.drawable.BitmapDrawable(resources, ic)
+                tv.setCompoundDrawablesWithIntrinsicBounds(null, dr, null, null)
+                tv.setPadding(0, (12 * d).toInt(), 0, 0)
+                dr.setBounds(0, 0, (24 * d).toInt(), (24 * d).toInt())
+                tv.setCompoundDrawables(null, dr, null, null)
+            } else {
+                tv.text = e.name.take(1).uppercase()
+                fetchEngineIcon(host)
+            }
             tv.gravity = Gravity.CENTER
             tv.textSize = 18f
             tv.typeface = Typeface.DEFAULT_BOLD
@@ -244,6 +255,27 @@ class MainActivity : AppCompatActivity() {
             row.addView(tv, lp)
         }
         strip.visibility = View.VISIBLE
+    }
+
+    private val iconFetching = HashSet<String>()
+    /** Downloads an engine's own favicon once (straight from its site) and redraws the strip. */
+    private fun fetchEngineIcon(host: String) {
+        if (host.isEmpty() || !iconFetching.add(host)) return
+        Thread {
+            var bmp: Bitmap? = null
+            for (path in listOf("/apple-touch-icon.png", "/favicon.ico")) {
+                try {
+                    val c = java.net.URL("https://$host$path").openConnection() as java.net.HttpURLConnection
+                    c.connectTimeout = 5000; c.readTimeout = 5000; c.instanceFollowRedirects = true
+                    c.setRequestProperty("User-Agent", "Mozilla/5.0")
+                    if (c.responseCode in 200..299) bmp = android.graphics.BitmapFactory.decodeStream(c.inputStream)
+                    c.disconnect()
+                } catch (_: Exception) { }
+                if (bmp != null) break
+            }
+            val b = bmp
+            if (b != null) { Thumbs.saveIcon(applicationContext, host, b); ui.post { if (urlBar.hasFocus()) showEngines() } }
+        }.start()
     }
 
     // ---------- predictive suggestions from bookmarks and history ----------
@@ -307,7 +339,7 @@ class MainActivity : AppCompatActivity() {
             Intent(this, MainActivity::class.java).setAction(ACTION_CLOSE_PRIVATE).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
             android.app.PendingIntent.FLAG_IMMUTABLE or android.app.PendingIntent.FLAG_UPDATE_CURRENT)
         val b = android.app.Notification.Builder(this, "private")
-            .setSmallIcon(R.drawable.ic_tabs)
+            .setSmallIcon(R.drawable.ic_stat_m)
             .setContentTitle(if (n == 1) "1 private tab open" else "$n private tabs open")
             .setContentText("Tap to return, or close them all")
             .setContentIntent(open)
