@@ -2,6 +2,8 @@
 import html
 import json
 import re
+import secrets
+import time
 
 from . import qr, security, syncapi
 from .store import ApiError, now_ms
@@ -79,23 +81,67 @@ def logout(ctx, req):
     return 200, {'ok': True}
 
 
+TICKET_SECONDS = 600
+
+
+def _ticket_user(ctx, b):
+    """A short-lived ticket from an earlier successful sign-in, so choosing or creating a profile
+    does not need the password (and a fresh 2FA code) a second time. Kept in memory only."""
+    t = str(b.get('ticket') or '').strip()
+    if not t:
+        return None
+    if not hasattr(ctx, 'tickets'):
+        ctx.tickets = {}
+    now = time.time()
+    for k in [k for k, v in ctx.tickets.items() if v[1] < now]:
+        del ctx.tickets[k]
+    v = ctx.tickets.get(t)
+    if not v:
+        raise ApiError(401, 'The sign-in expired. Please sign in again.')
+    user = ctx.store.user_by_id(v[0])
+    if not user or user['disabled']:
+        raise ApiError(401, 'The sign-in expired. Please sign in again.')
+    return user
+
+
+def _new_ticket(ctx, user_id):
+    if not hasattr(ctx, 'tickets'):
+        ctx.tickets = {}
+    t = secrets.token_urlsafe(24)
+    ctx.tickets[t] = (user_id, time.time() + TICKET_SECONDS)
+    return t
+
+
 def device_login(ctx, req):
-    """Used by the browser: sign in with an account, get back an API key for one profile."""
+    """Used by the browser: sign in with an account, get back an API key for one profile.
+
+    Extra options for apps that let the user choose:
+      list:true       -> only list the account's profiles and return a short-lived ticket (no key is issued)
+      ticket          -> use that ticket instead of user name / password / code
+      profile         -> name or id of the profile to use
+      create:"name"   -> make a new profile with that name and use it
+    """
     b = req.json()
-    user = _check_credentials(ctx, req, b)
+    user = _ticket_user(ctx, b) or _check_credentials(ctx, req, b)
     profiles = ctx.store.list_profiles(user['id'])
-    if not profiles:
-        raise ApiError(409, 'This account has no profile yet. Create one in the web interface first.')
+    brief = [{'id': p['id'], 'name': p['name']} for p in profiles]
+    if b.get('list'):
+        return 200, {'profiles': brief, 'ticket': _new_ticket(ctx, user['id']), 'user': {'username': user['username']}}
+    create = str(b.get('create') or '').strip()
     want = str(b.get('profile') or '').strip()
     chosen = None
-    if want:
+    if create:
+        chosen = ctx.store.get_profile(ctx.store.create_profile(user['id'], create))
+    elif want:
         chosen = next((p for p in profiles if str(p['id']) == want or p['name'].lower() == want.lower()), None)
         if not chosen:
             raise ApiError(404, 'There is no profile with that name.')
+    elif not profiles:
+        raise ApiError(409, 'This account has no profile yet. Create one in the web interface first.')
     elif len(profiles) == 1:
         chosen = profiles[0]
     else:
-        return 200, {'needProfile': True, 'profiles': [{'id': p['id'], 'name': p['name']} for p in profiles]}
+        return 200, {'needProfile': True, 'profiles': brief}
     device = re.sub(r'\s+', ' ', str(b.get('device') or 'Browser')).strip()[:40] or 'Browser'
     _, token = ctx.store.replace_device_token(chosen['id'], device)
     return 200, {'token': token, 'profile': {'id': chosen['id'], 'name': chosen['name']}, 'user': {'username': user['username']}}

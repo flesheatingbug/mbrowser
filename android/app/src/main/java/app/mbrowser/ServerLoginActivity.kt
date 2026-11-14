@@ -32,7 +32,6 @@ class ServerLoginActivity : AppCompatActivity() {
     private lateinit var server: EditText
     private lateinit var user: EditText
     private lateinit var pass: EditText
-    private lateinit var profile: EditText
     private lateinit var code: EditText
     private lateinit var key: EditText
     private lateinit var status: TextView
@@ -89,7 +88,6 @@ class ServerLoginActivity : AppCompatActivity() {
         if (accountMode) {
             user = field("User name", prefs.accountUser)
             pass = field("Password", password = true)
-            profile = field("Profile (leave blank if you only have one)", prefs.profileName)
             code = field(if (useRecovery) "Recovery code" else "Code from your authenticator app")
             code.visibility = if (needCode) View.VISIBLE else View.GONE
         } else {
@@ -128,9 +126,8 @@ class ServerLoginActivity : AppCompatActivity() {
         val name = user.text.toString().trim()
         if (base.isEmpty() || name.isEmpty() || pass.text.isEmpty()) { status.text = "Enter the server address, user name and password."; return }
         busy(true, "Signing in…")
-        val body = JSONObject().put("username", name).put("password", pass.text.toString()).put("device", prefs.device)
-        val wantProfile = profile.text.toString().trim()
-        if (wantProfile.isNotEmpty()) body.put("profile", wantProfile)
+        // list:true asks the server for the account's profiles and a short-lived ticket, so nothing is replaced yet
+        val body = JSONObject().put("username", name).put("password", pass.text.toString()).put("device", prefs.device).put("list", true)
         if (needCode) {
             val c = code.text.toString().trim()
             if (useRecovery) body.put("recovery", c) else body.put("totp", c)
@@ -151,43 +148,84 @@ class ServerLoginActivity : AppCompatActivity() {
             r.code == 404 && j.optString("error").isEmpty() ->
                 status.text = "This server is an older version without account sign-in. Use an API key instead."
             j.optBoolean("needTotp") -> {
-                needCode = true; code.visibility = View.VISIBLE; code.setText("")
+                needCode = true
                 status.text = j.optString("error", "Enter the code from your authenticator app.")
-                if (!this::submit.isInitialized) return
-                build_keepFields(base, name)
+                rebuildKeeping(base, name)
             }
             r.code !in 200..299 -> status.text = j.optString("error", "Sign-in failed (HTTP ${r.code})")
-            j.optBoolean("needProfile") -> chooseProfile(j)
-            else -> {
+            j.has("ticket") -> showProfiles(base, j.optJSONObject("user")?.optString("username") ?: name, j.optString("ticket"), j.optJSONArray("profiles"))
+            j.has("token") -> {
+                // an older server that signs straight in without listing profiles
                 val p = j.optJSONObject("profile")
-                val token = j.optString("token")
-                if (token.isEmpty() || p == null) { status.text = "The server's answer was not understood."; return }
-                finishConnect(base, token, j.optJSONObject("user")?.optString("username") ?: name, p.optString("id"), p.optString("name"))
+                finishConnect(base, j.optString("token"), name, p?.optString("id") ?: "", p?.optString("name") ?: "")
             }
+            else -> status.text = "This server is an older version and can't offer a choice of profiles. Update the server, or use an API key."
         }
     }
 
-    /** Shows the code field (and its recovery-code link) while keeping everything typed so far. */
-    private fun build_keepFields(base: String, name: String) {
-        val pw = pass.text.toString(); val prof = profile.text.toString(); val msg = status.text.toString()
+    /** Rebuilds the form (to show the code field) while keeping what was typed. */
+    private fun rebuildKeeping(base: String, name: String) {
+        val pw = pass.text.toString(); val msg = status.text.toString()
         prefs.server = base
         build()
-        user.setText(name); pass.setText(pw); profile.setText(prof); status.text = msg
+        user.setText(name); pass.setText(pw); status.text = msg
         code.requestFocus()
     }
 
-    private fun chooseProfile(j: JSONObject) {
-        val a = j.optJSONArray("profiles") ?: return
-        val names = (0 until a.length()).map { a.getJSONObject(it).optString("name") }
-        AlertDialog.Builder(this).setTitle("Which profile should this phone use?")
-            .setItems(names.toTypedArray()) { _, i ->
-                profile.setText(names[i])
-                if (needCode) {
-                    // the code was already used by the first request, so a fresh one is needed
-                    code.setText("")
-                    status.text = "Profile chosen. Enter the next code from your authenticator app and press Sign in."
-                } else signIn()
-            }.setCancelable(true).show()
+    // ---------- choose or create a profile ----------
+    private fun showProfiles(base: String, username: String, ticket: String, profiles: org.json.JSONArray?) {
+        box.removeAllViews()
+        text("Choose a profile", 24f, R.color.text, bold = true, top = 0)
+        text("Signed in as $username. This phone will sync with the profile you pick. Each profile keeps its own bookmarks, history, speed dials and passwords.", 15f, R.color.muted)
+        val msg = text("", 14f, R.color.muted, top = 10)
+        val n = profiles?.length() ?: 0
+        for (i in 0 until n) {
+            val o = profiles!!.getJSONObject(i)
+            val id = o.optString("id"); val pname = o.optString("name")
+            val current = prefs.syncConfigured && prefs.profileId == id && prefs.server == base
+            card(pname, if (current) "Currently used on this phone" else "Use this profile") {
+                postPick(base, username, ticket, JSONObject().put("profile", id), msg)
+            }
+        }
+        if (n == 0) text("This account has no profiles yet. Create the first one below.", 14f, R.color.muted, top = 12)
+        card("＋  Create a new profile", "Starts empty. Your bookmarks here can then be added to it.") {
+            promptFields(this, "New profile", listOf("Profile name, e.g. Phone"), listOf(""), "Create") { v ->
+                if (v[0].isNotEmpty()) postPick(base, username, ticket, JSONObject().put("create", v[0]), msg)
+            }
+        }
+        link("Back") { build() }
+    }
+
+    private fun card(head: String, sub: String, onClick: () -> Unit) {
+        val c = LinearLayout(this)
+        c.orientation = LinearLayout.VERTICAL
+        c.setBackgroundResource(R.drawable.bg_card)
+        c.setPadding(dp(18), dp(16), dp(18), dp(16))
+        val h = TextView(this); h.text = head; h.textSize = 17f; h.typeface = Typeface.DEFAULT_BOLD; h.setTextColor(getColor(R.color.text))
+        val s = TextView(this); s.text = sub; s.textSize = 13f; s.setTextColor(getColor(R.color.muted))
+        c.addView(h); c.addView(s)
+        c.setOnClickListener { onClick() }
+        box.addView(c, LinearLayout.LayoutParams(-1, -2).also { it.topMargin = dp(12) })
+    }
+
+    private fun postPick(base: String, username: String, ticket: String, what: JSONObject, msg: TextView) {
+        msg.text = "Working…"
+        val body = what.put("ticket", ticket).put("device", prefs.device)
+        Executors.newSingleThreadExecutor().execute {
+            var result: Login.Result? = null
+            var err = ""
+            try { result = Login.post(base, body) } catch (e: Exception) { err = e.message ?: "unknown error" }
+            ui.post {
+                val r = result
+                if (r == null) { msg.text = "Cannot reach the server: $err"; return@post }
+                val j = r.json
+                val p = j.optJSONObject("profile")
+                if (r.code in 200..299 && p != null && j.optString("token").isNotEmpty())
+                    finishConnect(base, j.optString("token"), username, p.optString("id"), p.optString("name"))
+                else if (r.code == 401) { build(); this.status.text = j.optString("error", "The sign-in expired. Please sign in again.") }
+                else msg.text = j.optString("error", "That did not work (HTTP ${r.code})")
+            }
+        }
     }
 
     // ---------- API key ----------
