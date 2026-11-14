@@ -33,8 +33,12 @@ services:
       - SESSION_DAYS=7
 
     volumes:
-      # Data directory — change this path if you want to store data elsewhere.
-      - /srv/dev-disk-by-uuid-9903b55c-c775-4bdc-9caf-319cd27eb39a/appdata/mbrowser-server:/config
+      # Data directory — change this to wherever you want to store the database and config.
+      # Examples:
+      #   /opt/mbrowser-sync/data:/config
+      #   /home/youruser/mbrowser:/config
+      #   /mnt/storage/appdata/mbrowser-sync:/config
+      - /opt/mbrowser-sync/data:/config
 
     ports:
       # host:container — remove this block entirely when using a reverse proxy on a shared Docker network
