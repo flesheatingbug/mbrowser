@@ -1421,6 +1421,7 @@ function mergeHistory(remote) {
 
 async function syncAll() {
   if (syncing) return;
+  if (wizardActive) return; // don't sync while the wizard is showing
   if (!syncReady()) { syncStatus = 'Sync not configured (Settings → Sync)'; return; }
   syncing = true;
   try {
@@ -2341,8 +2342,9 @@ function setupIpc() {
   handle('app:build-number', () => BUILD_NUMBER, BOTH);
 
   handle('app:resetAll', async () => {
-    await clearData('all');
-    profiles.resetAll();
+    // Mark a pending reset so the new process wipes data before loading anything.
+    // We do NOT delete the directory here — Chromium can recreate it during shutdown.
+    profiles.setPendingReset();
     app.relaunch(); app.quit();
     return { ok: true };
   }, BOTH);
@@ -2757,6 +2759,7 @@ let gateWcId = null;
 let gateResolve = null;
 let wizardWcId = null;
 let wizardResolve = null;
+let wizardActive = false;
 
 function showGate(mode) {
   return new Promise((resolve) => {
@@ -2797,6 +2800,7 @@ ipcMain.handle('gate:choose', async (e, id, pw, remember) => {
 ipcMain.on('gate:cancel', (e) => { if (e.sender.id === gateWcId && gateResolve) gateResolve('quit'); });
 
 function showWizard() {
+  wizardActive = true;
   return new Promise((resolve) => {
     const win = new BaseWindow({ width: 540, height: 600, title: 'mbrowser setup', icon: appIconImage(), resizable: false, backgroundColor: '#0a0e1f' });
     try { if (typeof win.removeMenu === 'function') win.removeMenu(); } catch { /* ignore */ }
@@ -2810,14 +2814,18 @@ function showWizard() {
     wizardWcId = view.webContents.id;
     view.webContents.loadURL('my://welcome');
     let done = false;
-    wizardResolve = (r) => {
+    const finish = (r) => {
       if (done) return;
-      done = true; wizardWcId = null;
+      done = true; wizardWcId = null; wizardActive = false;
+      clearTimeout(syncTimer); // cancel any sync that was queued during wizard
       profiles.setSetupDone();
       resolve(r);
+    };
+    wizardResolve = (r) => {
+      finish(r);
       setTimeout(() => { try { win.close(); } catch { /* closed */ } }, 0);
     };
-    win.on('closed', () => { if (!done) { done = true; wizardWcId = null; profiles.setSetupDone(); resolve('done'); } });
+    win.on('closed', () => finish('done'));
   });
 }
 
@@ -2927,6 +2935,17 @@ app.whenReady().then(async () => {
     const result = await showGate(chooser ? 'choose' : 'unlock');
     if (result !== 'continue') { app.quit(); return; }
   }
+  // If a reset was requested in the previous session, wipe the userData directory NOW —
+  // before Chromium loads anything from it — then continue with a fresh data directory.
+  if (profiles.pendingReset()) {
+    profiles.clearPendingReset();
+    const dataDir = app.getPath('userData');
+    try { if (fs.existsSync(dataDir)) fs.rmSync(dataDir, { recursive: true, force: true }); } catch { /* ignore */ }
+    // Also clear the Electron session so cookies / IndexedDB don't survive.
+    try { await session.defaultSession.clearStorageData(); } catch { /* ignore */ }
+    try { await session.defaultSession.clearCache(); } catch { /* ignore */ }
+  }
+
   store = createStore(file('settings.json'));
   blocker = createBlocker(S);
 
