@@ -171,10 +171,10 @@
 
         <ImageButton android:id="@+id/btnBack" style="@style/BarButton"
             android:contentDescription="Back" android:src="@drawable/ic_back" />
-        <ImageButton android:id="@+id/btnForward" style="@style/BarButton"
-            android:contentDescription="Forward" android:src="@drawable/ic_forward" />
         <ImageButton android:id="@+id/btnHome" style="@style/BarButton"
             android:contentDescription="Home" android:src="@drawable/ic_home" />
+        <ImageButton android:id="@+id/btnForward" style="@style/BarButton"
+            android:contentDescription="Forward" android:src="@drawable/ic_forward" />
 
         <FrameLayout
             android:id="@+id/btnTabs"
