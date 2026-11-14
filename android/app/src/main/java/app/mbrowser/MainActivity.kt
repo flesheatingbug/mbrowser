@@ -43,6 +43,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.GridLayoutManager
+import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import androidx.webkit.ProfileStore
@@ -86,6 +87,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnReload: ImageButton
 
     private var engineOverride: Engine? = null
+    private var switcherMode = 0          // 0 tabs, 1 private, 2 other devices, 3 recently closed
+    private var switcherQuery = ""
     private val tabs = mutableListOf<Tab>()
     private var current = -1
     private val ui = Handler(Looper.getMainLooper())
@@ -166,14 +169,41 @@ class MainActivity : AppCompatActivity() {
             m.show(); true
         }
 
-        findViewById<View>(R.id.switcherNew).setOnClickListener { hideSwitcher(); newTab(null) }
-        findViewById<View>(R.id.switcherCloseAll).setOnClickListener {
-            while (tabs.size > 1) { tabs.removeAt(tabs.size - 1).web.destroy() }
-            closeTab(0); switchTo(0); hideSwitcher()
+        findViewById<View>(R.id.switcherNew).setOnClickListener { hideSwitcher(); newTab(null, switcherMode == 1) }
+        findViewById<View>(R.id.switcherClose).setOnClickListener { hideSwitcher() }
+        findViewById<View>(R.id.modeTabs).setOnClickListener { switcherMode = 0; refreshSwitcher() }
+        findViewById<View>(R.id.modePrivate).setOnClickListener { switcherMode = 1; refreshSwitcher() }
+        findViewById<View>(R.id.modeSynced).setOnClickListener { switcherMode = 2; refreshSwitcher() }
+        findViewById<View>(R.id.modeClosed).setOnClickListener { switcherMode = 3; refreshSwitcher() }
+        val filter = findViewById<EditText>(R.id.switcherFilter)
+        filter.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(a: CharSequence?, b: Int, c: Int, d: Int) {}
+            override fun onTextChanged(a: CharSequence?, b: Int, c: Int, d: Int) {}
+            override fun afterTextChanged(e: Editable?) { switcherQuery = e?.toString()?.trim()?.lowercase() ?: ""; refreshSwitcher() }
+        })
+        findViewById<View>(R.id.switcherSearch).setOnClickListener {
+            if (filter.visibility == View.VISIBLE) { filter.setText(""); filter.visibility = View.GONE }
+            else { filter.visibility = View.VISIBLE; filter.requestFocus() }
         }
-        findViewById<View>(R.id.switcherDevices).setOnClickListener {
-            hideSwitcher()
-            picker.launch(Intent(this, ItemsActivity::class.java).putExtra("mode", "devices"))
+        findViewById<View>(R.id.switcherMore).setOnClickListener { v ->
+            val m = PopupMenu(this, v)
+            m.menu.add(0, 1, 0, "Close all tabs"); m.menu.add(0, 2, 1, "Close private tabs"); m.menu.add(0, 3, 2, "Clear recently closed")
+            m.setOnMenuItemClickListener {
+                when (it.itemId) {
+                    1 -> {
+                        tabs.filter { t -> !t.priv }.forEach { t -> rememberClosed(t) }
+                        val keepPriv = tabs.filter { t -> t.priv }
+                        tabs.filter { t -> !t.priv }.forEach { t -> t.web.destroy() }
+                        tabs.removeAll { t -> !t.priv }
+                        newTab(null); tabs.removeAll(keepPriv); tabs.addAll(keepPriv)
+                        switchTo(0)
+                    }
+                    2 -> closePrivateTabs()
+                    3 -> sessionPrefs().edit().remove("closed").apply()
+                }
+                refreshSwitcher(); true
+            }
+            m.show()
         }
 
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
@@ -574,10 +604,12 @@ class MainActivity : AppCompatActivity() {
         }
         if (tabs.size <= 1) {
             val t = tabs[0]
+            rememberClosed(t)
             t.home = true; t.url = ""; t.title = ""; t.thumb = null; t.icon = null
             t.web.loadUrl("about:blank"); t.web.clearHistory(); render(); return
         }
         val t = tabs.removeAt(i)
+        rememberClosed(t)
         t.web.destroy()
         switchTo(if (current >= tabs.size) tabs.size - 1 else if (i < current) current - 1 else current)
         if (t.priv) cleanupPrivate()
@@ -649,45 +681,126 @@ class MainActivity : AppCompatActivity() {
     // ---------- tab switcher ----------
     private fun showSwitcher() {
         cur()?.let { if (!it.home) capture(it, 360)?.let { b -> it.thumb = b } }
+        switcherMode = if (cur()?.priv == true) 1 else 0
+        switcherQuery = ""
+        findViewById<EditText>(R.id.switcherFilter).setText("")
+        findViewById<View>(R.id.switcherFilter).visibility = View.GONE
         switcher.visibility = View.VISIBLE
         refreshSwitcher()
     }
 
     private fun hideSwitcher() { switcher.visibility = View.GONE }
 
+    // ---- recently closed tabs ----
+    private fun rememberClosed(t: Tab) {
+        if (t.priv || t.home || t.url.isEmpty()) return
+        val old = try { org.json.JSONArray(sessionPrefs().getString("closed", "[]")) } catch (_: Exception) { org.json.JSONArray() }
+        val a = org.json.JSONArray()
+        a.put(org.json.JSONObject().put("url", t.url).put("title", t.title))
+        for (i in 0 until minOf(old.length(), 29)) a.put(old.get(i))
+        sessionPrefs().edit().putString("closed", a.toString()).apply()
+    }
+
+    private class Entry(val title: String, val sub: String, val url: String, val onOpen: () -> Unit)
+
     private fun refreshSwitcher() {
-        switcherTitle.text = if (tabs.size == 1) "1 tab" else "${tabs.size} tabs"
-        switcherList.layoutManager = GridLayoutManager(this, 2)
-        switcherList.adapter = object : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
-            override fun getItemCount() = tabs.size
-            override fun onCreateViewHolder(parent: ViewGroup, viewType: Int) =
-                object : RecyclerView.ViewHolder(LayoutInflater.from(this@MainActivity).inflate(R.layout.item_tab, parent, false)) {}
-            override fun onBindViewHolder(h: RecyclerView.ViewHolder, pos: Int) {
-                val t = tabs[pos]
-                val v = h.itemView
-                val label = (if (t.priv) "Private · " else "") + (if (t.home) (if (t.priv) "New tab" else "Speed Dial") else t.title.ifBlank { t.url })
-                v.findViewById<TextView>(R.id.title).text = label
-                val thumb = v.findViewById<ImageView>(R.id.thumb)
-                val letter = v.findViewById<TextView>(R.id.letter)
-                val icon = v.findViewById<ImageView>(R.id.icon)
-                val shot = t.thumb
-                if (shot != null && !t.home) {
-                    thumb.setImageBitmap(shot); thumb.visibility = View.VISIBLE; letter.visibility = View.GONE
-                } else {
-                    thumb.visibility = View.GONE; letter.visibility = View.VISIBLE
-                    letter.text = if (t.home) "⌂" else (label.firstOrNull { it.isLetterOrDigit() }?.uppercaseChar() ?: '•').toString()
-                    val g = GradientDrawable()
-                    g.cornerRadius = dp(12).toFloat()
-                    g.setColor(Color.HSVToColor(floatArrayOf(Math.floorMod(label.hashCode(), 360).toFloat(), 0.4f, 0.45f)))
-                    letter.background = g
+        val modes = listOf(R.id.modeTabs, R.id.modePrivate, R.id.modeSynced, R.id.modeClosed)
+        modes.forEachIndexed { i, id ->
+            val b = findViewById<View>(id)
+            if (i == switcherMode) {
+                val g = GradientDrawable(); g.cornerRadius = dp(22).toFloat(); g.setColor(0x33808080); b.background = g
+            } else b.background = null
+        }
+        val empty = findViewById<TextView>(R.id.switcherEmpty)
+        val q = switcherQuery
+        fun match(vararg x: String) = q.isEmpty() || x.any { it.lowercase().contains(q) }
+
+        if (switcherMode <= 1) {
+            val wantPriv = switcherMode == 1
+            val shownIdx = tabs.indices.filter { tabs[it].priv == wantPriv && match(tabs[it].title, tabs[it].url) }
+            switcherTitle.text = (if (wantPriv) "Private tabs" else "Tabs") + " (${tabs.count { it.priv == wantPriv }})"
+            empty.visibility = if (shownIdx.isEmpty()) View.VISIBLE else View.GONE
+            empty.text = if (wantPriv) "No private tabs open. Tap + to open one." else "No tabs match."
+            switcherList.layoutManager = GridLayoutManager(this, 2)
+            switcherList.adapter = object : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
+                override fun getItemCount() = shownIdx.size
+                override fun onCreateViewHolder(parent: ViewGroup, viewType: Int) =
+                    object : RecyclerView.ViewHolder(LayoutInflater.from(this@MainActivity).inflate(R.layout.item_tab, parent, false)) {}
+                override fun onBindViewHolder(h: RecyclerView.ViewHolder, pos: Int) {
+                    val real = shownIdx[pos]
+                    val t = tabs[real]
+                    val v = h.itemView
+                    val label = if (t.home) (if (t.priv) "New private tab" else "Speed Dial") else t.title.ifBlank { t.url }
+                    v.findViewById<TextView>(R.id.title).text = label
+                    val thumb = v.findViewById<ImageView>(R.id.thumb)
+                    val letter = v.findViewById<TextView>(R.id.letter)
+                    val icon = v.findViewById<ImageView>(R.id.icon)
+                    val shot = t.thumb
+                    if (shot != null && !t.home) {
+                        thumb.setImageBitmap(shot); thumb.visibility = View.VISIBLE; letter.visibility = View.GONE
+                    } else {
+                        thumb.visibility = View.GONE; letter.visibility = View.VISIBLE
+                        letter.text = if (t.home) (if (t.priv) "👻" else "⌂") else (label.firstOrNull { it.isLetterOrDigit() }?.uppercaseChar() ?: '•').toString()
+                        val g = GradientDrawable()
+                        g.cornerRadius = dp(12).toFloat()
+                        g.setColor(Color.HSVToColor(floatArrayOf(Math.floorMod(label.hashCode(), 360).toFloat(), 0.4f, 0.45f)))
+                        letter.background = g
+                    }
+                    val ic = t.icon
+                    if (ic != null) { icon.setImageBitmap(ic); icon.imageTintList = null }
+                    else { icon.setImageResource(R.drawable.ic_globe); icon.imageTintList = getColorStateList(R.color.muted) }
+                    v.setOnClickListener { hideSwitcher(); switchTo(real) }
+                    v.findViewById<View>(R.id.close).setOnClickListener {
+                        val w = tabs[real]
+                        closeTab(real); refreshSwitcher()
+                    }
                 }
-                val ic = t.icon
+            }
+            return
+        }
+
+        val rows = mutableListOf<Entry>()
+        if (switcherMode == 2) {
+            switcherTitle.text = "Other devices"
+            val devices = try { org.json.JSONArray(prefs.otherTabs) } catch (_: Exception) { org.json.JSONArray() }
+            for (i in 0 until devices.length()) {
+                val d = devices.getJSONObject(i); val name = d.optString("device")
+                val ts = d.optJSONArray("tabs") ?: continue
+                for (j in 0 until ts.length()) {
+                    val t = ts.getJSONObject(j); val u = t.optString("url"); val title = t.optString("title").ifBlank { u }
+                    if (match(title, u, name)) rows.add(Entry(title, "$name  ·  $u", u) { hideSwitcher(); newTab(u) })
+                }
+            }
+            empty.text = if (prefs.syncConfigured) "No tabs from other devices yet. They appear after each sync." else "Connect to your server in Settings to see tabs from your other devices."
+        } else {
+            switcherTitle.text = "Recently closed"
+            val a = try { org.json.JSONArray(sessionPrefs().getString("closed", "[]")) } catch (_: Exception) { org.json.JSONArray() }
+            for (i in 0 until a.length()) {
+                val o = a.getJSONObject(i); val u = o.optString("url"); val title = o.optString("title").ifBlank { u }
+                if (match(title, u)) rows.add(Entry(title, u, u) {
+                    // reopen it and take it off the list
+                    val rest = org.json.JSONArray(); for (k in 0 until a.length()) if (k != i) rest.put(a.get(k))
+                    sessionPrefs().edit().putString("closed", rest.toString()).apply()
+                    hideSwitcher(); newTab(u)
+                })
+            }
+            empty.text = "Nothing was closed recently."
+        }
+        empty.visibility = if (rows.isEmpty()) View.VISIBLE else View.GONE
+        switcherList.layoutManager = LinearLayoutManager(this)
+        switcherList.adapter = object : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
+            override fun getItemCount() = rows.size
+            override fun onCreateViewHolder(parent: ViewGroup, viewType: Int) =
+                object : RecyclerView.ViewHolder(LayoutInflater.from(this@MainActivity).inflate(R.layout.item_row, parent, false)) {}
+            override fun onBindViewHolder(h: RecyclerView.ViewHolder, pos: Int) {
+                val r = rows[pos]; val v = h.itemView
+                v.findViewById<TextView>(R.id.title).text = r.title
+                v.findViewById<TextView>(R.id.sub).text = r.sub
+                val icon = v.findViewById<ImageView>(R.id.icon)
+                val ic = Thumbs.icon(this@MainActivity, Thumbs.hostOf(r.url))
                 if (ic != null) { icon.setImageBitmap(ic); icon.imageTintList = null }
                 else { icon.setImageResource(R.drawable.ic_globe); icon.imageTintList = getColorStateList(R.color.muted) }
-                v.setOnClickListener { hideSwitcher(); switchTo(pos) }
-                v.findViewById<View>(R.id.close).setOnClickListener {
-                    closeTab(pos); refreshSwitcher()
-                }
+                v.setOnClickListener { r.onOpen() }
             }
         }
     }
