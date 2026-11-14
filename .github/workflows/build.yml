@@ -7,7 +7,16 @@ name: Build mbrowser
 on:
   workflow_dispatch:
   push:
+    branches: [master, main]
     tags: ['v*']
+    paths:
+      - '*.js'
+      - '*.html'
+      - 'pages/**'
+      - 'lib/**'
+      - 'assets/**'
+      - 'package.json'
+      - '.github/workflows/build.yml'
 
 permissions:
   contents: write
@@ -90,8 +99,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           TAG="${{ github.ref_name }}"
-          # For manual runs (no tag) use "latest-desktop"
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then TAG="latest-desktop"; fi
+          # Use "latest-desktop" for branch pushes and manual runs; keep the tag for version tags
+          if [[ "$TAG" != v* ]]; then TAG="latest-desktop"; fi
 
           NOTES="**Download mbrowser** — Build ${{ github.run_number }}
 

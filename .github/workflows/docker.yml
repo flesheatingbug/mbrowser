@@ -2,7 +2,7 @@ name: Server Docker image
 
 on:
   push:
-    branches: [main]
+    branches: [main, master]
     paths:
       - 'server/**'
       - '.github/workflows/docker.yml'
