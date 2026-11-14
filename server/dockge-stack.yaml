@@ -1,0 +1,60 @@
+---
+# mbrowser sync server — Dockge stack
+# Paste this into Dockge (or save as compose.yaml in /opt/stacks/mbrowser-sync/).
+# Image is built automatically from the GitHub repo and published to GHCR.
+#
+# First run: open http://<your-server>:4242 and create your admin account.
+# Browser config: Settings → Sync → Server address → http://<your-server>:4242
+#
+# Maintenance:
+#   docker exec mbrowser-sync python -m app.cli list-users
+#   docker exec mbrowser-sync python -m app.cli reset-password <username>
+
+services:
+  mbrowser-sync:
+    image: ghcr.io/flesheatingbug/mbrowser-sync:latest
+    container_name: mbrowser-sync
+    environment:
+      # ── file ownership (run `id` on the host to get your numbers) ──
+      - PUID=1000
+      - PGID=1000
+      - TZ=Europe/London
+
+      # ── optional: auto-create the first admin account ──
+      # Leave blank to create it via the web UI on first run instead.
+      - ADMIN_USER=
+      - ADMIN_PASSWORD=
+
+      # ── reverse proxy ──
+      # true = trust X-Forwarded-For / X-Forwarded-Proto (Nginx Proxy Manager, Traefik, etc.)
+      - TRUST_PROXY=true
+
+      # days a web-UI login stays valid
+      - SESSION_DAYS=7
+
+    volumes:
+      # Data directory — change this path if you want to store data elsewhere.
+      - /srv/dev-disk-by-uuid-9903b55c-c775-4bdc-9caf-319cd27eb39a/appdata/mbrowser-server:/config
+
+    ports:
+      # host:container — remove this block entirely when using a reverse proxy on a shared Docker network
+      - 4242:4242
+
+    restart: unless-stopped
+
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://localhost:4242/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+    # ── Nginx Proxy Manager (or any other reverse proxy on a shared network) ──
+    # 1. Remove the "ports" block above.
+    # 2. Uncomment the lines below and change "myown" to your proxy's Docker network name.
+    # networks:
+    #   - myown
+
+# networks:
+#   myown:
+#     external: true
