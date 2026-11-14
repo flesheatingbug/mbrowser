@@ -55,6 +55,7 @@ class MainActivity : AppCompatActivity() {
     private class Tab(val web: WebView) {
         var title = ""
         @Volatile var url = ""
+        var pending: String? = null     // restored tab: loads when first shown
         var home = true                 // true until something has been loaded: shows the speed dial
         var thumb: Bitmap? = null
         var icon: Bitmap? = null
@@ -190,7 +191,7 @@ class MainActivity : AppCompatActivity() {
         })
 
         cleanupPrivate()   // drop private storage left over if the app was killed with private tabs open
-        newTab(null)
+        if (!restoreTabs()) newTab(null)
         handleIntent(intent)
         if (!prefs.firstRunDone) {
             prefs.firstRunDone = true
@@ -371,7 +372,42 @@ class MainActivity : AppCompatActivity() {
         if (prefs.autoSync) syncNow(false)
     }
 
+    // ---------- remember open tabs across restarts and updates ----------
+    private fun sessionPrefs() = getSharedPreferences("session", MODE_PRIVATE)
+
+    private fun saveTabs() {
+        if (tabs.isEmpty()) return
+        val a = org.json.JSONArray()
+        var idx = 0
+        tabs.forEachIndexed { i, t ->
+            if (t.priv) return@forEachIndexed
+            if (i == current) idx = a.length()
+            a.put(org.json.JSONObject().put("url", if (t.home) "" else t.url).put("title", t.title).put("desktop", t.desktop))
+        }
+        sessionPrefs().edit().putString("tabs", a.toString()).putInt("current", idx).apply()
+    }
+
+    private fun restoreTabs(): Boolean {
+        val raw = sessionPrefs().getString("tabs", null) ?: return false
+        val a = try { org.json.JSONArray(raw) } catch (_: Exception) { return false }
+        if (a.length() == 0) return false
+        for (i in 0 until minOf(a.length(), 40)) {
+            val o = a.optJSONObject(i) ?: continue
+            val t = newTab(null)
+            val u = o.optString("url")
+            if (u.isNotEmpty()) { t.home = false; t.url = u; t.title = o.optString("title"); t.pending = u }
+        }
+        switchTo(sessionPrefs().getInt("current", 0))
+        return true
+    }
+
+    override fun onPause() {
+        saveTabs()
+        super.onPause()
+    }
+
     override fun onStop() {
+        saveTabs()
         super.onStop()
         if (prefs.autoSync) syncNow(false)
     }
@@ -586,6 +622,7 @@ class MainActivity : AppCompatActivity() {
             (t.web.parent as? ViewGroup)?.removeView(t.web)
             container.addView(t.web, FrameLayout.LayoutParams(-1, -1))
             urlBar.setText(t.url)
+            t.pending?.let { t.pending = null; t.web.loadUrl(it) }
         }
         updateChrome()
     }
@@ -672,8 +709,11 @@ class MainActivity : AppCompatActivity() {
         t.home = false
         t.url = url
         render()
+        t.pending = null
         t.web.loadUrl(url)
         urlBar.clearFocus()
+        // the page view is added while the search lists are still on screen; attach it again once the layout has settled
+        ui.postDelayed({ if (cur() === t && !t.home && !urlBar.hasFocus()) render() }, 250)
         (getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager).hideSoftInputFromWindow(urlBar.windowToken, 0)
     }
 

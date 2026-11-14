@@ -145,11 +145,16 @@ class ItemsActivity : AppCompatActivity() {
         val dm = getSystemService(DOWNLOAD_SERVICE) as android.app.DownloadManager
         val uri = dm.getUriForDownloadedFile(d.id)
         if (uri == null) { android.widget.Toast.makeText(this, "The file is gone", android.widget.Toast.LENGTH_SHORT).show(); return }
+        // the server often labels files "application/octet-stream"; the file name's ending says more
+        val ext = android.webkit.MimeTypeMap.getFileExtensionFromUrl(d.name.replace(" ", "_")).lowercase()
+        val guessed = android.webkit.MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext)
+        val mime = guessed ?: d.mime.takeIf { it.isNotBlank() && it != "application/octet-stream" } ?: "*/*"
+        val view = Intent(Intent.ACTION_VIEW).setDataAndType(uri, mime).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         try {
-            startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(uri, d.mime.ifBlank { "*/*" })
-                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK))
+            startActivity(Intent.createChooser(view, "Open with").addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
         } catch (_: Exception) {
-            android.widget.Toast.makeText(this, "No app on this phone can open this file", android.widget.Toast.LENGTH_LONG).show()
+            try { startActivity(Intent(android.app.DownloadManager.ACTION_VIEW_DOWNLOADS)) }
+            catch (_: Exception) { android.widget.Toast.makeText(this, "No app on this phone can open this file", android.widget.Toast.LENGTH_LONG).show() }
         }
     }
 
