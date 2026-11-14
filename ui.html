@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'unsafe-inline'; script-src 'self' 'unsafe-inline'; img-src https: http: data:">
+<style>
+  :root { --bg:#1e1f22; --tab:#2b2d31; --active:#3a3d44; --fg:#e6e6e6; --muted:#9aa0a6; --line:#34363b; --accent:#7aa2f7; }
+  * { box-sizing: border-box; }
+  html, body { margin:0; height:100%; background:var(--bg); color:var(--fg);
+    font:13px system-ui, sans-serif; user-select:none; overflow:hidden; }
+  body.part-tabs #bar, body.part-toolbar #tabs { display:none; }
+  body.part-status #tabs, body.part-status #bar { display:none; }
+  body.part-tabs #status, body.part-toolbar #status { display:none; }
+
+  /* ---- tab strip (horizontal) ---- */
+  #tabs { display:flex; gap:2px; padding:6px 6px 0; height:38px; align-items:flex-end; }
+  .tab { position:relative; display:flex; align-items:center; gap:6px; flex:0 1 200px; min-width:42px; max-width:200px;
+    height:32px; padding:0 8px; background:var(--tab); border-radius:8px 8px 0 0; cursor:default; }
+  .tab.active { background:var(--active); }
+  .tab.pinned { flex:0 0 38px; min-width:38px; padding:0; justify-content:center; }
+  .tab.private::after { content:""; position:absolute; left:8px; right:8px; bottom:0; height:2px; background:#b57bee; border-radius:2px; }
+  .tab .ico { width:16px; height:16px; flex:none; border-radius:3px; display:grid; place-items:center;
+    font-size:10px; background:var(--line); color:var(--muted); object-fit:cover; }
+  .tab.loading .ico { animation:pulse 1s infinite; }
+  @keyframes pulse { 50% { opacity:.3; } }
+  .tab .t { flex:1; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+  .tab .x, .tab .snd { background:none; border:0; color:var(--muted); cursor:pointer; padding:0 2px; font-size:13px; }
+  .tab .x:hover, .tab .snd:hover { color:var(--fg); }
+  .tab.pinned .t, .tab.pinned .x { display:none; }
+  #newtab { background:none; border:0; color:var(--muted); font-size:18px; cursor:pointer; padding:0 8px; height:32px; }
+  #newtab:hover { color:var(--fg); }
+
+  /* ---- vertical mode ---- */
+  body.vertical #tabs { flex-direction:column; height:100%; padding:6px; gap:2px; align-items:stretch; overflow-y:auto; }
+  body.vertical .tab { flex:none; max-width:none; border-radius:6px; height:32px; }
+  body.vertical .tab.pinned { flex:none; justify-content:flex-start; padding:0 8px; }
+  body.vertical .tab.pinned .t { display:block; }
+  body.vertical #newtab { text-align:left; height:32px; }
+
+  /* ---- toolbar ---- */
+  #bar { display:flex; gap:6px; padding:6px; background:var(--active); height:50px; align-items:center; }
+  #bar button { background:none; border:0; color:var(--fg); font-size:16px; min-width:34px; height:34px;
+    border-radius:6px; cursor:pointer; position:relative; }
+  #bar button:hover:not(:disabled) { background:var(--tab); }
+  #bar button:disabled { opacity:.35; cursor:default; }
+  #bar button.nav { min-width:40px; height:38px; border-radius:10px; display:grid; place-items:center; }
+  #bar button.nav svg { width:22px; height:22px; display:block; }
+  #urlwrap { flex:1; display:flex; align-items:center; height:36px; border:1px solid transparent; border-radius:18px;
+    background:var(--bg); min-width:0; }
+  #urlwrap:focus-within { border-color:var(--accent); }
+  #url { flex:1; min-width:0; height:34px; border:0; padding:0 14px 0 4px; background:transparent; color:var(--fg);
+    font:inherit; outline:none; }
+  #bar #sec { height:24px; min-width:0; margin-left:6px; padding:0 8px; border-radius:12px; font-size:13px; display:flex; align-items:center; gap:4px; }
+  #sec .lbl { font-size:12px; }
+  #sec.secure { color:#4cc38a; }
+  #sec.insecure { color:#e8a33d; }
+  #sec.warning { color:#e5534b; }
+  #sec.internal { color:var(--muted); }
+  .ic svg { width:18px; height:18px; display:block; margin:auto; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+  #bar button.ic { display:grid; place-items:center; }
+  #star.on svg { fill:var(--accent); stroke:var(--accent); }
+  #shield.off svg { opacity:.45; }
+  #shield .n, #key .n { position:absolute; right:-2px; top:-3px; font-size:9px; background:var(--accent); color:var(--onaccent); border-radius:8px; padding:0 4px; }
+  #bar #key { display:none; position:relative; height:28px; min-width:28px; margin-right:6px; border-radius:50%; color:var(--muted); }
+  #bar #key.show { display:grid; }
+  #bar #key.has { color:var(--accent); }
+  #sec .ic svg, #sec svg { width:16px; height:16px; }
+  #winbar .ic svg { width:15px; height:15px; }
+  #pchip { display:grid; place-items:center; width:26px; height:26px; border-radius:50%; font-size:13px; font-weight:700; color:#fff; background:var(--accent); }
+
+  /* ---- tab list arrow + window controls (top right) ---- */
+  #winbar { position:absolute; right:0; top:0; display:flex; align-items:center; gap:2px; padding:0 6px; z-index:3; }
+  body.part-status #winbar { display:none; }
+  body.part-tabs.vertical #winbar, body.part-toolbar:not(.vertical) #winbar { display:none; }
+  body.part-tabs #winbar { height:38px; }
+  body.part-toolbar #winbar { height:50px; }
+  #winbar button { background:none; border:0; color:var(--muted); border-radius:6px; height:28px; min-width:30px; cursor:pointer; font-size:14px; }
+  #winbar button:hover { background:var(--tab); color:var(--fg); }
+  #wc { display:none; margin-left:4px; }
+  body.frameless #wc { display:flex; gap:2px; }
+  #wclose:hover { background:#e5484d !important; color:#fff !important; }
+  body.part-tabs:not(.vertical) #tabs { padding-right:46px; }
+  body.part-tabs.frameless:not(.vertical) #tabs { padding-right:150px; }
+  body.part-toolbar.vertical #bar { padding-right:46px; }
+  body.part-toolbar.vertical.frameless #bar { padding-right:150px; }
+
+  /* ---- dragging the window by its tab strip / toolbar (frameless) ---- */
+  body.frameless.part-tabs #tabs, body.frameless.part-toolbar.vertical #bar { -webkit-app-region:drag; }
+  body.frameless .tab, body.frameless #newtab, body.frameless #winbar, body.frameless #bar button,
+  body.frameless #urlwrap, body.frameless #tabs button { -webkit-app-region:no-drag; }
+
+  /* ---- status bar ---- */
+  #status { display:flex; align-items:center; gap:12px; height:100%; padding:0 10px; background:var(--active);
+    border-top:1px solid var(--line); font-size:12px; color:var(--muted); white-space:nowrap; }
+  #status .grow { flex:1; overflow:hidden; text-overflow:ellipsis; }
+  #status .dot { width:7px; height:7px; border-radius:50%; background:var(--accent); animation:pulse 1s infinite; }
+  #status button { background:none; border:0; color:var(--muted); font-size:12px; padding:0 4px; cursor:pointer; }
+  #status button:hover { color:var(--fg); }
+  #star.on { color:#f7c948; }
+  #shield { font-size:14px; }
+  #shield.off { opacity:.4; }
+  #shield .n { position:absolute; right:0; top:-2px; font-size:9px; background:var(--accent); color:var(--onaccent);
+    border-radius:8px; padding:0 4px; }
+  #priv { display:none; font-size:12px; color:#b57bee; padding:0 4px; }
+  body.is-private #priv { display:block; }
+</style>
+</head>
+<body>
+  <div id="tabs"></div>
+  <div id="winbar">
+    <button id="tl" class="ic" title="All tabs and recently closed"></button>
+    <span id="wc">
+      <button id="wmin" class="ic" title="Minimize"></button>
+      <button id="wmax" class="ic" title="Maximize"></button>
+      <button id="wclose" class="ic" title="Close"></button>
+    </span>
+  </div>
+  <div id="status">
+    <span class="dot" id="st-dot" style="display:none"></span>
+    <span class="grow" id="st-text"></span>
+    <span id="st-blocked"></span>
+    <button id="st-zoom" title="Reset zoom"></button>
+    <span id="st-tabs"></span>
+  </div>
+  <div id="bar">
+    <button id="panelbtn" class="ic" title="Side panel (F4)"></button>
+    <button id="back" class="nav" title="Back"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="M12 5l-7 7 7 7"/></svg></button>
+    <button id="fwd" class="nav" title="Forward"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5l7 7-7 7"/></svg></button>
+    <button id="reload" class="nav" title="Reload"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 0-2.4 5.7"/><path d="M20 4v8h-8"/></svg></button>
+    <span id="priv">Private</span>
+    <div id="urlwrap">
+      <button id="sec" class="internal" title="Connection and site information"><span id="secicon" class="ic"></span><span class="lbl" id="seclbl"></span></button>
+      <input id="url" placeholder="Search or enter address" spellcheck="false">
+      <button id="key" class="ic" title="Saved logins for this site"><span id="keyic"></span><span class="n" id="keyn"></span></button>
+    </div>
+    <button id="shield" class="ic" title="Tracker blocking for this site"><span id="shieldic"></span><span class="n" id="shieldn"></span></button>
+    <button id="star" class="ic" title="Bookmark (Ctrl+D)"></button>
+    <button id="profile" title="Profiles"><span id="pchip"></span></button>
+    <button id="menu" class="ic" title="Menu"></button>
+  </div>
+<script>
+  const $ = (id) => document.getElementById(id);
+  const svg = (inner) => '<svg viewBox="0 0 24 24">' + inner + '</svg>';
+  const ICON = {
+    panel: svg('<rect x="3" y="4.5" width="18" height="15" rx="3"/><path d="M9 4.5v15"/>'),
+    star: svg('<path d="M12 3.6l2.6 5.3 5.8.8-4.2 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8-4.2-4.1 5.8-.8z"/>'),
+    shield: svg('<path d="M12 3l7.5 3v5.2c0 4.3-3.1 7.8-7.5 9.8-4.4-2-7.5-5.5-7.5-9.8V6z"/><path d="M8.8 12l2.2 2.2 4.2-4.4"/>'),
+    lock: svg('<rect x="5" y="11" width="14" height="9.5" rx="2.2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>'),
+    warn: svg('<path d="M12 4.2l9 15.6H3z"/><path d="M12 10v4.2M12 17.4v.01"/>'),
+    info: svg('<circle cx="12" cy="12" r="9"/><path d="M12 11v5.2M12 7.8v.01"/>'),
+    menu: svg('<path d="M4 7h16M4 12h16M4 17h16"/>'),
+    chevron: svg('<path d="M6 9.5l6 6 6-6"/>'),
+    min: svg('<path d="M6 12h12"/>'),
+    max: svg('<rect x="6" y="6" width="12" height="12" rx="1.6"/>'),
+    restore: svg('<rect x="8.5" y="5" width="10.5" height="10.5" rx="1.6"/><path d="M5 9v8.5A1.5 1.5 0 0 0 6.5 19H15"/>'),
+    close: svg('<path d="M6 6l12 12M18 6L6 18"/>'),
+    key: svg('<circle cx="8" cy="15.5" r="3.8"/><path d="M10.8 12.8L19 4.6M15.5 8.1l2.6 2.6M13.2 10.4l1.8 1.8"/>'),
+  };
+  document.getElementById('panelbtn').innerHTML = ICON.panel;
+  document.getElementById('menu').innerHTML = ICON.menu;
+  document.getElementById('tl').innerHTML = ICON.chevron;
+  document.getElementById('wmin').innerHTML = ICON.min;
+  document.getElementById('wclose').innerHTML = ICON.close;
+  document.getElementById('star').innerHTML = ICON.star;
+  document.getElementById('shieldic').innerHTML = ICON.shield;
+  document.getElementById('keyic').innerHTML = ICON.key;
+  document.getElementById('wmax').innerHTML = ICON.max;
+  document.getElementById('secicon').innerHTML = ICON.info;
+  const part = new URLSearchParams(location.search).get('part');
+  document.body.classList.add('part-' + part);
+  const urlInput = $('url');
+  const TAB_MIME = 'application/x-mybrowser-tab';
+  // dropping a tab on empty space in the strip moves it to the end
+  $('tabs').addEventListener('dragover', (e) => { if (e.dataTransfer.types.includes(TAB_MIME)) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; } });
+  $('tabs').addEventListener('drop', (e) => {
+    e.preventDefault();
+    const id = Number(e.dataTransfer.getData(TAB_MIME));
+    if (id) api.moveTab(id, null);
+  });
+
+  $('panelbtn').onclick = () => api.panelToggle();
+  $('key').onclick = () => api.showLogins();
+  $('tl').onclick = () => api.tabList();
+  $('wmin').onclick = () => api.winMin();
+  $('wmax').onclick = () => api.winMax();
+  $('wclose').onclick = () => api.winClose();
+  $('tabs').addEventListener('dblclick', (e) => { if (e.target.id === 'tabs' && document.body.classList.contains('frameless')) api.winMax(); });
+  $('back').onclick = () => api.back();
+  $('fwd').onclick = () => api.forward();
+  $('reload').onclick = () => api.reload();
+  $('star').onclick = () => api.toggleBookmark();
+  $('shield').onclick = () => api.toggleShield();
+  $('menu').onclick = () => api.mainMenu();
+  $('profile').onclick = () => api.profileMenu();
+  let editing = false, shownUrl = '';
+  urlInput.addEventListener('input', () => { editing = true; api.suggestQuery(urlInput.value); });
+  urlInput.addEventListener('blur', () => { editing = false; urlInput.value = shownUrl; api.suggestClose(); });
+  api.onUrlFill((t) => { urlInput.value = t; });
+  urlInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { editing = false; api.urlEnter(urlInput.value); }
+    else if (e.key === 'ArrowDown') { e.preventDefault(); api.suggestNav(1); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); api.suggestNav(-1); }
+    else if (e.key === 'Escape') { editing = false; urlInput.value = shownUrl; urlInput.select(); api.suggestClose(); }
+  });
+  $('sec').onclick = () => api.showSecurity();
+  $('st-zoom').onclick = () => api.resetZoom();
+  urlInput.addEventListener('focus', () => urlInput.select());
+  api.onFocusUrl(() => { window.focus(); urlInput.focus(); if (!editing) urlInput.select(); });
+
+  function tabEl(t, activeId) {
+    const el = document.createElement('div');
+    el.className = 'tab' + (t.id === activeId ? ' active' : '') + (t.pinned ? ' pinned' : '')
+      + (t.private ? ' private' : '') + (t.loading ? ' loading' : '');
+    el.title = t.title;
+    el.onclick = () => api.switchTab(t.id);
+    el.onauxclick = (e) => { if (e.button === 1) api.closeTab(t.id); };
+    el.oncontextmenu = (e) => { e.preventDefault(); api.tabMenu(t.id); };
+
+    // drag to reorder, drag out of the strip for a new window, drop on another window's strip to move it there
+    el.draggable = true;
+    el.ondragstart = (e) => {
+      e.dataTransfer.setData(TAB_MIME, String(t.id));
+      e.dataTransfer.effectAllowed = 'move';
+    };
+    el.ondragover = (e) => {
+      if (e.dataTransfer.types.includes(TAB_MIME)) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }
+    };
+    el.ondrop = (e) => {
+      e.preventDefault(); e.stopPropagation();
+      const id = Number(e.dataTransfer.getData(TAB_MIME));
+      if (id && id !== t.id) api.moveTab(id, t.id);
+    };
+    el.ondragend = (e) => {
+      const outside = e.clientX < -8 || e.clientY < -8 || e.clientX > innerWidth + 8 || e.clientY > innerHeight + 8
+        || (e.screenX === 0 && e.screenY === 0);
+      api.dragEnd(t.id, e.dataTransfer.dropEffect, outside);
+    };
+
+    let ico;
+    if (t.favicon) { ico = document.createElement('img'); ico.src = t.favicon; ico.onerror = () => { ico.removeAttribute('src'); }; }
+    else { ico = document.createElement('div'); ico.textContent = (t.title || '?').trim().charAt(0).toUpperCase(); }
+    ico.className = 'ico';
+    el.append(ico);
+
+    const title = document.createElement('span');
+    title.className = 't';
+    title.textContent = t.title;
+    el.append(title);
+
+    if (t.audible || t.muted) {
+      const snd = document.createElement('button');
+      snd.className = 'snd';
+      snd.textContent = t.muted ? '🔇' : '🔊';
+      snd.onclick = (e) => { e.stopPropagation(); api.muteTab(t.id); };
+      el.append(snd);
+    }
+    const x = document.createElement('button');
+    x.className = 'x';
+    x.textContent = '×';
+    x.onclick = (e) => { e.stopPropagation(); api.closeTab(t.id); };
+    el.append(x);
+    return el;
+  }
+
+  api.onState((s) => {
+    const root = document.documentElement.style;
+    for (const [k, v] of Object.entries(s.theme)) if (typeof v === 'string') root.setProperty('--' + k, v);
+    document.body.classList.toggle('vertical', s.tabBar === 'left');
+    document.body.classList.toggle('is-private', !!s.private);
+    document.body.classList.toggle('frameless', !!s.frameless);
+    if (s.profile) { $('pchip').textContent = (s.profile.name || '?').charAt(0).toUpperCase(); $('pchip').style.background = s.profile.color; $('profile').title = 'Profile: ' + s.profile.name; }
+    $('wmax').innerHTML = s.maximized ? ICON.restore : ICON.max;
+
+    $('back').disabled = !s.canBack;
+    $('fwd').disabled = !s.canForward;
+    $('star').classList.toggle('on', s.bookmarked);
+    $('shield').classList.toggle('off', !s.blockerOn || s.siteAllowed);
+    $('shieldn').textContent = s.blocked > 0 && s.blockerOn && !s.siteAllowed ? s.blocked : '';
+    shownUrl = /^my:\/\/start/.test(s.url) || s.url === 'about:blank' ? '' : s.url;
+    if (!editing) urlInput.value = shownUrl;
+
+    const sec = $('sec');
+    sec.className = s.security.level;
+    $('secicon').innerHTML = { secure: ICON.lock, insecure: ICON.warn, warning: ICON.warn, internal: ICON.info }[s.security.level] || ICON.info;
+    $('seclbl').textContent = s.security.label;
+
+    // status bar
+    $('st-text').textContent = s.hover || s.statusText || (s.loading ? 'Loading…' : '');
+    $('st-dot').style.display = s.loading ? '' : 'none';
+    $('st-blocked').textContent = s.blocked > 0 && s.blockerOn && !s.siteAllowed ? s.blocked + ' blocked' : '';
+    const lg = s.logins;
+    $('key').classList.toggle('show', !!(lg && (lg.form || lg.count > 0)));
+    $('key').classList.toggle('has', !!(lg && lg.count > 0));
+    $('keyn').textContent = lg && lg.count > 0 ? lg.count : '';
+    $('key').title = lg && lg.locked ? 'Saved logins (locked)' : 'Saved logins for this site';
+    $('st-zoom').textContent = s.zoom + '%';
+    $('st-tabs').textContent = s.tabCount + (s.tabCount === 1 ? ' tab' : ' tabs');
+
+    if (part === 'tabs') {
+      const strip = $('tabs');
+      strip.textContent = '';
+      for (const t of s.tabs) strip.appendChild(tabEl(t, s.activeId));
+      const plus = document.createElement('button');
+      plus.id = 'newtab';
+      plus.textContent = s.tabBar === 'left' ? '+  New tab' : '+';
+      plus.onclick = () => api.newTab();
+      strip.appendChild(plus);
+    }
+  });
+</script>
+</body>
+</html>

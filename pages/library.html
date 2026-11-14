@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Library</title>
+<link rel="stylesheet" href="my://assets/theme.css">
+<link rel="stylesheet" href="my://assets/common.css">
+</head>
+<body>
+<div class="wrap">
+  <h1>Library</h1>
+  <p class="muted" id="status"></p>
+  <input id="filter" placeholder="Filter bookmarks, tabs and history" style="width:100%">
+  <h2>Bookmarks <small id="bn"></small></h2><ul class="plain" id="bm"></ul>
+  <h2>Tabs on other devices</h2><div id="dev"></div>
+  <h2>Recent history <button id="clr" class="danger" style="margin-left:10px;padding:3px 10px">Clear history</button></h2>
+  <ul class="plain" id="hist"></ul>
+</div>
+<script>
+  const $ = (id) => document.getElementById(id);
+  const isWeb = (u) => /^https?:\/\//i.test(u);
+  let L = null;
+
+  function item(url, title, extra) {
+    const li = document.createElement('li');
+    const g = document.createElement('div'); g.className = 'grow';
+    const a = document.createElement('a'); a.href = url; a.textContent = title || url;
+    const s = document.createElement('small'); s.textContent = url;
+    g.append(a, s); li.append(g);
+    if (extra) li.append(extra);
+    return li;
+  }
+
+  function render() {
+    if (!L) return;
+    const q = $('filter').value.toLowerCase().split(/\s+/).filter(Boolean);
+    const ok = (...f) => { const s = f.join(' ').toLowerCase(); return q.every((t) => s.includes(t)); };
+    $('status').textContent = L.syncStatus;
+
+    const bm = L.bookmarks.filter((b) => ok(b.title, b.url));
+    $('bn').textContent = '(' + bm.length + ')';
+    const bl = $('bm'); bl.textContent = '';
+    bm.sort((a, b) => (a.folder || '\uffff').localeCompare(b.folder || '\uffff') || b.added - a.added);
+    const anyFolder = bm.some((y) => y.folder);
+    let lastFolder = null;
+    bm.forEach((b) => {
+      if (anyFolder && (b.folder || '') !== lastFolder) { lastFolder = b.folder || ''; const h = document.createElement('li'); h.className = 'muted'; h.style.fontSize = '12px'; h.style.textTransform = 'uppercase'; h.textContent = lastFolder || 'Unsorted'; bl.appendChild(h); }
+      const rm = document.createElement('button'); rm.textContent = 'Remove'; rm.className = 'danger';
+      rm.onclick = async () => { await browser.removeBookmark(b.url); load(); };
+      bl.appendChild(item(b.url, b.title, rm));
+    });
+    if (!bm.length) bl.innerHTML = '<li class="muted">Nothing here yet. Press Ctrl+D on a page to bookmark it.</li>';
+
+    const dv = $('dev'); dv.textContent = '';
+    for (const d of L.remoteTabs) {
+      const h = document.createElement('h3'); h.textContent = d.device + ' · ' + new Date(d.updated).toLocaleString();
+      const ul = document.createElement('ul'); ul.className = 'plain';
+      d.tabs.filter((t) => isWeb(t.url) && ok(t.title, t.url)).forEach((t) => ul.appendChild(item(t.url, t.title)));
+      dv.append(h, ul);
+    }
+    if (!L.remoteTabs.length) dv.innerHTML = '<p class="muted">None synced yet.</p>';
+
+    const hl = $('hist'); hl.textContent = '';
+    L.history.filter((h) => isWeb(h.url) && ok(h.title, h.url)).slice(0, 200)
+      .forEach((h) => hl.appendChild(item(h.url, h.title)));
+  }
+
+  async function load() { L = await browser.getLibrary(); render(); }
+  $('filter').oninput = render;
+  $('clr').onclick = async () => { await browser.clearData('history'); load(); };
+  load();
+</script>
+</body>
+</html>

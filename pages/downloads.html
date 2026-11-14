@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Downloads</title>
+<link rel="stylesheet" href="my://assets/theme.css">
+<link rel="stylesheet" href="my://assets/common.css">
+<style>
+  progress { width:100%; height:6px; accent-color:var(--accent); }
+  .btns { display:flex; gap:6px; }
+  .btns button { padding:3px 10px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Downloads</h1>
+  <ul class="plain" id="list"></ul>
+</div>
+<script>
+  const fmt = (n) => n > 1e9 ? (n / 1e9).toFixed(1) + ' GB' : n > 1e6 ? (n / 1e6).toFixed(1) + ' MB' : n > 1e3 ? Math.round(n / 1e3) + ' KB' : n + ' B';
+  async function tick() {
+    const list = document.getElementById('list');
+    const ds = await browser.getDownloads();
+    list.textContent = '';
+    if (!ds.length) { list.innerHTML = '<li class="muted">No downloads yet.</li>'; return; }
+    for (const d of ds) {
+      const li = document.createElement('li');
+      const g = document.createElement('div'); g.className = 'grow';
+      const name = document.createElement('div'); name.textContent = d.name;
+      const sub = document.createElement('small');
+      const active = d.state === 'progressing' || d.state === 'paused';
+      sub.textContent = active ? `${fmt(d.received)} / ${d.total ? fmt(d.total) : '?'}  ${d.state === 'paused' ? '(paused)' : ''}`
+        : d.state === 'completed' ? 'Completed · ' + d.path : d.state;
+      g.append(name, sub);
+      if (active && d.total) { const p = document.createElement('progress'); p.max = d.total; p.value = d.received; g.append(p); }
+      const b = document.createElement('div'); b.className = 'btns';
+      const btn = (t, act, cls) => { const x = document.createElement('button'); x.textContent = t; if (cls) x.className = cls; x.onclick = async () => { await browser.downloadAction(d.id, act); tick(); }; b.append(x); };
+      if (d.state === 'completed') { btn('Open', 'open'); btn('Show', 'show'); }
+      if (active) { btn(d.state === 'paused' ? 'Resume' : 'Pause', d.state === 'paused' ? 'resume' : 'pause'); btn('Cancel', 'cancel', 'danger'); }
+      btn('Remove', 'remove', 'danger');
+      li.append(g, b);
+      list.appendChild(li);
+    }
+  }
+  tick(); setInterval(tick, 1000);
+</script>
+</body>
+</html>

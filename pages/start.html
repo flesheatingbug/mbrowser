@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Start Page</title>
+<link rel="stylesheet" href="my://assets/theme.css">
+<link rel="stylesheet" href="my://assets/common.css">
+<style>
+  :root { --tile:150px; }
+  body { display:flex; justify-content:center; }
+  .box { width:min(1100px, 94vw); padding-top:9vh; text-align:center; position:relative; }
+  #brand { display:flex; align-items:center; justify-content:center; gap:14px; margin-bottom:26px; }
+  #brand img { width:56px; height:56px; }
+  #brand span { font-size:34px; font-weight:600; letter-spacing:-.5px; }
+  #search { width:min(640px, 100%); font-size:18px; padding:14px 22px; border-radius:30px; }
+  #gear { position:fixed; top:14px; right:16px; background:var(--tab); border:1px solid var(--line); border-radius:16px;
+    padding:5px 14px; font-size:13px; color:var(--muted); }
+  #gear:hover { color:var(--fg); border-color:var(--accent); }
+  #panel { display:none; position:fixed; top:48px; right:16px; width:260px; text-align:left; background:var(--tab);
+    border:1px solid var(--line); border-radius:12px; padding:14px; z-index:5; }
+  #panel label { display:flex; justify-content:space-between; align-items:center; gap:10px; margin:8px 0; font-size:14px; }
+  #panel input[type=range] { width:100%; padding:0; }
+
+  #groups { display:flex; gap:6px; justify-content:center; flex-wrap:wrap; margin-top:34px; }
+  .gbtn { background:none; border:1px solid transparent; color:var(--muted); border-radius:16px; padding:5px 14px; cursor:pointer; }
+  .gbtn:hover { color:var(--fg); }
+  .gbtn.on { background:var(--tab); color:var(--fg); border-color:var(--line); }
+  .gbtn.drop { border-color:var(--accent); color:var(--fg); }
+  #gtools { margin-top:6px; font-size:12px; }
+  #gtools a { color:var(--muted); margin:0 6px; cursor:pointer; }
+  #gtools a:hover { color:var(--fg); }
+
+  .grid { display:grid; grid-template-columns:repeat(auto-fill, var(--tile)); gap:16px; justify-content:center; margin-top:22px; }
+  .tile { position:relative; display:flex; flex-direction:column; width:var(--tile); color:var(--fg); }
+  .tile:hover { text-decoration:none; }
+  .thumb { height:calc(var(--tile) * 0.62); border-radius:10px; background:var(--tab); border:1px solid var(--line);
+    overflow:hidden; display:grid; place-items:center; }
+  .tile:hover .thumb { border-color:var(--accent); }
+  .thumb img { width:100%; height:100%; object-fit:cover; object-position:top; display:block; }
+  .thumb .big { width:calc(var(--tile) * 0.3); height:calc(var(--tile) * 0.3); border-radius:12px; background:var(--accent); color:var(--onaccent);
+    font-size:calc(var(--tile) * 0.15); font-weight:600; display:grid; place-items:center; }
+  .nm { margin-top:6px; font-size:13px; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+  .tile .acts { position:absolute; top:5px; right:5px; display:none; gap:4px; }
+  .tile:hover .acts { display:flex; }
+  .acts button { background:var(--bg); border:1px solid var(--line); border-radius:6px; padding:0 6px; height:22px; font-size:12px; color:var(--fg); }
+  .tile.over .thumb { border-color:var(--accent); border-style:dashed; }
+  .tile.add .thumb { border-style:dashed; color:var(--muted); font-size:28px; cursor:pointer; background:none; }
+  .tile.add { cursor:pointer; }
+
+  #edit { display:none; margin:20px auto 0; max-width:520px; text-align:left; background:var(--tab); border:1px solid var(--line);
+    border-radius:12px; padding:14px; }
+  #edit .r { display:flex; gap:8px; margin:8px 0; align-items:center; }
+  #edit .r label { width:70px; color:var(--muted); font-size:13px; }
+  #edit .r input, #edit .r select { flex:1; }
+</style>
+</head>
+<body>
+<button id="gear" title="Customize the start page">⚙ Customize</button>
+<div id="panel">
+  <label>Tile size <span id="sizev"></span></label>
+  <input type="range" id="size" min="90" max="260" step="10">
+  <label>Page thumbnails <input type="checkbox" id="thumbs"></label>
+  <label>Search box <input type="checkbox" id="showsearch"></label>
+  <label><a href="my://settings#startpage">All settings…</a></label>
+</div>
+<div class="box">
+  <div id="brand"><img src="my://assets/logo.png" alt=""><span>mbrowser</span></div>
+  <form id="f"><input id="search" placeholder="Search or enter address" autocomplete="off" spellcheck="false"></form>
+  <div id="groups"></div>
+  <div id="gtools"></div>
+  <form id="edit">
+    <div class="r"><label id="l1">Title</label><input id="f1" type="text"></div>
+    <div class="r" id="r2"><label>Address</label><input id="f2" type="text" placeholder="https://…"></div>
+    <div class="r" id="r3"><label>Group</label><select id="f3"></select></div>
+    <div class="r"><button type="submit">Save</button><button type="button" id="cancel">Cancel</button></div>
+  </form>
+  <div class="grid" id="grid"></div>
+</div>
+<script>
+  const $ = (id) => document.getElementById(id);
+  let SP = null;          // the startPage settings object
+  let drag = null;        // { gi, di } of the tile being dragged
+  let editing = null;     // { kind:'dial'|'group', gi, di|-1 }
+  const save = () => browser.setSetting('startPage', SP);
+  const isWeb = (u) => /^https?:\/\//i.test(u);
+  const activeIdx = () => Math.max(0, SP.groups.findIndex((g) => g.id === SP.activeGroup));
+
+  $('f').onsubmit = (e) => { e.preventDefault(); const v = $('search').value.trim(); if (v) browser.go(v); };
+
+  // ---- customise panel ----
+  $('gear').onclick = () => { const p = $('panel'); p.style.display = p.style.display === 'block' ? 'none' : 'block'; };
+  $('size').oninput = () => { SP.tileSize = Number($('size').value); $('sizev').textContent = SP.tileSize + 'px'; applyLook(); };
+  $('size').onchange = save;
+  $('thumbs').onchange = () => { SP.thumbnails = $('thumbs').checked; save(); render(); };
+  $('showsearch').onchange = () => { SP.showSearch = $('showsearch').checked; save(); applyLook(); };
+
+  function applyLook() {
+    document.documentElement.style.setProperty('--tile', SP.tileSize + 'px');
+    $('f').style.display = SP.showSearch ? '' : 'none';
+  }
+
+  // ---- edit form ----
+  function openForm(mode) {
+    editing = mode;
+    const isDial = mode.kind === 'dial';
+    $('edit').style.display = 'block';
+    $('l1').textContent = isDial ? 'Title' : 'Group name';
+    $('r2').style.display = isDial ? 'flex' : 'none';
+    $('r3').style.display = isDial ? 'flex' : 'none';
+    const g = SP.groups[mode.gi];
+    const d = isDial && mode.di >= 0 ? g.dials[mode.di] : null;
+    $('f1').value = isDial ? (d ? d.title : '') : (mode.di === -1 && mode.isNew ? '' : g.name);
+    $('f2').value = d ? d.url : '';
+    const sel = $('f3');
+    sel.textContent = '';
+    SP.groups.forEach((x, i) => { const o = document.createElement('option'); o.value = i; o.textContent = x.name; sel.append(o); });
+    sel.value = mode.gi;
+    ($('f1').value || !isDial ? $('f1') : $('f2')).focus();
+  }
+  $('cancel').onclick = () => { $('edit').style.display = 'none'; editing = null; };
+  $('edit').onsubmit = async (e) => {
+    e.preventDefault();
+    if (!editing) return;
+    if (editing.kind === 'group') {
+      const name = $('f1').value.trim() || 'Group';
+      if (editing.isNew) {
+        const id = 'g' + Date.now();
+        SP.groups.push({ id, name, dials: [] });
+        SP.activeGroup = id;
+      } else SP.groups[editing.gi].name = name;
+    } else {
+      let url = $('f2').value.trim();
+      if (!url) return;
+      if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
+      const dial = { title: $('f1').value.trim() || url.replace(/^https?:\/\//i, ''), url };
+      const to = Number($('f3').value);
+      if (editing.di >= 0) {
+        const from = SP.groups[editing.gi].dials;
+        if (to === editing.gi) from[editing.di] = dial;
+        else { from.splice(editing.di, 1); SP.groups[to].dials.push(dial); }
+      } else SP.groups[to].dials.push(dial);
+      SP.activeGroup = SP.groups[to].id;
+    }
+    $('edit').style.display = 'none'; editing = null;
+    await save(); render();
+  };
+
+  // ---- rendering ----
+  function render() {
+    applyLook();
+    $('size').value = SP.tileSize; $('sizev').textContent = SP.tileSize + 'px';
+    $('thumbs').checked = SP.thumbnails; $('showsearch').checked = SP.showSearch;
+    const ai = activeIdx();
+    SP.activeGroup = SP.groups[ai].id;
+
+    const gb = $('groups'); gb.textContent = '';
+    SP.groups.forEach((g, i) => {
+      const b = document.createElement('button');
+      b.className = 'gbtn' + (i === ai ? ' on' : '');
+      b.textContent = g.name;
+      b.onclick = () => { SP.activeGroup = g.id; save(); render(); };
+      b.ondragover = (e) => { if (drag) { e.preventDefault(); b.classList.add('drop'); } };
+      b.ondragleave = () => b.classList.remove('drop');
+      b.ondrop = async (e) => {
+        e.preventDefault(); b.classList.remove('drop');
+        if (!drag || drag.gi === i) return;
+        const [d] = SP.groups[drag.gi].dials.splice(drag.di, 1);
+        SP.groups[i].dials.push(d);
+        drag = null; await save(); render();
+      };
+      gb.appendChild(b);
+    });
+    const addG = document.createElement('button');
+    addG.className = 'gbtn'; addG.textContent = '+ Group';
+    addG.onclick = () => openForm({ kind: 'group', gi: ai, di: -1, isNew: true });
+    gb.appendChild(addG);
+
+    const tools = $('gtools'); tools.textContent = '';
+    const link = (t, fn) => { const a = document.createElement('a'); a.textContent = t; a.onclick = fn; tools.appendChild(a); };
+    link('Rename group', () => openForm({ kind: 'group', gi: ai, di: -1 }));
+    if (SP.groups.length > 1) {
+      link('Delete group', async () => {
+        if (SP.groups[ai].dials.length && !confirm('Delete this group and its ' + SP.groups[ai].dials.length + ' speed dials?')) return;
+        SP.groups.splice(ai, 1); SP.activeGroup = SP.groups[0].id; await save(); render();
+      });
+    }
+
+    const grid = $('grid'); grid.textContent = '';
+    SP.groups[ai].dials.forEach((d, di) => {
+      if (!isWeb(d.url)) return;
+      const a = document.createElement('a');
+      a.className = 'tile'; a.href = d.url; a.draggable = true;
+      const th = document.createElement('div'); th.className = 'thumb';
+      const big = document.createElement('div'); big.className = 'big'; big.textContent = (d.title || d.url).charAt(0).toUpperCase();
+      th.append(big);
+      if (SP.thumbnails) {
+        const img = document.createElement('img');
+        img.src = 'my://thumb/x?u=' + encodeURIComponent(d.url);
+        img.onload = () => { big.remove(); th.append(img); };
+        // (stays hidden until it loads, so a missing thumbnail simply keeps the letter tile)
+      }
+      const nm = document.createElement('div'); nm.className = 'nm'; nm.textContent = d.title || d.url;
+      const acts = document.createElement('div'); acts.className = 'acts';
+      const ed = document.createElement('button'); ed.textContent = '✎'; ed.title = 'Edit';
+      ed.onclick = (e) => { e.preventDefault(); openForm({ kind: 'dial', gi: ai, di }); };
+      const rm = document.createElement('button'); rm.textContent = '×'; rm.title = 'Remove';
+      rm.onclick = async (e) => { e.preventDefault(); SP.groups[ai].dials.splice(di, 1); await save(); render(); };
+      acts.append(ed, rm);
+      a.append(th, nm, acts);
+
+      a.ondragstart = (e) => { drag = { gi: ai, di }; e.dataTransfer.setData('text/plain', d.url); e.dataTransfer.effectAllowed = 'move'; };
+      a.ondragend = () => { drag = null; };
+      a.ondragover = (e) => { if (drag && drag.gi === ai) { e.preventDefault(); a.classList.add('over'); } };
+      a.ondragleave = () => a.classList.remove('over');
+      a.ondrop = async (e) => {
+        e.preventDefault(); a.classList.remove('over');
+        if (!drag || drag.gi !== ai || drag.di === di) return;
+        const list = SP.groups[ai].dials;
+        const [moved] = list.splice(drag.di, 1);
+        list.splice(di, 0, moved);
+        drag = null; await save(); render();
+      };
+      grid.appendChild(a);
+    });
+    const add = document.createElement('div');
+    add.className = 'tile add';
+    add.innerHTML = '<div class="thumb">+</div><div class="nm">Add speed dial</div>';
+    add.onclick = () => openForm({ kind: 'dial', gi: ai, di: -1 });
+    grid.appendChild(add);
+  }
+
+  (async () => {
+    try {
+      if (typeof browser === 'undefined') throw new Error('the browser API is not available on this page');
+      const st = await browser.getSettings();
+      SP = st.startPage;
+      if (!SP || !Array.isArray(SP.groups) || !SP.groups.length) throw new Error('start page settings are missing');
+      render();
+      if (st.tabs.newTabFocus === 'page') $('search').focus();
+    } catch (err) {
+      const d = document.createElement('div');
+      d.style.cssText = 'padding:24px;color:var(--fg)';
+      d.textContent = 'The start page could not load: ' + err.message + '. You can still type an address in the address bar. Settings: my://settings';
+      document.body.append(d);
+    }
+  })();
+</script>
+</body>
+</html>

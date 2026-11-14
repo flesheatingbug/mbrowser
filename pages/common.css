@@ -1,0 +1,22 @@
+* { box-sizing: border-box; }
+body { margin:0; background:var(--bg); color:var(--fg); font:15px system-ui, sans-serif; }
+a { color:var(--accent); text-decoration:none; }
+a:hover { text-decoration:underline; }
+h1 { font-size:26px; margin:0 0 16px; }
+h2 { font-size:17px; margin:26px 0 8px; }
+h3 { font-size:14px; margin:14px 0 4px; }
+small, .muted { color:var(--muted); }
+input, select, textarea, button { font:inherit; color:var(--fg); background:var(--tab); border:1px solid var(--line);
+  border-radius:8px; padding:7px 10px; outline:none; }
+input:focus, select:focus, textarea:focus { border-color:var(--accent); }
+input[type=checkbox] { width:18px; height:18px; padding:0; accent-color:var(--accent); }
+input[type=color] { padding:2px; width:48px; height:32px; }
+button { cursor:pointer; }
+button:hover { border-color:var(--accent); }
+button.danger:hover { border-color:#e5534b; color:#e5534b; }
+ul.plain { list-style:none; padding:0; margin:0; }
+ul.plain li { padding:7px 0; border-bottom:1px solid var(--line); display:flex; gap:10px; align-items:center; }
+ul.plain li .grow { flex:1; min-width:0; }
+ul.plain li .grow a { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+ul.plain li .grow small { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.wrap { max-width:860px; margin:0 auto; padding:32px 20px 60px; }

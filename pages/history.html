@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>History</title>
+<link rel="stylesheet" href="my://assets/theme.css">
+<link rel="stylesheet" href="my://assets/common.css">
+<style>
+  .bar { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:14px; }
+  .bar input[type=search], .bar input[type=text] { flex:1; min-width:220px; }
+  .day { position:sticky; top:0; background:var(--bg); padding:14px 0 6px; font-weight:600; font-size:14px; z-index:1; }
+  .day small { font-weight:400; margin-left:8px; }
+  .h { display:flex; align-items:center; gap:12px; padding:6px 4px; border-bottom:1px solid var(--line); border-radius:6px; }
+  .h:hover { background:var(--tab); }
+  .h .tm { width:56px; color:var(--muted); font-size:12px; flex:none; }
+  .h .t { flex:1; min-width:0; }
+  .h .t a { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .h .t small { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .h button { padding:2px 9px; visibility:hidden; }
+  .h:hover button { visibility:visible; }
+  .more { text-align:center; margin:18px 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>History</h1>
+  <div class="bar">
+    <input id="q" type="search" placeholder="Search history by title or address" autofocus>
+    <select id="range">
+      <option value="0">All time</option>
+      <option value="today">Today</option>
+      <option value="yesterday">Yesterday</option>
+      <option value="week">Last 7 days</option>
+      <option value="month">Last 30 days</option>
+    </select>
+  </div>
+  <div class="bar">
+    <span class="muted" id="count"></span>
+    <span style="flex:1"></span>
+    <select id="del">
+      <option value="">Delete…</option>
+      <option value="hour">Last hour</option>
+      <option value="today">Today</option>
+      <option value="week">Last 7 days</option>
+      <option value="all">Everything</option>
+    </select>
+  </div>
+  <div id="list"></div>
+  <div class="more"><button id="more" style="display:none">Show more</button></div>
+</div>
+<script>
+  const $ = (id) => document.getElementById(id);
+  const DAY = 864e5;
+  let limit = 300;
+  const startOfDay = (t) => { const d = new Date(t); d.setHours(0, 0, 0, 0); return d.getTime(); };
+
+  function range() {
+    const v = $('range').value, now = Date.now(), today = startOfDay(now);
+    if (v === 'today') return { from: today };
+    if (v === 'yesterday') return { from: today - DAY, to: today - 1 };
+    if (v === 'week') return { from: today - 6 * DAY };
+    if (v === 'month') return { from: today - 29 * DAY };
+    return {};
+  }
+  const dayLabel = (t) => {
+    const today = startOfDay(Date.now()), d = startOfDay(t);
+    if (d === today) return 'Today';
+    if (d === today - DAY) return 'Yesterday';
+    return new Date(t).toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+  };
+
+  async function load() {
+    const r = await browser.historyQuery({ q: $('q').value, limit, ...range() });
+    const list = $('list'); list.textContent = '';
+    let day = '', group = null;
+    for (const h of r.items) {
+      if (!/^https?:\/\//i.test(h.url)) continue;
+      const lbl = dayLabel(h.time);
+      if (lbl !== day) {
+        day = lbl;
+        group = document.createElement('div');
+        const hd = document.createElement('div'); hd.className = 'day'; hd.textContent = lbl;
+        list.append(hd, group);
+      }
+      const row = document.createElement('div'); row.className = 'h';
+      const tm = document.createElement('span'); tm.className = 'tm'; tm.textContent = new Date(h.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      const t = document.createElement('div'); t.className = 't';
+      const a = document.createElement('a'); a.href = h.url; a.textContent = h.title || h.url;
+      const sm = document.createElement('small'); sm.className = 'muted'; sm.textContent = h.url;
+      t.append(a, sm);
+      const x = document.createElement('button'); x.className = 'danger'; x.textContent = 'Remove'; x.title = 'Remove this page from history';
+      x.onclick = async () => { await browser.historyDelete({ urls: [h.url] }); load(); };
+      row.append(tm, t, x);
+      group.append(row);
+    }
+    if (!r.items.length) list.innerHTML = '<p class="muted">Nothing found.</p>';
+    $('count').textContent = r.items.length + ' shown · ' + r.total + ' entries stored on this computer';
+    $('more').style.display = r.items.length >= limit ? '' : 'none';
+  }
+
+  $('q').oninput = () => { limit = 300; load(); };
+  $('range').onchange = () => { limit = 300; load(); };
+  $('more').onclick = () => { limit += 300; load(); };
+  $('del').onchange = async () => {
+    const v = $('del').value; $('del').value = '';
+    if (!v) return;
+    const now = Date.now(), today = startOfDay(now);
+    const spec = { hour: { from: now - 3600e3 }, today: { from: today }, week: { from: today - 6 * DAY }, all: { from: 0 } }[v];
+    const label = { hour: 'the last hour', today: 'today', week: 'the last 7 days', all: 'all time' }[v];
+    if (!confirm('Delete browsing history for ' + label + '? This only affects this computer; entries already on the sync server are not removed.')) return;
+    await browser.historyDelete(spec);
+    load();
+  };
+  load();
+</script>
+</body>
+</html>
