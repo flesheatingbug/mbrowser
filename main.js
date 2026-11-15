@@ -147,7 +147,11 @@ function broadcastUpd(ch, data) {
 }
 
 function getAutoUpdater() {
-  if (!app.isPackaged) return null;
+  // app.isPackaged can be false when electron-builder skips ASAR.
+  // process.env.APPIMAGE is set by the AppImage runtime on Linux.
+  // Either indicator means we're running a packaged build.
+  const packaged = app.isPackaged || !!process.env.APPIMAGE;
+  if (!packaged) return null;
   try { return require('electron-updater').autoUpdater; } catch { return null; }
 }
 
