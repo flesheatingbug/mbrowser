@@ -619,10 +619,11 @@ function renderGrid() {
     add.innerHTML = SP.dialStyle === 'icons' ? '<div class="thumb">+</div>' : '<div class="thumb">+</div><div class="nm">Add</div>';
     add.title = 'Add speed dial';
     add.onclick = () => showModal('dial', { d: null, idx: -1 });
+    add.oncontextmenu = (e) => showCtx(e, 'blank', {});
     grid.append(add);
   }
 
-  grid.oncontextmenu = (e) => { if (e.target === grid) showCtx(e, 'blank', {}); };
+  grid.oncontextmenu = (e) => showCtx(e, 'blank', {});
 }
 
 function render() { applyLook(); renderTabBar(); renderGrid(); }
