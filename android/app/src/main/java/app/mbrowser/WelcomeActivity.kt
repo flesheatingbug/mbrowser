@@ -36,12 +36,43 @@ class WelcomeActivity : BaseActivity() {
         box.setPadding(dp(24), dp(40), dp(24), dp(24))
         scroll.addView(box, ViewGroup.LayoutParams(-1, -2))
         setContentView(scroll)
-        show("start")
+        show(savedInstanceState?.getString("step") ?: "start")
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
                 if (step == "start") finishSetup() else show("start")
             }
         })
+    }
+
+    override fun onSaveInstanceState(out: Bundle) { super.onSaveInstanceState(out); out.putString("step", step) }
+
+    /** The full set of colour themes, each as a small preview of the browser in those colours. */
+    private fun themePicker() {
+        body("More themes", 22).also { it.setTextColor(tc(R.attr.mbText)) }
+        val hs = android.widget.HorizontalScrollView(this)
+        hs.isHorizontalScrollBarEnabled = false
+        val rowv = LinearLayout(this)
+        rowv.orientation = LinearLayout.HORIZONTAL
+        rowv.setPadding(0, dp(8), 0, dp(8))
+        for ((id, name) in Themes.LIST) {
+            val w = android.view.ContextThemeWrapper(this, Themes.styleId(this, id))
+            val on = prefs.themeId == id
+            val col = LinearLayout(this)
+            col.orientation = LinearLayout.VERTICAL
+            col.gravity = Gravity.CENTER_HORIZONTAL
+            col.addView(ThemePreview(this, w.tc(R.attr.mbBg), w.tc(R.attr.mbBar), w.tc(R.attr.mbPill), w.tc(R.attr.mbText), w.tc(R.attr.mbAccent),
+                if (on) tc(R.attr.mbAccent) else w.tc(R.attr.mbLine), on), LinearLayout.LayoutParams(dp(88), dp(124)))
+            val l = TextView(this)
+            l.text = name.substringBefore(" (")
+            l.textSize = 12f; l.maxLines = 1; l.gravity = Gravity.CENTER
+            l.setTextColor(tc(if (on) R.attr.mbText else R.attr.mbMuted))
+            col.addView(l, LinearLayout.LayoutParams(dp(88), -2))
+            col.setOnClickListener { prefs.themeId = id; recreate() }
+            val lp = LinearLayout.LayoutParams(-2, -2); lp.setMargins(0, 0, dp(10), 0)
+            rowv.addView(col, lp)
+        }
+        hs.addView(rowv)
+        box.addView(hs)
     }
 
     private fun finishSetup() {
@@ -152,12 +183,14 @@ class WelcomeActivity : BaseActivity() {
                     tchips.add(tv); box.addView(tv)
                 }
                 paintThemes()
+                themePicker()
                 primary("Start browsing") { finishSetup() }
                 link("Back") { show("start") }
             }
             "done-server" -> {
                 title("Connected")
                 body("Your bookmarks, history, tabs, speed dials and search engines will sync from your server. Passwords can be unlocked from the menu once you've set up a vault.", 10)
+                themePicker()
                 primary("Start browsing") { finishSetup() }
             }
         }
