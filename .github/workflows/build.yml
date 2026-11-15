@@ -132,7 +132,7 @@ jobs:
               gh release delete "$DST" --yes --cleanup-tag 2>/dev/null || true
               if ls "_dl_${DST}"/* > /dev/null 2>&1; then
                 gh release create "$DST" "_dl_${DST}"/* \
-                  --title "[Backup] ${PREV_TITLE}" \
+                  --title "${PREV_TITLE}" \
                   --notes "${PREV_NOTES}" 2>/dev/null || true
               fi
             fi

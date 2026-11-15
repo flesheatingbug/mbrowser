@@ -1591,7 +1591,10 @@ async function syncAll() {
     if (S().sync.settings !== false) {
       try {
         const sr = await syncSettings({ store, call });
-        if (sr.applied.length) afterSettingsChange();
+        if (sr.applied.length) {
+          afterSettingsChange();
+          if (sr.applied.includes('profileMeta')) applyProfileMeta();
+        }
       } catch (e) { settingsSyncNote = /HTTP 404/.test(e.message) ? ' (update the sync server to sync settings)' : ' (settings: ' + e.message + ')'; }
     }
 
@@ -1610,6 +1613,16 @@ async function syncAll() {
 function syncSoon() {
   clearTimeout(syncTimer);
   syncTimer = setTimeout(syncAll, 3000);
+}
+
+function applyProfileMeta() {
+  const m = S().profileMeta;
+  if (!m || (!m.color && !m.avatar)) return;
+  const update = {};
+  if (m.color) update.color = m.color;
+  if (m.avatar !== undefined) update.avatar = m.avatar;
+  if (Object.keys(update).length) profiles.update(profileId, update);
+  pushAll();
 }
 
 // "Test connection" button: says exactly which step fails
@@ -2213,7 +2226,18 @@ function setupIpc() {
   // ---- profiles ----
   handle('profiles:list', () => { profiles.reload(); return { profiles: profiles.list(), current: profileId, askAtStart: profiles.askAtStart() }; }, PAGE_ONLY);
   handle('profiles:create', (_e, o) => { profiles.reload(); return profiles.create(o || {}); }, PAGE_ONLY);
-  handle('profiles:update', (_e, id, o) => profiles.update(String(id), o || {}), PAGE_ONLY);
+  handle('profiles:update', (_e, id, o) => {
+    const r = profiles.update(String(id), o || {});
+    if (r.ok && String(id) === profileId && syncReady()) {
+      const p = profiles.get(profileId);
+      if (p) {
+        if (o.color !== undefined) store.set('profileMeta.color', p.color);
+        if (o.avatar !== undefined) store.set('profileMeta.avatar', p.avatar || '');
+        syncSoon();
+      }
+    }
+    return r;
+  }, PAGE_ONLY);
   handle('profiles:setPassword', async (_e, id, newPw, oldPw) => {
     const r = profiles.setPassword(String(id), String(newPw || ''), String(oldPw || ''));
     if (r.error) await sleep(400);
@@ -3303,7 +3327,7 @@ ipcMain.on('gate:cancel', (e) => { if (e.sender.id === gateWcId && gateResolve) 
 function showWizard() {
   wizardActive = true;
   return new Promise((resolve) => {
-    const win = new BaseWindow({ width: 660, height: 740, title: 'mbrowser setup', icon: appIconImage(), resizable: true, minWidth: 520, minHeight: 580, backgroundColor: '#17191e' });
+    const win = new BaseWindow({ width: 660, height: 740, title: 'mbrowser setup', icon: appIconImage(), resizable: true, minWidth: 520, minHeight: 580, backgroundColor: '#0f0524' });
     try { if (typeof win.removeMenu === 'function') win.removeMenu(); } catch { /* ignore */ }
     const view = new WebContentsView({
       webPreferences: { preload: path.join(__dirname, 'page-preload.js'), contextIsolation: true, sandbox: true },
@@ -3490,6 +3514,7 @@ app.whenReady().then(async () => {
 
   store = createStore(file('settings.json'));
   blocker = createBlocker(S, path.join(app.getPath('userData'), 'adblock'));
+  applyProfileMeta();
 
   // one-time migration of the old sync.json
   if (!S().sync.server && !S().sync.token) {

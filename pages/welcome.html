@@ -6,31 +6,58 @@
 <link rel="stylesheet" href="my://assets/theme.css">
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: system-ui, sans-serif; background: var(--bg); color: var(--fg); font-size: 14px; height: 100vh; display: flex; flex-direction: column; }
+body {
+  font-family: system-ui, sans-serif;
+  font-size: 14px;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: linear-gradient(145deg, #0f0524 0%, #2d1065 22%, #6d28d9 52%, #a855f7 72%, #f43f5e 88%, #fb923c 100%);
+}
+
+/* card */
+.wizard-card {
+  background: var(--bg);
+  color: var(--fg);
+  border-radius: 20px;
+  box-shadow: 0 28px 80px rgba(0,0,0,.55);
+  width: 100%;
+  max-width: 600px;
+  min-height: 580px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* inputs */
 input, select { background: var(--tab); border: 1px solid var(--line); border-radius: 8px; color: var(--fg); padding: 8px 12px; font-size: 14px; width: 100%; outline: none; }
 input:focus, select:focus { border-color: var(--accent); }
-button { border: none; border-radius: 8px; padding: 9px 18px; font-size: 14px; cursor: pointer; font-family: inherit; }
-.btn-primary { background: var(--accent); color: var(--onaccent); }
+
+/* buttons */
+button { border: none; border-radius: 999px; padding: 10px 24px; font-size: 14px; cursor: pointer; font-family: inherit; transition: opacity .15s, background .15s; }
+.btn-primary { background: var(--accent); color: var(--onaccent); font-weight: 600; }
 .btn-primary:hover { opacity: .88; }
 .btn-primary:disabled { opacity: .45; cursor: default; }
-.btn-ghost { background: transparent; color: var(--muted); }
+.btn-ghost { background: transparent; color: var(--muted); border-radius: 999px; }
 .btn-ghost:hover { color: var(--fg); }
-.btn-secondary { background: var(--tab); color: var(--fg); border: 1px solid var(--line); }
+.btn-secondary { background: var(--tab); color: var(--fg); border: 1px solid var(--line); border-radius: 999px; }
 .btn-secondary:hover { border-color: var(--muted); }
 
-/* header */
-.header { padding: 20px 32px 0; display: flex; align-items: center; gap: 10px; }
-.logo { width: 32px; height: 32px; }
-.app-name { font-size: 16px; font-weight: 600; }
-.dots { margin-left: auto; display: flex; gap: 6px; align-items: center; }
-.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--line); transition: background .2s; }
+/* card header */
+.card-header { padding: 22px 28px 0; display: flex; align-items: center; gap: 10px; }
+.logo { width: 30px; height: 30px; border-radius: 8px; }
+.app-name { font-size: 15px; font-weight: 700; letter-spacing: -.01em; }
+.dots { margin-left: auto; display: flex; gap: 7px; align-items: center; }
+.dot { width: 7px; height: 7px; border-radius: 50%; background: var(--line); transition: background .2s; }
 .dot.active { background: var(--accent); }
 .dot.done { background: var(--muted); }
 
 /* main content */
-.content { flex: 1; padding: 24px 32px 20px; overflow-y: auto; display: flex; flex-direction: column; }
-h2 { font-size: 22px; font-weight: 700; margin-bottom: 6px; }
-.subtitle { color: var(--muted); margin-bottom: 24px; line-height: 1.5; }
+.content { flex: 1; padding: 20px 28px 16px; overflow-y: auto; display: flex; flex-direction: column; }
+h2 { font-size: 22px; font-weight: 700; margin-bottom: 6px; letter-spacing: -.02em; }
+.subtitle { color: var(--muted); margin-bottom: 22px; line-height: 1.5; }
 .field { margin-bottom: 14px; }
 .field label { display: block; color: var(--muted); font-size: 12px; margin-bottom: 5px; }
 .err { color: #ff6b6b; font-size: 13px; min-height: 18px; margin-top: 4px; }
@@ -53,7 +80,7 @@ h2 { font-size: 22px; font-weight: 700; margin-bottom: 6px; }
 .toggle-label { flex: 1; }
 .toggle-label b { display: block; }
 .toggle-label span { font-size: 12px; color: var(--muted); }
-.toggle { width: 42px; height: 24px; border-radius: 12px; border: none; cursor: pointer; position: relative; flex: none; transition: background .15s; }
+.toggle { width: 42px; height: 24px; border-radius: 12px; border: none; cursor: pointer; position: relative; flex: none; transition: background .15s; padding: 0; }
 .toggle.on { background: var(--accent); }
 .toggle.off { background: var(--line); }
 .toggle::after { content: ''; position: absolute; width: 18px; height: 18px; border-radius: 50%; background: #fff; top: 3px; transition: left .15s; }
@@ -61,7 +88,10 @@ h2 { font-size: 22px; font-weight: 700; margin-bottom: 6px; }
 .toggle.off::after { left: 3px; }
 
 /* footer */
-.footer { padding: 16px 32px; display: flex; align-items: center; justify-content: flex-end; gap: 10px; border-top: 1px solid var(--line); }
+.card-footer { padding: 14px 28px 20px; display: flex; align-items: center; justify-content: flex-end; gap: 10px; border-top: 1px solid var(--line); }
+
+/* step counter */
+.step-count { margin-right: auto; font-size: 12px; color: var(--muted); }
 
 /* server status */
 .server-status { font-size: 13px; padding: 8px 0; min-height: 24px; }
@@ -84,8 +114,15 @@ h2 { font-size: 22px; font-weight: 700; margin-bottom: 6px; }
 .summary-item { display: flex; align-items: center; gap: 10px; font-size: 13px; }
 .summary-item svg { flex: none; width: 16px; height: 16px; }
 
-/* ---- theme swatches ---- */
-.theme-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; margin-bottom: 24px; }
+/* feature highlights (step 1) */
+.features { display: flex; flex-direction: column; gap: 10px; margin-top: 20px; width: 100%; max-width: 380px; text-align: left; }
+.feat { display: flex; align-items: flex-start; gap: 12px; padding: 10px 14px; background: var(--tab); border-radius: 12px; }
+.feat-icon { font-size: 20px; flex: none; line-height: 1; }
+.feat-text b { display: block; font-size: 13px; }
+.feat-text span { font-size: 12px; color: var(--muted); line-height: 1.4; }
+
+/* theme swatches */
+.theme-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 10px; margin-bottom: 24px; }
 .tswatch { border: 2px solid var(--line); border-radius: 10px; overflow: hidden; cursor: pointer; transition: border-color .15s; }
 .tswatch:hover { border-color: var(--muted); }
 .tswatch.selected { border-color: var(--accent); }
@@ -94,7 +131,7 @@ h2 { font-size: 22px; font-weight: 700; margin-bottom: 6px; }
 .tswatch-body { flex: 1; }
 .tswatch-name { padding: 5px 8px 7px; font-size: 12px; font-weight: 500; }
 
-/* ---- search engine grid ---- */
+/* search engine grid */
 .engine-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px; margin-bottom: 24px; }
 .ecard { border: 2px solid var(--line); border-radius: 10px; padding: 10px 12px; cursor: pointer; transition: border-color .15s; display: flex; align-items: center; gap: 8px; }
 .ecard:hover { border-color: var(--muted); }
@@ -104,13 +141,15 @@ h2 { font-size: 22px; font-weight: 700; margin-bottom: 6px; }
 </style>
 </head>
 <body>
-<div class="header">
-  <img class="logo" src="my://assets/logo.png" alt="">
-  <span class="app-name">mbrowser</span>
-  <div class="dots" id="dots"></div>
+<div class="wizard-card">
+  <div class="card-header">
+    <img class="logo" src="my://assets/logo.png" alt="">
+    <span class="app-name">mbrowser</span>
+    <div class="dots" id="dots"></div>
+  </div>
+  <div class="content" id="content"></div>
+  <div class="card-footer" id="footer"></div>
 </div>
-<div class="content" id="content"></div>
-<div class="footer" id="footer"></div>
 
 <script>
 const TOTAL_STEPS = 5;
@@ -179,18 +218,37 @@ function renderStep1() {
   const c = $('content');
   c.innerHTML = '';
   const wrap = el('div');
-  wrap.style.cssText = 'flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;padding:20px 0';
-  const img = el('img'); img.src = 'my://assets/logo.png'; img.style.cssText = 'width:80px;height:80px;margin-bottom:20px;border-radius:20px';
+  wrap.style.cssText = 'flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;padding:16px 0';
+
+  const img = el('img'); img.src = 'my://assets/logo.png'; img.style.cssText = 'width:72px;height:72px;margin-bottom:18px;border-radius:18px';
   const h = el('h2', null, 'Welcome to mbrowser');
-  h.style.marginBottom = '10px';
+  h.style.marginBottom = '8px';
   const sub = el('p', 'subtitle', "Let's get you set up in a few quick steps.");
-  sub.style.maxWidth = '360px';
-  wrap.append(img, h, sub);
+  sub.style.maxWidth = '320px';
+
+  const feats = el('div', 'features');
+  const featData = [
+    { icon: '🔖', title: 'Bookmarks & Speed Dial', desc: 'Organise your web with folders and visual speed dials.' },
+    { icon: '🔒', title: 'Encrypted Password Vault', desc: 'AES-256 encrypted, unlocked by master password or OS key.' },
+    { icon: '🔄', title: 'Self-hosted Sync', desc: 'Sync everything to your own Docker server — no cloud lock-in.' },
+    { icon: '🛡️', title: 'Ad & Tracker Blocking', desc: 'Built-in EasyList and uBlock filter support.' },
+  ];
+  for (const f of featData) {
+    const row = el('div', 'feat');
+    const icon = el('div', 'feat-icon', f.icon);
+    const text = el('div', 'feat-text');
+    text.append(el('b', null, f.title), el('span', null, f.desc));
+    row.append(icon, text);
+    feats.append(row);
+  }
+
+  wrap.append(img, h, sub, feats);
   c.append(wrap);
 
   const f = $('footer');
   f.innerHTML = '';
   const next = el('button', 'btn-primary', 'Get started →');
+  next.style.padding = '11px 32px';
   next.onclick = () => { step = 2; render(); };
   f.append(next);
 }
@@ -209,70 +267,8 @@ function engineIcon(id) {
   return ic;
 }
 
+// Step 2: Sync server (was step 3)
 function renderStep2() {
-  const c = $('content');
-  c.innerHTML = '';
-  c.append(el('h2', null, 'Make it yours'));
-  c.append(el('p', 'subtitle', 'Choose a theme and your default search engine.'));
-
-  // --- Theme section ---
-  c.append(el('div', 'section-label', 'Theme'));
-  const grid = el('div', 'theme-grid');
-
-  for (const t of allThemes) {
-    const sw = el('div', 'tswatch' + (chosenTheme === t.id ? ' selected' : ''));
-    if (t.bg) {
-      const preview = el('div', 'tswatch-preview');
-      const bar = el('div', 'tswatch-bar'); bar.style.background = t.active || t.bg;
-      const body = el('div', 'tswatch-body'); body.style.background = t.bg;
-      // accent dot
-      const dot = el('div');
-      dot.style.cssText = `width:10px;height:10px;border-radius:50%;background:${t.accent};position:relative;top:7px;left:8px`;
-      body.append(dot);
-      preview.append(bar, body);
-      sw.append(preview);
-    } else {
-      // system theme: half dark half light
-      const preview = el('div', 'tswatch-preview');
-      preview.style.cssText = 'background:linear-gradient(135deg,#1e1f22 50%,#e4e7ec 50%)';
-      sw.append(preview);
-    }
-    const name = el('div', 'tswatch-name', t.name);
-    sw.append(name);
-    sw.onclick = async () => {
-      chosenTheme = t.id;
-      grid.querySelectorAll('.tswatch').forEach((x) => x.classList.remove('selected'));
-      sw.classList.add('selected');
-      await browser.setSetting('appearance.themeId', t.id);
-    };
-    grid.append(sw);
-  }
-  c.append(grid);
-
-  // --- Search engine section ---
-  c.append(el('div', 'section-label', 'Default search engine'));
-  const egrid = el('div', 'engine-grid');
-  for (const eng of allEngines) {
-    const ec = el('div', 'ecard' + (chosenEngine === eng.id ? ' selected' : ''));
-    ec.append(engineIcon(eng.id), el('span', 'ecard-name', eng.name));
-    ec.onclick = async () => {
-      chosenEngine = eng.id;
-      egrid.querySelectorAll('.ecard').forEach((x) => x.classList.remove('selected'));
-      ec.classList.add('selected');
-      await browser.setSetting('search.default', eng.id);
-    };
-    egrid.append(ec);
-  }
-  c.append(egrid);
-
-  const f = $('footer');
-  f.innerHTML = '';
-  const back = el('button', 'btn-ghost', '← Back'); back.onclick = () => { step = 1; render(); };
-  const next = el('button', 'btn-primary', 'Next →'); next.onclick = () => { step = 3; render(); };
-  f.append(back, next);
-}
-
-function renderStep3() {
   const c = $('content');
   c.innerHTML = '';
   const h = el('h2', null, 'Sync server');
@@ -281,7 +277,6 @@ function renderStep3() {
 
   const cards = el('div', 'cards');
 
-  // Server card
   const cardServer = el('div', 'card' + (serverConnected || !standaloneMode ? ' selected' : ''));
   const serverTitle = el('div', 'card-title', 'Connect to my server');
   const serverDesc = el('div', 'card-desc', 'Sync everything across your devices via your own Docker server.');
@@ -326,9 +321,10 @@ function renderStep3() {
 
   const f = $('footer');
   f.innerHTML = '';
-  const back = el('button', 'btn-ghost', '← Back'); back.onclick = () => { step = 2; render(); };
-  const next = el('button', 'btn-primary', 'Next →'); next.onclick = () => { step = 4; render(); };
-  f.append(back, next);
+  const stepCount = el('span', 'step-count', `Step ${step} of ${TOTAL_STEPS}`);
+  const back = el('button', 'btn-ghost', '← Back'); back.onclick = () => { step = 1; render(); };
+  const next = el('button', 'btn-primary', 'Next →'); next.onclick = () => { step = 3; render(); };
+  f.append(stepCount, back, next);
 }
 
 function renderServerForm(card) {
@@ -478,6 +474,67 @@ function renderServerForm(card) {
   return wrap;
 }
 
+// Step 3: Theme + search engine (was step 2)
+function renderStep3() {
+  const c = $('content');
+  c.innerHTML = '';
+  c.append(el('h2', null, 'Make it yours'));
+  c.append(el('p', 'subtitle', 'Choose a theme and your default search engine.'));
+
+  c.append(el('div', 'section-label', 'Theme'));
+  const grid = el('div', 'theme-grid');
+
+  for (const t of allThemes) {
+    const sw = el('div', 'tswatch' + (chosenTheme === t.id ? ' selected' : ''));
+    if (t.bg) {
+      const preview = el('div', 'tswatch-preview');
+      const bar = el('div', 'tswatch-bar'); bar.style.background = t.active || t.bg;
+      const body = el('div', 'tswatch-body'); body.style.background = t.bg;
+      const dot = el('div');
+      dot.style.cssText = `width:10px;height:10px;border-radius:50%;background:${t.accent};position:relative;top:7px;left:8px`;
+      body.append(dot);
+      preview.append(bar, body);
+      sw.append(preview);
+    } else {
+      const preview = el('div', 'tswatch-preview');
+      preview.style.cssText = 'background:linear-gradient(135deg,#1e1f22 50%,#e4e7ec 50%)';
+      sw.append(preview);
+    }
+    const name = el('div', 'tswatch-name', t.name);
+    sw.append(name);
+    sw.onclick = async () => {
+      chosenTheme = t.id;
+      grid.querySelectorAll('.tswatch').forEach((x) => x.classList.remove('selected'));
+      sw.classList.add('selected');
+      await browser.setSetting('appearance.themeId', t.id);
+    };
+    grid.append(sw);
+  }
+  c.append(grid);
+
+  c.append(el('div', 'section-label', 'Default search engine'));
+  const egrid = el('div', 'engine-grid');
+  for (const eng of allEngines) {
+    const ec = el('div', 'ecard' + (chosenEngine === eng.id ? ' selected' : ''));
+    ec.append(engineIcon(eng.id), el('span', 'ecard-name', eng.name));
+    ec.onclick = async () => {
+      chosenEngine = eng.id;
+      egrid.querySelectorAll('.ecard').forEach((x) => x.classList.remove('selected'));
+      ec.classList.add('selected');
+      await browser.setSetting('search.default', eng.id);
+    };
+    egrid.append(ec);
+  }
+  c.append(egrid);
+
+  const f = $('footer');
+  f.innerHTML = '';
+  const stepCount = el('span', 'step-count', `Step ${step} of ${TOTAL_STEPS}`);
+  const back = el('button', 'btn-ghost', '← Back'); back.onclick = () => { step = 2; render(); };
+  const next = el('button', 'btn-primary', 'Next →'); next.onclick = () => { step = 4; render(); };
+  f.append(stepCount, back, next);
+}
+
 function renderStep4() {
   const c = $('content');
   c.innerHTML = '';
@@ -574,7 +631,8 @@ function renderStep4() {
 
   const f = $('footer');
   f.innerHTML = '';
-  const errEl = el('span', 'err', ''); errEl.style.flex = '1';
+  const stepCount = el('span', 'step-count', `Step ${step} of ${TOTAL_STEPS}`);
+  const errEl = el('span', 'err', '');
   const back = el('button', 'btn-ghost', '← Back'); back.onclick = () => { step = 3; render(); };
   const next = el('button', 'btn-primary', 'Finish →');
   next.onclick = async () => {
@@ -600,7 +658,7 @@ function renderStep4() {
     }
     step = 5; render();
   };
-  f.append(errEl, back, next);
+  f.append(stepCount, errEl, back, next);
 }
 
 function renderStep5() {
@@ -612,7 +670,7 @@ function renderStep5() {
 
   const icon = el('div', 'done-icon');
   icon.innerHTML = svgCheck;
-  const title = el('div', 'done-title', "You're all set!");
+  const title = el('div', 'done-title', "You’re all set!");
   const sub = el('div', 'done-sub', 'mbrowser is ready to use.');
 
   const items = [];
@@ -639,7 +697,7 @@ function renderStep5() {
   }
 
   const start = el('button', 'btn-primary', 'Start browsing');
-  start.style.marginTop = '20px';
+  start.style.cssText = 'margin-top:20px;padding:11px 32px';
   start.onclick = async () => { await browser.wizardDone(); };
 
   c.append(icon, title, sub, ...(items.length ? [summary] : []), start);
