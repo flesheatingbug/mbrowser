@@ -484,7 +484,7 @@
     const r = await ask('New Speed Dial', [{ key: 'name', label: 'Speed Dial name', value: 'Speed dial' }], 'Create');
     if (!r) return;
     const S = await browser.getSettings();
-    const newGroup = { name: r.name || 'Speed dial', dials: [] };
+    const newGroup = { id: 'g' + Date.now().toString(36), name: r.name || 'Speed dial', dials: [] };
     for (const b of bms) {
       if (!b.url || b.recycleBin) continue;
       newGroup.dials.push({ title: b.title || b.url, url: b.url });
@@ -499,7 +499,7 @@
     const S = await browser.getSettings();
     // Build the full recursive tree; use its items as the speed dial's top-level dials
     const src = buildDialFolder(folderPath);
-    const newGroup = { name: r.name || leaf(folderPath), dials: src.items };
+    const newGroup = { id: 'g' + Date.now().toString(36), name: r.name || leaf(folderPath), dials: src.items };
     S.startPage.groups.push(newGroup);
     await browser.setSetting('startPage.groups', S.startPage.groups);
   }
