@@ -532,7 +532,7 @@
     m.style.cssText = '';
     m.textContent = '';
     if (searchQuery.trim()) { renderSearchResults(m); return; }
-    if (cur !== 'server') m.append(el('h1', null, CATS.find((c) => c[0] === cur)[1]));
+    if (cur !== 'server' && cur !== 'import' && cur !== 'profiles') m.append(el('h1', null, CATS.find((c) => c[0] === cur)[1]));
 
     if (cur === 'search') { searchSection(m); return; }
     if (cur === 'keyboard') { await keyboardSection(m); return; }
@@ -606,8 +606,13 @@
     if (cur === 'import' || cur === 'profiles' || cur === 'passwords') {
       const frame = document.createElement('iframe');
       frame.src = cur === 'passwords' ? 'my://passwords' : ('my://' + cur);
-      frame.style.cssText = 'width:100%;height:calc(100vh - 20px);border:0;display:block';
-      m.style.padding = '0';
+      if (cur === 'passwords') {
+        m.style.cssText = 'max-width:none;padding:32px 48px 0;';
+        frame.style.cssText = 'width:100%;height:calc(100vh - 74px);border:0;display:block;';
+      } else {
+        frame.style.cssText = 'width:100%;height:calc(100vh - 20px);border:0;display:block';
+        m.style.padding = '0';
+      }
       m.append(frame);
       return;
     }
