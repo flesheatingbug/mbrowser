@@ -104,6 +104,8 @@ if (location.protocol === 'my:') {
     appBuildNumber: invoke('app:build-number'),
     appUpdateInfo: invoke('app:update-info'),
     appAutoInstall: (info) => ipcRenderer.invoke('app:auto-install', info),
+    onDlProgress: (cb) => ipcRenderer.on('app:dl-progress', (_, v) => cb(v)),
+    offDlProgress: () => ipcRenderer.removeAllListeners('app:dl-progress'),
   });
 }
 

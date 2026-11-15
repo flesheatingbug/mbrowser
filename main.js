@@ -181,13 +181,15 @@ async function promptInstallUpdate(info) {
   });
   if (response !== 0) return;
   if (!info.canInstall) { shell.openExternal(info.url); return; }
-  await downloadAndInstall(info.url, isWin, isAppImage);
+  await downloadAndInstall(info.url, isWin, isAppImage, (pct) => {
+    for (const w of windows) { try { w.win.setProgressBar(pct); } catch { /* ignore */ } }
+  });
+  for (const w of windows) { try { w.win.setProgressBar(-1); } catch { /* ignore */ } }
 }
 
-async function downloadAndInstall(url, isWin, isAppImage) {
+async function downloadAndInstall(url, isWin, isAppImage, onProgress) {
   const ext = isWin ? '.exe' : '.AppImage';
   const dest = path.join(os.tmpdir(), `mbrowser-update${ext}`);
-  const prog = await dialog.showMessageBox({ type: 'info', title: 'Downloading update…', message: 'Downloading, please wait.', buttons: [] }).catch(() => null);
   try {
     await new Promise((resolve, reject) => {
       const follow = (u, depth) => {
@@ -196,7 +198,14 @@ async function downloadAndInstall(url, isWin, isAppImage) {
         mod.get(u, { headers: { 'User-Agent': 'mbrowser-desktop' } }, (res) => {
           if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) { res.resume(); return follow(res.headers.location, depth + 1); }
           if (res.statusCode !== 200) return reject(new Error('HTTP ' + res.statusCode));
-          const ws = fs.createWriteStream(dest); res.pipe(ws);
+          const total = parseInt(res.headers['content-length'] || '0', 10);
+          let received = 0;
+          const ws = fs.createWriteStream(dest);
+          res.on('data', (chunk) => {
+            received += chunk.length;
+            if (onProgress && total > 0) onProgress(received / total);
+          });
+          res.pipe(ws);
           ws.on('finish', resolve); ws.on('error', reject);
         }).on('error', reject);
       };
@@ -2371,11 +2380,16 @@ function setupIpc() {
       return { error: e.message };
     }
   }, BOTH);
-  handle('app:auto-install', async (_e, info) => {
+  handle('app:auto-install', async (e, info) => {
     const isWin = process.platform === 'win32';
     const isAppImage = !!process.env.APPIMAGE;
-    if (!info.canInstall) { shell.openExternal(info.url); return { ok: true }; }
-    await downloadAndInstall(info.url, isWin, isAppImage);
+    if (!info.canInstall) { newTab(info.url); return { ok: true }; }
+    const sender = e.sender;
+    await downloadAndInstall(info.url, isWin, isAppImage, (pct) => {
+      try { if (!sender.isDestroyed()) sender.send('app:dl-progress', pct); } catch { /* ignore */ }
+      for (const w of windows) { try { w.win.setProgressBar(pct); } catch { /* ignore */ } }
+    });
+    for (const w of windows) { try { w.win.setProgressBar(-1); } catch { /* ignore */ } }
     return { ok: true };
   }, BOTH);
 

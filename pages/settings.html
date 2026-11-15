@@ -510,8 +510,18 @@
         pendingInfo = info;
         const ib = el('button', 'install-btn', info.canInstall ? 'Install now' : 'Open download page');
         ib.onclick = async () => {
-          ib.disabled = true; ib.textContent = info.canInstall ? 'Installing…' : 'Opening…';
-          await browser.appAutoInstall(pendingInfo);
+          ib.disabled = true;
+          if (info.canInstall) {
+            ib.textContent = 'Downloading… 0%';
+            browser.onDlProgress((pct) => { ib.textContent = 'Downloading… ' + Math.round(pct * 100) + '%'; });
+            await browser.appAutoInstall(pendingInfo);
+            browser.offDlProgress();
+            ib.textContent = 'Installing…';
+          } else {
+            ib.textContent = 'Opening…';
+            await browser.appAutoInstall(pendingInfo);
+            ib.disabled = false; ib.textContent = 'Open download page';
+          }
         };
         updateRow.append(ib);
       };
