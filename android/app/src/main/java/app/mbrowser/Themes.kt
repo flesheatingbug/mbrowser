@@ -22,12 +22,13 @@ object Themes {
         "contrast" to "High contrast",
     )
 
-    fun styleFor(ctx: android.content.Context): Int {
-        val id = Prefs(ctx).themeId
+    fun styleId(ctx: android.content.Context, id: String): Int {
         if (id == "system") return R.style.Theme_MBrowser
         val r = ctx.resources.getIdentifier("MbTheme_" + id.replace('-', '_'), "style", ctx.packageName)
         return if (r != 0) r else R.style.Theme_MBrowser
     }
+
+    fun styleFor(ctx: android.content.Context): Int = styleId(ctx, Prefs(ctx).themeId)
 }
 
 /** Every screen starts from here so it gets the chosen theme, and redraws when the theme changes. */

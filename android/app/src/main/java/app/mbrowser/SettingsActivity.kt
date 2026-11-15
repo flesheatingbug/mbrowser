@@ -6,6 +6,12 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.view.View
+import androidx.activity.OnBackPressedCallback
+import android.widget.EditText
+import android.widget.ImageView
+import android.widget.ImageButton
+import android.widget.HorizontalScrollView
+import android.graphics.drawable.GradientDrawable
 import android.view.ViewGroup
 import android.webkit.CookieManager
 import android.webkit.WebStorage
@@ -22,52 +28,249 @@ import java.util.concurrent.Executors
 class SettingsActivity : BaseActivity() {
     private lateinit var prefs: Prefs
     private lateinit var box: LinearLayout
+    private lateinit var bar: LinearLayout
     private val ui = Handler(Looper.getMainLooper())
     private var query = ""
+    private var searching = false
+    private var page = "main"
+
+    private class Pg(val id: String, val title: String, val sub: String, val icon: Int, val fill: () -> Unit)
+
+    private val pages by lazy {
+        listOf(
+            Pg("browser", "Browser", "Identify as, text size, translate", R.drawable.ic_globe) { browserPage() },
+            Pg("appearance", "Appearance", "Themes, button style, logo", R.drawable.ic_tune) { appearancePage() },
+            Pg("start", "Start page", "Speed dials, thumbnails", R.drawable.ic_home) { startPageSettings() },
+            Pg("data", "Personal data", "Sync & backup, passwords", R.drawable.ic_cloud) { dataPage() },
+            Pg("privacy", "Privacy & security", "Ad blocker, clear browsing data", R.drawable.ic_shield) { privacyPage() },
+            Pg("search", "Search", "Search engines", R.drawable.ic_search) { searchRows() },
+            Pg("about", "About", "Updates, source code", R.drawable.ic_info) { aboutPage() },
+        )
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         prefs = Prefs(this)
         Store.init(this)
+        page = savedInstanceState?.getString("page") ?: "main"
+        val root = LinearLayout(this)
+        root.orientation = LinearLayout.VERTICAL
+        root.setBackgroundColor(tc(R.attr.mbBg))
+        root.fitsSystemWindows = true
+        bar = LinearLayout(this)
+        bar.orientation = LinearLayout.HORIZONTAL
+        bar.gravity = android.view.Gravity.CENTER_VERTICAL
+        bar.setBackgroundColor(tc(R.attr.mbBg))
+        root.addView(bar, LinearLayout.LayoutParams(-1, dp(56)))
         val scroll = ScrollView(this)
-        scroll.setBackgroundColor(tc(R.attr.mbBg))
-        scroll.fitsSystemWindows = true
         box = LinearLayout(this)
         box.orientation = LinearLayout.VERTICAL
         box.setPadding(0, 0, 0, dp(32))
         scroll.addView(box, ViewGroup.LayoutParams(-1, -2))
-        setContentView(scroll)
+        root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
+        setContentView(root)
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                when {
+                    searching -> { searching = false; query = ""; build() }
+                    page != "main" -> { page = "main"; build() }
+                    else -> finish()
+                }
+            }
+        })
         build()
     }
 
-    private fun build() {
-        box.removeAllViews()
-        val top = TextView(this)
-        top.text = "Settings"
-        top.textSize = 22f
-        top.typeface = Typeface.DEFAULT_BOLD
-        top.setTextColor(tc(R.attr.mbText))
-        top.setBackgroundColor(tc(R.attr.mbBar))
-        top.setPadding(dp(16), dp(18), dp(16), dp(18))
-        box.addView(top)
-        val search = android.widget.EditText(this)
-        search.hint = "Search settings"
-        search.setSingleLine()
-        search.setText(query)
-        search.setTextColor(tc(R.attr.mbText)); search.setHintTextColor(tc(R.attr.mbMuted))
-        search.setPadding(dp(16), dp(12), dp(16), dp(12))
-        search.setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_search, 0, 0, 0)
-        search.compoundDrawablePadding = dp(10)
-        search.compoundDrawableTintList = tcl(R.attr.mbMuted)
-        val sl = LinearLayout.LayoutParams(-1, -2); sl.setMargins(dp(12), dp(10), dp(12), dp(2))
-        search.setBackgroundResource(R.drawable.bg_chip)
-        box.addView(search, sl)
-        search.addTextChangedListener(object : android.text.TextWatcher {
-            override fun afterTextChanged(s: android.text.Editable?) { query = s?.toString() ?: ""; applyFilter() }
-            override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
-            override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
-        })
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putString("page", page)
+    }
 
+    private fun barButton(icon: Int, desc: String, onClick: () -> Unit): ImageButton {
+        val b = ImageButton(this)
+        b.setImageResource(icon)
+        b.imageTintList = tcl(R.attr.mbText)
+        b.contentDescription = desc
+        val tv = android.util.TypedValue()
+        theme.resolveAttribute(android.R.attr.selectableItemBackgroundBorderless, tv, true)
+        b.setBackgroundResource(tv.resourceId)
+        b.setOnClickListener { onClick() }
+        return b
+    }
+
+    private fun buildBar() {
+        bar.removeAllViews()
+        bar.addView(barButton(R.drawable.ic_back, "Back") { onBackPressedDispatcher.onBackPressed() }, LinearLayout.LayoutParams(dp(56), -1))
+        if (searching) {
+            val e = EditText(this)
+            e.hint = "Search settings"
+            e.setSingleLine()
+            e.setText(query)
+            e.setSelection(e.text.length)
+            e.setTextColor(tc(R.attr.mbText)); e.setHintTextColor(tc(R.attr.mbMuted))
+            e.background = null
+            e.textSize = 18f
+            e.addTextChangedListener(object : android.text.TextWatcher {
+                override fun afterTextChanged(s: android.text.Editable?) { query = s?.toString() ?: ""; applyFilter() }
+                override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
+                override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
+            })
+            bar.addView(e, LinearLayout.LayoutParams(0, -1, 1f))
+            bar.addView(barButton(R.drawable.ic_close, "Clear") { if (query.isEmpty()) { searching = false; build() } else e.setText("") }, LinearLayout.LayoutParams(dp(56), -1))
+            e.requestFocus()
+            e.post { (getSystemService(INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager).showSoftInput(e, 0) }
+        } else {
+            bar.addView(View(this), LinearLayout.LayoutParams(0, -1, 1f))
+            bar.addView(barButton(R.drawable.ic_search, "Search settings") { searching = true; build() }, LinearLayout.LayoutParams(dp(56), -1))
+        }
+    }
+
+    private fun bigTitle(t: String) {
+        val v = TextView(this)
+        v.text = t
+        v.textSize = 34f
+        v.typeface = Typeface.DEFAULT_BOLD
+        v.setTextColor(tc(R.attr.mbText))
+        v.setPadding(dp(20), dp(8), dp(20), dp(14))
+        box.addView(v)
+    }
+
+    private fun build() {
+        buildBar()
+        box.removeAllViews()
+        if (searching) {
+            for (p in pages) { header(p.title); p.fill() }
+            applyFilter()
+            return
+        }
+        if (page == "main") { mainPage(); return }
+        val p = pages.firstOrNull { it.id == page } ?: run { page = "main"; mainPage(); return }
+        bigTitle(p.title)
+        p.fill()
+    }
+
+    // ---------- the main list ----------
+    private fun mainPage() {
+        bigTitle("Settings")
+        switchRow("Ad blocker", if (prefs.blockTrackers) "Enabled" else "Disabled", { prefs.blockTrackers }, { prefs.blockTrackers = it })
+        val sep = View(this); sep.setBackgroundColor(tc(R.attr.mbLine))
+        box.addView(sep, LinearLayout.LayoutParams(-1, dp(1)).also { it.setMargins(0, dp(8), 0, dp(8)) })
+        for (p in pages) navRow(p)
+    }
+
+    private fun navRow(p: Pg) {
+        val r = LinearLayout(this)
+        r.orientation = LinearLayout.HORIZONTAL
+        r.gravity = android.view.Gravity.CENTER_VERTICAL
+        r.setPadding(dp(16), dp(10), dp(16), dp(10))
+        val tv = android.util.TypedValue()
+        theme.resolveAttribute(android.R.attr.selectableItemBackground, tv, true)
+        r.setBackgroundResource(tv.resourceId)
+        val ic = ImageView(this)
+        ic.setImageResource(p.icon)
+        ic.imageTintList = tcl(R.attr.mbText)
+        ic.setPadding(dp(13), dp(13), dp(13), dp(13))
+        val g = GradientDrawable(); g.cornerRadius = dp(14).toFloat(); g.setColor(tc(R.attr.mbCard))
+        ic.background = g
+        r.addView(ic, LinearLayout.LayoutParams(dp(50), dp(50)))
+        val col = LinearLayout(this)
+        col.orientation = LinearLayout.VERTICAL
+        val t = TextView(this); t.text = p.title; t.textSize = 18f; t.setTextColor(tc(R.attr.mbText))
+        val s = TextView(this); s.text = p.sub; s.textSize = 14f; s.setTextColor(tc(R.attr.mbMuted))
+        col.addView(t); col.addView(s)
+        val cl = LinearLayout.LayoutParams(0, -2, 1f); cl.marginStart = dp(16)
+        r.addView(col, cl)
+        r.setOnClickListener { page = p.id; build() }
+        box.addView(r, LinearLayout.LayoutParams(-1, -2))
+    }
+
+    // ---------- pages ----------
+    private fun browserPage() {
+        switchRow("Request desktop sites", "For new tabs", { prefs.desktopSite }, { prefs.desktopSite = it })
+        choiceRow("Text size", listOf("Small (80%)", "Normal (100%)", "Large (120%)", "Extra large (150%)"),
+            { listOf(80, 100, 120, 150).indexOf(prefs.textZoom).coerceAtLeast(1) },
+            { prefs.textZoom = listOf(80, 100, 120, 150)[it] })
+        switchRow("Pull down to refresh", "Off if it gets in the way of pages with their own drag gestures", { prefs.pullRefresh }, { prefs.pullRefresh = it })
+        choiceRow("Identify as", UserAgents.MODES.map { it.second }, { UserAgents.MODES.indexOfFirst { it.first == prefs.uaMode }.coerceAtLeast(0) },
+            { prefs.uaMode = UserAgents.MODES[it].first; toast("Applied to open tabs when you return to the browser") })
+        choiceRow("Translate to", Translate.LANGS.map { it.second }, { Translate.LANGS.indexOfFirst { it.first == prefs.translateLang }.coerceAtLeast(0) },
+            { prefs.translateLang = Translate.LANGS[it].first })
+    }
+
+    private fun appearancePage() {
+        header("Theme")
+        val cards = LinearLayout(this)
+        cards.orientation = LinearLayout.HORIZONTAL
+        cards.setPadding(dp(12), dp(4), dp(12), dp(8))
+        cards.tag = "theme light dark follow system appearance"
+        listOf("Follow system", "Light", "Dark").forEachIndexed { i, n ->
+            val on = prefs.themeId == "system" && prefs.themeMode == i
+            val c = TextView(this)
+            c.text = if (on) "✓  $n" else n
+            c.gravity = android.view.Gravity.CENTER
+            c.textSize = 14f
+            c.typeface = Typeface.DEFAULT_BOLD
+            c.setTextColor(tc(R.attr.mbText))
+            val g = GradientDrawable(); g.cornerRadius = dp(18).toFloat(); g.setColor(tc(R.attr.mbCard))
+            g.setStroke(dp(if (on) 3 else 1), tc(if (on) R.attr.mbAccent else R.attr.mbLine))
+            c.background = g
+            c.setOnClickListener {
+                val was = prefs.themeId
+                prefs.themeId = "system"; prefs.themeMode = i; App.applyTheme(i)
+                if (was != "system") recreate() else build()
+            }
+            val lp = LinearLayout.LayoutParams(0, dp(80), 1f); lp.setMargins(dp(4), 0, dp(4), 0)
+            cards.addView(c, lp)
+        }
+        box.addView(cards)
+
+        val hs = HorizontalScrollView(this)
+        hs.isHorizontalScrollBarEnabled = false
+        hs.tag = "colour theme themes preview"
+        val rowv = LinearLayout(this)
+        rowv.orientation = LinearLayout.HORIZONTAL
+        rowv.setPadding(dp(12), dp(8), dp(12), dp(8))
+        for ((id, name) in Themes.LIST) {
+            val w = android.view.ContextThemeWrapper(this, Themes.styleId(this, id))
+            val on = prefs.themeId == id
+            val col = LinearLayout(this)
+            col.orientation = LinearLayout.VERTICAL
+            col.gravity = android.view.Gravity.CENTER_HORIZONTAL
+            col.addView(ThemePreview(this, w.tc(R.attr.mbBg), w.tc(R.attr.mbBar), w.tc(R.attr.mbPill), w.tc(R.attr.mbText), w.tc(R.attr.mbAccent),
+                if (on) tc(R.attr.mbAccent) else w.tc(R.attr.mbLine), on), LinearLayout.LayoutParams(dp(88), dp(124)))
+            val l = TextView(this)
+            l.text = name.substringBefore(" (")
+            l.textSize = 12f
+            l.maxLines = 1
+            l.ellipsize = android.text.TextUtils.TruncateAt.END
+            l.gravity = android.view.Gravity.CENTER
+            l.setTextColor(tc(if (on) R.attr.mbText else R.attr.mbMuted))
+            col.addView(l, LinearLayout.LayoutParams(dp(88), -2))
+            col.setOnClickListener { prefs.themeId = id; recreate() }
+            val lp = LinearLayout.LayoutParams(-2, -2); lp.setMargins(dp(5), 0, dp(5), 0)
+            rowv.addView(col, lp)
+        }
+        hs.addView(rowv)
+        box.addView(hs)
+
+        header("Buttons and icons")
+        choiceRow("Button style", IconStyle.LIST.map { it.second }, { IconStyle.LIST.indexOfFirst { it.first == prefs.iconStyle }.coerceAtLeast(0) },
+            { prefs.iconStyle = IconStyle.LIST[it].first })
+        choiceRow("App icon", AppIcon.LIST.map { it.label }, { AppIcon.LIST.indexOfFirst { it.id == prefs.appIcon }.coerceAtLeast(0) },
+            { prefs.appIcon = AppIcon.LIST[it].id; AppIcon.applyLauncher(this); toast("Address bar logo changed. The home screen icon may take a moment to follow.") })
+    }
+
+    private fun startPageSettings() {
+        choiceRow("Columns", listOf("2", "3", "4", "5"), { (prefs.dialCols - 2).coerceIn(0, 3) }, { prefs.dialCols = it + 2 })
+        switchRow("Show titles", null, { prefs.showTitles }, { prefs.showTitles = it })
+        switchRow("Show thumbnails", "Page previews, captured as you browse", { Settings.thumbnails() }, { Settings.setThumbnails(it) })
+        switchRow("Show Add button", null, { prefs.showAdd }, { prefs.showAdd = it })
+        actionRow("Clear speed dial thumbnails", "They are captured again as you visit the sites") {
+            Thumbs.clear(this); toast("Thumbnails cleared")
+        }
+    }
+
+    private fun dataPage() {
         header("Sync")
         accountRows()
         textRow("Device name", "Shown to your other devices", { prefs.device }, { prefs.device = it }, "")
@@ -90,39 +293,17 @@ class SettingsActivity : BaseActivity() {
         switchRow("Sync settings and speed dials", "Search engines, speed dials and other settings shared with your desktop browser", { prefs.syncSettings }, { prefs.syncSettings = it })
         switchRow("Sync history", null, { prefs.syncHistory }, { prefs.syncHistory = it })
         switchRow("Sync open tabs", "Lets your other devices see this phone's tabs", { prefs.syncTabs }, { prefs.syncTabs = it })
+        header("Passwords")
+        actionRow("Password manager", "Saved logins, unlock and sync") { startActivity(Intent(this, PasswordsActivity::class.java)) }
+    }
 
-        header("Search")
-        searchRows()
-
-        header("Appearance")
-        choiceRow("Colour theme", Themes.LIST.map { it.second }, { Themes.LIST.indexOfFirst { it.first == prefs.themeId }.coerceAtLeast(0) },
-            { prefs.themeId = Themes.LIST[it].first; recreate() })
-        if (prefs.themeId == "system")
-            choiceRow("Light or dark", listOf("Follow system", "Light", "Dark"), { prefs.themeMode }, { prefs.themeMode = it; App.applyTheme(it) })
-        choiceRow("Button style", IconStyle.LIST.map { it.second }, { IconStyle.LIST.indexOfFirst { it.first == prefs.iconStyle }.coerceAtLeast(0) },
-            { prefs.iconStyle = IconStyle.LIST[it].first })
-        choiceRow("Logo", AppIcon.LIST.map { it.label }, { AppIcon.LIST.indexOfFirst { it.id == prefs.appIcon }.coerceAtLeast(0) },
-            { prefs.appIcon = AppIcon.LIST[it].id; AppIcon.applyLauncher(this); toast("Address bar logo changed. The home screen icon may take a moment to follow.") })
-
-        header("Speed dial")
-        choiceRow("Columns", listOf("2", "3", "4", "5"), { (prefs.dialCols - 2).coerceIn(0, 3) }, { prefs.dialCols = it + 2 })
-        switchRow("Show titles", null, { prefs.showTitles }, { prefs.showTitles = it })
-        switchRow("Show thumbnails", "Page previews, captured as you browse", { Settings.thumbnails() }, { Settings.setThumbnails(it) })
-        switchRow("Show Add button", null, { prefs.showAdd }, { prefs.showAdd = it })
-
-        header("Browsing")
-        switchRow("Request desktop sites", "For new tabs", { prefs.desktopSite }, { prefs.desktopSite = it })
-        choiceRow("Text size", listOf("Small (80%)", "Normal (100%)", "Large (120%)", "Extra large (150%)"),
-            { listOf(80, 100, 120, 150).indexOf(prefs.textZoom).coerceAtLeast(1) },
-            { prefs.textZoom = listOf(80, 100, 120, 150)[it] })
-        switchRow("Pull down to refresh", "Off if it gets in the way of pages with their own drag gestures", { prefs.pullRefresh }, { prefs.pullRefresh = it })
+    private fun privacyPage() {
         switchRow("Block ads and trackers", "Uses the EasyList, EasyPrivacy and uBlock filter lists", { prefs.blockTrackers }, { prefs.blockTrackers = it })
         actionRow("Filter lists", AdBlock.status + "\nTap to update now") {
             toast("Updating the filter lists…")
             Thread { val m = AdBlock.download(this); runOnUiThread { toast(m); build() } }.start()
         }
-
-        header("Privacy and data")
+        header("Clear browsing data")
         actionRow("Clear history", null) { confirm("Clear all browsing history on this device?") { Store.clearHistory(); toast("History cleared") } }
         actionRow("Clear cookies and site data", "Signs you out of websites") {
             confirm("Clear cookies and site data?") {
@@ -130,16 +311,9 @@ class SettingsActivity : BaseActivity() {
             }
         }
         actionRow("Clear cache", null) { WebView(this).clearCache(true); toast("Cache cleared") }
-        actionRow("Clear speed dial thumbnails", "They are captured again as you visit the sites") {
-            Thumbs.clear(this); toast("Thumbnails cleared")
-        }
+    }
 
-        choiceRow("Identify as", UserAgents.MODES.map { it.second }, { UserAgents.MODES.indexOfFirst { it.first == prefs.uaMode }.coerceAtLeast(0) },
-            { prefs.uaMode = UserAgents.MODES[it].first; toast("Applied to open tabs when you return to the browser") })
-        choiceRow("Translate to", Translate.LANGS.map { it.second }, { Translate.LANGS.indexOfFirst { it.first == prefs.translateLang }.coerceAtLeast(0) },
-            { prefs.translateLang = Translate.LANGS[it].first })
-
-        header("About")
+    private fun aboutPage() {
         actionRow("mbrowser for Android", "Build ${Updater.current(this)}. Syncs with your own mbrowser server.") { }
         actionRow("Source code on GitHub", "github.com/${prefs.updateRepo}") {
             try { startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://github.com/" + prefs.updateRepo))) }
@@ -151,7 +325,6 @@ class SettingsActivity : BaseActivity() {
             promptFields(this, "Update source", listOf("GitHub repository (owner/name)", "Access token (only for a private repository)"),
                 listOf(prefs.updateRepo, prefs.updateToken)) { v -> prefs.updateRepo = v[0]; prefs.updateToken = v[1]; build() }
         }
-        applyFilter()
     }
 
     private val loginLauncher = registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()) {
@@ -207,7 +380,7 @@ class SettingsActivity : BaseActivity() {
         var header: View? = null
         var shown = 0
         fun close() { header?.visibility = if (q.isEmpty() || shown > 0) View.VISIBLE else View.GONE }
-        for (i in 2 until box.childCount) { // 0 = title, 1 = search box
+        for (i in 0 until box.childCount) {
             val v = box.getChildAt(i)
             if (v.tag == HEADER) { close(); header = v; shown = 0; continue }
             val ok = q.isEmpty() || ((v.tag as? String) ?: "").contains(q)
@@ -225,15 +398,15 @@ class SettingsActivity : BaseActivity() {
         v.textSize = 13f
         v.typeface = Typeface.DEFAULT_BOLD
         v.setTextColor(tc(R.attr.mbAccent))
-        v.setPadding(dp(16), dp(22), dp(16), dp(6))
+        v.setPadding(dp(20), dp(22), dp(16), dp(6))
         box.addView(v)
     }
 
     private fun rowView(title: String, sub: String?): Pair<LinearLayout, TextView> {
         val r = LinearLayout(this)
         r.orientation = LinearLayout.VERTICAL
-        r.setPadding(dp(16), dp(12), dp(16), dp(12))
-        r.setBackgroundColor(tc(R.attr.mbCard))
+        r.setPadding(dp(20), dp(14), dp(16), dp(14))
+        run { val tv = android.util.TypedValue(); theme.resolveAttribute(android.R.attr.selectableItemBackground, tv, true); r.setBackgroundResource(tv.resourceId) }
         r.tag = (title + " " + (sub ?: "")).lowercase()
         val t = TextView(this)
         t.text = title; t.textSize = 16f; t.setTextColor(tc(R.attr.mbText))
