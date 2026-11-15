@@ -166,7 +166,7 @@ async function checkForUpdates(manual = false) {
     const assetName = isWin ? 'mbrowser-windows-setup.exe' : 'mbrowser-linux.AppImage';
     const asset = (j.assets || []).find((a) => a.name === assetName);
     const downloadUrl = asset?.browser_download_url || j.html_url;
-    const info = { build: remote, currentBuild: BUILD_NUMBER, url: downloadUrl, canInstall: !!(asset && (isWin || isAppImage)) };
+    const info = { build: remote, currentBuild: BUILD_NUMBER, url: downloadUrl, releaseUrl: j.html_url, canInstall: !!(asset && (isWin || isAppImage)) };
     if (isAppImage && info.canInstall) {
       silentAppImageUpdate(info);
     } else {
@@ -178,7 +178,7 @@ async function checkForUpdates(manual = false) {
   }
 }
 
-async function silentAppImageUpdate(info) {
+async function silentAppImageUpdate(info, autoInstall = false) {
   // Save next to the running AppImage so moveFile stays on the same filesystem
   const dest = path.join(path.dirname(process.env.APPIMAGE), '.mbrowser-update.AppImage');
   const broadcast = (ch, data) => {
@@ -208,24 +208,40 @@ async function silentAppImageUpdate(info) {
     });
     fs.chmodSync(dest, 0o755);
     _pendingUpdatePath = dest;
-    broadcast('app:update-ready', info);
+    if (autoInstall) {
+      try { moveFile(_pendingUpdatePath, process.env.APPIMAGE); app.relaunch({ execPath: process.env.APPIMAGE }); app.exit(0); } catch (e) { dialog.showErrorBox('Update failed', e.message); }
+    } else {
+      broadcast('app:update-ready', info);
+    }
   } catch { /* silent — user can manually check in About */ }
 }
 
 async function promptInstallUpdate(info) {
   const isWin = process.platform === 'win32';
   const isAppImage = !!process.env.APPIMAGE;
+  const releaseUrl = info.releaseUrl || `https://github.com/${UPDATE_REPO}/releases/tag/${UPDATE_TAG}`;
+  const msg = `Build ${info.build || '?'} is available` + (info.currentBuild ? ` (you have build ${info.currentBuild})` : '') + '.';
+  if (!info.canInstall) {
+    const { response } = await dialog.showMessageBox({
+      type: 'info', title: 'Update available', message: msg,
+      buttons: ['See release changes', 'Later'], defaultId: 0,
+    });
+    if (response === 0) shell.openExternal(releaseUrl);
+    return;
+  }
   const { response } = await dialog.showMessageBox({
-    type: 'info',
-    title: 'Update available',
-    message: `Build ${info.build} is available` + (info.currentBuild ? ` (you have build ${info.currentBuild})` : '') + '.',
-    detail: 'The update will be downloaded and installed.',
-    buttons: info.canInstall ? ['Download & install', 'Later'] : ['Open download page', 'Later'],
-    defaultId: 0,
+    type: 'info', title: 'Update available', message: msg,
+    detail: 'The update will be downloaded and applied, then the browser will restart.',
+    buttons: ['Update now', 'See release changes', 'Later'], defaultId: 0,
   });
-  if (response !== 0) return;
-  if (!info.canInstall) { shell.openExternal(info.url); return; }
-  await downloadAndInstall(info.url, isWin, isAppImage, () => {});
+  if (response === 2) return;
+  if (response === 1) { shell.openExternal(releaseUrl); return; }
+  // Update now — download and apply immediately
+  if (isAppImage) {
+    await silentAppImageUpdate(info, true);
+  } else if (isWin) {
+    await downloadAndInstall(info.url, true, false, () => {});
+  }
 }
 
 async function downloadAndInstall(url, isWin, isAppImage, onProgress) {
