@@ -118,6 +118,28 @@ jobs:
             printf 'releaseNotes: |\n%s\n' "$NOTES_YAML" >> "$YML"
           done
 
+          # Rotate backups before overwriting the latest release.
+          # desktop-backup-2 is dropped, desktop-backup-1 → desktop-backup-2,
+          # latest-desktop → desktop-backup-1, then we publish the new latest.
+          rotate_backup() {
+            local SRC="$1" DST="$2"
+            if gh release view "$SRC" > /dev/null 2>&1; then
+              local PREV_TITLE PREV_NOTES
+              PREV_TITLE=$(gh release view "$SRC" --json name   -q .name 2>/dev/null || true)
+              PREV_NOTES=$(gh release view "$SRC" --json body   -q .body 2>/dev/null || true)
+              mkdir -p "_dl_${DST}"
+              gh release download "$SRC" --dir "_dl_${DST}" --clobber 2>/dev/null || true
+              gh release delete "$DST" --yes --cleanup-tag 2>/dev/null || true
+              if ls "_dl_${DST}"/* > /dev/null 2>&1; then
+                gh release create "$DST" "_dl_${DST}"/* \
+                  --title "[Backup] ${PREV_TITLE}" \
+                  --notes "${PREV_NOTES}" 2>/dev/null || true
+              fi
+            fi
+          }
+          rotate_backup "desktop-backup-1" "desktop-backup-2"
+          rotate_backup "$TAG"             "desktop-backup-1"
+
           gh release delete "$TAG" --yes --cleanup-tag 2>/dev/null || true
           gh release create "$TAG" release-assets/* \
             --title "mbrowser Desktop Build ${{ github.run_number }}" \
