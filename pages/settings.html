@@ -636,7 +636,7 @@
         urlLbl.textContent = serverUrl;
         const reloadBtn = el('button'); reloadBtn.textContent = '↻ Reload'; reloadBtn.style.cssText = 'padding:2px 10px;font-size:12px;';
         const popBtn = el('button'); popBtn.textContent = '⬡ Open in tab'; popBtn.style.cssText = 'padding:2px 10px;font-size:12px;';
-        popBtn.onclick = () => browser.openUrl('my://server-admin', 'tab');
+        popBtn.onclick = () => browser.openUrl(serverUrl, 'tab');
         bar.append(dot, urlLbl, reloadBtn, popBtn);
         // webview fills the rest — iframe can't load http:// from a my:// origin
         const frame = document.createElement('webview');

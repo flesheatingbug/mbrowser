@@ -19,7 +19,7 @@
   #bar button { padding: 2px 10px; font-size: 12px; cursor: pointer; border: 1px solid var(--line); background: var(--bg); color: var(--fg); border-radius: 6px; }
   #bar button:hover { background: var(--tab); }
   #frame-wrap { height: calc(100% - 38px); }
-  #frame { width: 100%; height: 100%; border: none; display: none; }
+  #frame { width: 100%; height: 100%; border: none; display: none; flex: 1; }
   #no-server {
     height: 100%; display: flex; align-items: center; justify-content: center;
     flex-direction: column; gap: 14px; text-align: center; color: var(--muted); padding: 40px;
@@ -36,7 +36,7 @@
   <button id="newtab-btn" title="Open in new tab" style="display:none">⬡ Open in tab</button>
 </div>
 <div id="frame-wrap">
-  <iframe id="frame"></iframe>
+  <webview id="frame"></webview>
   <div id="no-server" style="display:none">
     <h2>No server configured</h2>
     <p>Set a server address in Settings → Sync first.</p>
@@ -65,14 +65,14 @@
   urlEl.textContent = url;
   reloadBtn.style.display = '';
   newTabBtn.style.display = '';
-  reloadBtn.onclick = () => { frame.src = ''; frame.src = url; };
+  reloadBtn.onclick = () => { try { frame.reload(); } catch { frame.setAttribute('src', url); } };
   newTabBtn.onclick = () => browser.openUrl(url, 'tab');
 
   frame.style.display = 'block';
-  frame.src = url;
+  frame.setAttribute('src', url);
 
-  frame.onload = () => { dot.className = 'dot ok'; };
-  frame.onerror = () => { dot.className = 'dot err'; urlEl.textContent = 'Could not load ' + url; };
+  frame.addEventListener('dom-ready', () => { dot.className = 'dot ok'; });
+  frame.addEventListener('did-fail-load', () => { dot.className = 'dot err'; urlEl.textContent = 'Could not load ' + url; });
 
   // ping the server to set initial dot colour
   browser.invoke('server:ping', url).then((r) => {
