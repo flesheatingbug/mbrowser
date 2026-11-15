@@ -1129,13 +1129,6 @@ class MainActivity : BaseActivity() {
             }
         }
     }
-}
-
-/** The WebView's stock user agent, read once without needing a live WebView on the UI path. */
-object WebSettingsDefault {
-    private var ua: String? = null
-    fun mobile(ctx: android.content.Context): String =
-        ua ?: android.webkit.WebSettings.getDefaultUserAgent(ctx).also { ua = it }
 
     private fun applyLogo() {
         val v = findViewById<ImageView>(R.id.appLogo)
@@ -1147,4 +1140,11 @@ object WebSettingsDefault {
         super.onResume()
         applyLogo()
     }
+}
+
+/** The WebView's stock user agent, read once without needing a live WebView on the UI path. */
+object WebSettingsDefault {
+    private var ua: String? = null
+    fun mobile(ctx: android.content.Context): String =
+        ua ?: android.webkit.WebSettings.getDefaultUserAgent(ctx).also { ua = it }
 }
