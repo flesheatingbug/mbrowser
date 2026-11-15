@@ -18,7 +18,7 @@ object Wallpapers {
     private var cacheKey = ""
     private var cacheDrawable: Drawable? = null
 
-    private fun customFile(ctx: Context) = File(ctx.applicationContext.filesDir, "wallpaper.jpg")
+    fun customFile(ctx: Context) = File(ctx.applicationContext.filesDir, "wallpaper.jpg")
 
     private fun resOf(ctx: Context, id: String) = ctx.resources.getIdentifier("wp_$id", "drawable", ctx.packageName)
 
@@ -59,11 +59,16 @@ object Wallpapers {
 
     fun hasCustom(ctx: Context) = customFile(ctx).exists()
 
+    /** A photo that came down from the server; its file time is set to the server's change time so both sides agree. */
+    fun storeCustom(ctx: Context, bytes: ByteArray, updated: Long) {
+        val f = customFile(ctx); f.writeBytes(bytes); f.setLastModified(updated); cacheKey = ""
+    }
+
     /** Copies a picked photo, scaled down, so it keeps working if the original is moved. */
     fun saveCustom(ctx: Context, uri: Uri): Boolean {
         return try {
-            val b = sampled({ ctx.contentResolver.openInputStream(uri) }, 1440, 2560) ?: return false
-            customFile(ctx).outputStream().use { b.compress(Bitmap.CompressFormat.JPEG, 90, it) }
+            val b = sampled({ ctx.contentResolver.openInputStream(uri) }, 1080, 2400) ?: return false
+            customFile(ctx).outputStream().use { b.compress(Bitmap.CompressFormat.JPEG, 85, it) }
             cacheKey = ""
             true
         } catch (e: Exception) { false }

@@ -12,7 +12,7 @@ class Engine(val id: String, val name: String, val url: String)
  * browser has more). Same shape as the server document: { key: { updated, value } }.
  */
 object Settings {
-    val MANAGED = listOf("search", "startPage")
+    val MANAGED = listOf("search", "startPage", "look")
     private lateinit var file: File
     private var groups = JSONObject()
     private var loaded = false

@@ -159,6 +159,9 @@ class Prefs(ctx: Context) {
     var blockTrackers: Boolean
         get() = bool("blockTrackers", true)
         set(v) = putB("blockTrackers", v)
+    var lookHash: String
+        get() = str("lookHash", "")
+        set(v) = put("lookHash", v)
     var firstRunDone: Boolean
         get() = bool("firstRun", false)
         set(v) = putB("firstRun", v)

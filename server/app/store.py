@@ -37,6 +37,7 @@ CREATE TABLE IF NOT EXISTS bookmarks(url TEXT PRIMARY KEY, title TEXT, folder TE
 CREATE TABLE IF NOT EXISTS history(url TEXT, time INTEGER, title TEXT, rev INTEGER, PRIMARY KEY(url, time));
 CREATE TABLE IF NOT EXISTS tabs(device TEXT PRIMARY KEY, tabs TEXT, updated INTEGER);
 CREATE TABLE IF NOT EXISTS settings(id INTEGER PRIMARY KEY CHECK (id = 1), version INTEGER, doc TEXT, updated INTEGER);
+CREATE TABLE IF NOT EXISTS wallpaper(id INTEGER PRIMARY KEY CHECK (id = 1), updated INTEGER, data TEXT);
 CREATE TABLE IF NOT EXISTS vault(id INTEGER PRIMARY KEY CHECK (id = 1), version INTEGER, blob TEXT, updated INTEGER);
 CREATE INDEX IF NOT EXISTS bookmarks_rev ON bookmarks(rev);
 CREATE INDEX IF NOT EXISTS history_rev ON history(rev);

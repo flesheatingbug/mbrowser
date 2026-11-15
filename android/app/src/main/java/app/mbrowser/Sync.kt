@@ -62,7 +62,7 @@ object Sync {
         prefs.otherTabs = (api.tabsGet().optJSONArray("devices") ?: JSONArray()).toString()
         }
 
-        if (prefs.syncSettings) syncSettings(api)
+        if (prefs.syncSettings) { try { syncWallpaper(ctx, api) } catch (_: Exception) { }; syncSettings(api, ctx, prefs) }
 
         if (prefs.syncVault) { try { VaultSync.run(ctx, api) } catch (e: Exception) { prefs.vaultStatus = "Sync failed: ${e.message}" } }
 
@@ -70,7 +70,22 @@ object Sync {
     }
 
     /** Merges the managed settings groups with the server's document. The newest change to a group wins. */
-    private fun syncSettings(api: Api) {
+    /** Your own wallpaper photo: the newer copy wins, in either direction. */
+    private fun syncWallpaper(ctx: Context, api: Api) {
+        val f = Wallpapers.customFile(ctx)
+        val local = if (f.exists()) f.lastModified() else 0L
+        val r = api.request("GET", "/api/wallpaper")
+        val ru = r.optLong("updated")
+        val data = r.optString("data", "")
+        if (local > ru && f.exists()) {
+            val b64 = android.util.Base64.encodeToString(f.readBytes(), android.util.Base64.NO_WRAP)
+            api.request("PUT", "/api/wallpaper", JSONObject().put("updated", local).put("data", b64))
+        } else if (ru > local && data.isNotEmpty()) {
+            Wallpapers.storeCustom(ctx, android.util.Base64.decode(data, android.util.Base64.DEFAULT), ru)
+        }
+    }
+
+    private fun syncSettings(api: Api, ctx: Context, prefs: Prefs) {
         for (attempt in 0 until 3) {
             val remote = api.request("GET", "/api/settings")
             val version = remote.optLong("version")
@@ -78,6 +93,12 @@ object Sync {
             val rgroups = doc?.optJSONObject("groups") ?: JSONObject()
             val merged = JSONObject()
             var push = doc == null
+            // the look: if it changed on this phone since the last sync, that is a new local change
+            val rl = rgroups.optJSONObject("look")
+            val remoteHasLook = rl != null && rl.has("updated") && rl.optJSONObject("value") != null
+            val curLook = Look.json(prefs)
+            if (prefs.lookHash.isNotEmpty() && prefs.lookHash != Look.hash(prefs)) Settings.set("look", curLook)
+            else if (!remoteHasLook && Settings.updated("look") == 0L) Settings.set("look", curLook)
             // groups this app doesn't manage (the desktop has more) are passed through untouched
             for (k in rgroups.keys()) if (k !in Settings.MANAGED) merged.put(k, rgroups.get(k))
             for (key in Settings.MANAGED) {
@@ -87,10 +108,14 @@ object Sync {
                 val valid = r != null && r.has("updated") && r.optJSONObject("value") != null
                 if (!valid) { merged.put(key, local); push = true; continue }
                 val ru = r!!.optLong("updated")
-                if (ru > lu) { Settings.applyRemote(key, r.getJSONObject("value"), ru); merged.put(key, r) }
+                if (ru > lu) {
+                    Settings.applyRemote(key, r.getJSONObject("value"), ru); merged.put(key, r)
+                    if (key == "look") Look.apply(ctx, prefs, r.getJSONObject("value"))
+                }
                 else if (ru < lu) { merged.put(key, local); push = true }
                 else merged.put(key, r)
             }
+            prefs.lookHash = Look.hash(prefs)
             if (!push) return
             try {
                 api.request("PUT", "/api/settings", JSONObject().put("base", version).put("doc", JSONObject().put("groups", merged)))

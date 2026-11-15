@@ -121,6 +121,22 @@ def vault_put(c, body):
     return {'version': cur + 1}
 
 
+def wallpaper_get(c):
+    r = c.execute('SELECT updated, data FROM wallpaper WHERE id = 1').fetchone()
+    return {'updated': r['updated'] if r else 0, 'data': r['data'] if r else None}
+
+
+def wallpaper_put(c, body):
+    data, upd = body.get('data'), _num(body.get('updated'))
+    if not isinstance(data, str) or not data or len(data) > 3_000_000:
+        raise ApiError(413 if isinstance(data, str) and data else 400, 'invalid or too large wallpaper')
+    r = c.execute('SELECT updated FROM wallpaper WHERE id = 1').fetchone()
+    if r and r['updated'] >= upd:
+        return {'updated': r['updated']}   # the server already has a newer or equal photo
+    c.execute('INSERT INTO wallpaper(id, updated, data) VALUES(1,?,?) ON CONFLICT(id) DO UPDATE SET updated=excluded.updated, data=excluded.data', (upd, data))
+    return {'updated': upd}
+
+
 def settings_get(c):
     r = _versioned_get(c, 'settings', 'doc')
     if not r:
