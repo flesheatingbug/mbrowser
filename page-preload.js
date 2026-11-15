@@ -45,6 +45,7 @@ if (location.protocol === 'my:') {
     vaultImportFile: invoke('vault:importFile'),
     profilesList: invoke('profiles:list'),
     profilesCreate: invoke('profiles:create'),
+    relaunch: invoke('app:relaunch'),
     profilesUpdate: invoke('profiles:update'),
     profilesSetPassword: invoke('profiles:setPassword'),
     profilesRemove: invoke('profiles:remove'),
@@ -143,7 +144,7 @@ if (/^https?:$/.test(location.protocol)) {
   const chromeMajor = chromeVer.split('.')[0];
   webFrame.executeJavaScript(`(function(){
     // only for the Chrome identity: with Firefox or Safari nothing is faked
-    if (!/ Chrome\\//.test(navigator.userAgent)) return;
+    if (!navigator.userAgentData || !/ Chrome\\//.test(navigator.userAgent)) return;
     var brands = [
       {brand:'Not?A_Brand',version:'8'},
       {brand:'Chromium',version:'${chromeMajor}'},

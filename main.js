@@ -132,7 +132,7 @@ const EARLY_ID = (() => {
 // silences the harmless "--ozone-platform=wayland is not compatible with Vulkan" message.
 // Firefox and Safari have no "client hints" (navigator.userAgentData, Sec-CH-UA headers), so for those identities the feature is switched off
 // instead of faked: a faked one is easy to detect, a missing one is exactly what a real Firefox looks like.
-app.commandLine.appendSwitch('disable-features', EARLY_ID === 'firefox' || EARLY_ID === 'safari' ? 'Vulkan,UserAgentClientHint' : 'Vulkan');
+app.commandLine.appendSwitch('disable-features', EARLY_ID === 'chrome' || EARLY_ID === 'none' ? 'Vulkan' : 'Vulkan,UserAgentClientHint');
 // prevent navigator.webdriver from being set (some Chromium builds set it when DevTools attaches)
 app.commandLine.appendSwitch('disable-blink-features', 'AutomationControlled');
 
@@ -593,6 +593,7 @@ function createView(isPrivate) {
     },
   });
   maskUserAgentData(v.webContents);
+  applyAutoIdentity(v.webContents);
   return v;
 }
 
@@ -728,6 +729,7 @@ function wire(tab) {
     // Auth popups: session UA is already Chrome — no CDP needed, and attaching a
     // debugger is itself a detectable signal. Mask everything else as before.
     if (!isAuth) maskUserAgentData(newWin.webContents);
+    applyAutoIdentity(newWin.webContents);
   });
   wc.on('context-menu', h((_e, params) => {
     // Always store params. Chromium fires this event before dispatching the DOM
@@ -2358,6 +2360,7 @@ function setupIpc() {
   handle('vault:deleteAddress', (_e, id) => { locked(); vault.remove(id); syncSoon(); return true; }, PAGE_ONLY);
 
   // ---- profiles ----
+  handle('app:relaunch', () => { app.relaunch(); app.exit(0); }, PAGE_ONLY);
   handle('profiles:list', () => { profiles.reload(); return { profiles: profiles.list(), current: profileId, askAtStart: profiles.askAtStart() }; }, PAGE_ONLY);
   handle('profiles:create', (_e, o) => { profiles.reload(); return profiles.create(o || {}); }, PAGE_ONLY);
   handle('profiles:update', (_e, id, o) => {
@@ -3017,9 +3020,29 @@ function chromePlatformVersion() {
   const build = parseInt((os.release().split('.')[2] || '0'), 10);
   return build >= 22000 ? '15.0.0' : '10.0.0';
 }
+// Sites that refuse an embedded Chromium but accept Firefox (Google sign-in, Gmail, YouTube).
+const GOOGLE_HOST = /(^|\.)(google\.[a-z.]{2,}|gmail\.com|googleapis\.com|gstatic\.com|googleusercontent\.com|youtube\.com|ytimg\.com|ggpht\.com)$/i;
+const isGoogleUrl = (u) => { try { return GOOGLE_HOST.test(new URL(u).hostname); } catch { return false; } };
+const FIREFOX_UA = process.platform === 'win32'
+  ? 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0'
+  : 'Mozilla/5.0 (X11; Linux x86_64; rv:140.0) Gecko/20100101 Firefox/140.0';
+
+// "Automatic": Chrome everywhere, Firefox on Google's own sites. Nothing is faked: the user agent is set per page, and the client hints are off.
+function applyAutoIdentity(wc) {
+  if (S().general.browserId !== 'auto') return;
+  const chromeUA = uaForMode('chrome');
+  let last = '';
+  const set = (url) => { const ua = isGoogleUrl(url) ? FIREFOX_UA : chromeUA; if (ua !== last) { last = ua; try { wc.setUserAgent(ua); } catch { /* closed */ } } };
+  const orig = wc.loadURL.bind(wc);
+  wc.loadURL = (url, opts) => { set(url); return orig(url, opts); };   // the address bar loads pages this way and fires no will-navigate
+  wc.on('will-navigate', (_e, url) => set(url));
+  wc.on('will-redirect', (_e, url) => set(url));
+  wc.on('did-start-navigation', (d) => { if (d && d.isMainFrame) set(d.url); });
+}
+
 function uaForMode(mode) {
   const win = process.platform === 'win32';
-  if (mode === 'firefox') return win ? 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0' : 'Mozilla/5.0 (X11; Linux x86_64; rv:140.0) Gecko/20100101 Firefox/140.0';
+  if (mode === 'firefox') return FIREFOX_UA;
   if (mode === 'safari') return 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.6 Safari/605.1.15';
   if (mode === 'none') return app.userAgentFallback;
   return `Mozilla/5.0 ${win ? '(Windows NT 10.0; Win64; x64)' : '(X11; Linux x86_64)'} AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${CHROME_VER} Safari/537.36`;
@@ -3080,6 +3103,11 @@ function setupSession(ses) {
     // Google/Gmail: always masquerade as Chrome on Google domains so Gmail and
     // sign-in work regardless of the user's browserId setting. The JS-side
     // Emulation.setUserAgentOverride already reports Chrome; HTTP headers must match.
+    if (S().general.browserId === 'auto' && isGoogleUrl(details.url)) {
+      // Google's own sites see a plain Firefox: its user agent, and none of the Chrome-only hint headers
+      Object.keys(h).filter((k) => /^(sec-ch-ua|user-agent$)/i.test(k)).forEach((k) => delete h[k]);
+      h['User-Agent'] = FIREFOX_UA;
+    }
     if (S().general.browserId === 'chrome' && googlePattern.test(details.url)) {
       // Delete both common capitalisations so the Electron brand doesn't leak alongside ours.
       ['Sec-CH-UA', 'sec-ch-ua', 'Sec-CH-UA-Mobile', 'sec-ch-ua-mobile',
