@@ -56,6 +56,7 @@ class MainActivity : AppCompatActivity() {
     private class Tab(val web: WebView) {
         var title = ""
         @Volatile var url = ""
+        var fresh = false               // the next page loaded is the first one after the speed dial: it starts a new history
         var pending: String? = null     // restored tab: loads when first shown
         var home = true                 // true until something has been loaded: shows the speed dial
         var thumb: Bitmap? = null
@@ -214,7 +215,7 @@ class MainActivity : AppCompatActivity() {
                     findViewById<View>(R.id.findBar).visibility == View.VISIBLE -> closeFind()
                     t != null && t.home && startPage.up() -> Unit
                     t != null && !t.home && t.web.canGoBack() -> t.web.goBack()
-                    t != null && !t.home -> { t.home = true; t.url = ""; t.title = ""; render() }
+                    t != null && !t.home -> { leaveToHome(t); render() }
                     tabs.size > 1 -> closeTab(current)
                     else -> { isEnabled = false; onBackPressedDispatcher.onBackPressed() }
                 }
@@ -531,6 +532,7 @@ class MainActivity : AppCompatActivity() {
 
             override fun onPageFinished(view: WebView, url: String) {
                 if (url.startsWith("about:")) return
+                if (tab.fresh) { tab.fresh = false; view.clearHistory() }
                 tab.url = url
                 tab.title = view.title ?: ""
                 if (!tab.priv) Store.addVisit(url, tab.title)
@@ -831,6 +833,7 @@ class MainActivity : AppCompatActivity() {
         val url = toUrl(input)
         if (url.isEmpty()) return
         val t = cur() ?: return
+        if (t.home) t.fresh = true
         t.home = false
         t.url = url
         render()
@@ -845,14 +848,22 @@ class MainActivity : AppCompatActivity() {
     private fun goHome() {
         val t = cur() ?: return
         hideSwitcher()
-        t.home = true; t.url = ""; t.title = ""
+        leaveToHome(t)
         startPage.resetPath()
         render()
     }
 
+    /** Back to the speed dial: the page view is emptied so the old pages don't show up or stay in its history. */
+    private fun leaveToHome(t: Tab) {
+        t.home = true; t.url = ""; t.title = ""; t.pending = null
+        t.web.loadUrl("about:blank")
+        t.fresh = true
+    }
+
     private fun goBack() {
         val t = cur() ?: return
-        if (!t.home && t.web.canGoBack()) t.web.goBack()
+        if (t.home) return
+        if (t.web.canGoBack()) t.web.goBack() else { leaveToHome(t); render() }
     }
 
     // ---------- bookmarks / menu ----------
