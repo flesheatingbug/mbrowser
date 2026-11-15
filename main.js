@@ -582,6 +582,14 @@ function wire(tab) {
       tab.focusUrlOnLoad = false;
       if (cur.activeId === tab.id && !cur.overlayMode) focusUrl();
     }
+    // cosmetic ad hiding (element-hiding rules from filter lists)
+    if (S().privacy.blockTrackers && isWeb(wc.getURL()) && !tab.private) {
+      const pageHost = hostOf(wc.getURL());
+      if (pageHost && !((S().privacy.allowSites || []).some((h) => pageHost === h || pageHost.endsWith('.' + h)))) {
+        const css = blocker.cosmeticCss(pageHost);
+        if (css) wc.insertCSS(css).catch(() => { /* ignore */ });
+      }
+    }
   }));
   wc.on('update-target-url', h((_e, url) => { tab.hover = url; pushState(); }));
   wc.on('did-navigate-in-page', h(() => pushState()));
@@ -2491,6 +2499,8 @@ function setupIpc() {
     }
     return result;
   }, BOTH);
+  handle('blocker:status', () => blocker.getStatus(), BOTH);
+  handle('blocker:update', async () => { const r = await blocker.download(); return r; }, BOTH);
   handle('app:check-updates', async () => { await checkForUpdates(true); }, BOTH);
   handle('app:install-update', async (_e, info) => {
     const isAppImage = !!process.env.APPIMAGE;
@@ -3292,7 +3302,7 @@ app.whenReady().then(async () => {
   }
 
   store = createStore(file('settings.json'));
-  blocker = createBlocker(S);
+  blocker = createBlocker(S, path.join(app.getPath('userData'), 'adblock'));
 
   // one-time migration of the old sync.json
   if (!S().sync.server && !S().sync.token) {

@@ -366,7 +366,10 @@
     if (flash) { msg.textContent = flash; flash = ''; }
     else browser.syncStatus().then((s) => { msg.textContent = s; });
     const b = el('button', null, 'Sync now');
-    b.onclick = async () => { msg.textContent = 'Syncing…'; msg.textContent = await browser.syncNow(); };
+    b.onclick = async () => {
+      if (!S.sync.token) { cur = 'sync'; render(); return; }
+      msg.textContent = 'Syncing…'; msg.textContent = await browser.syncNow();
+    };
     const test = el('button', null, 'Test connection');
     const out = el('div', 'msg'); out.style.whiteSpace = 'pre-wrap'; out.style.marginTop = '10px';
     test.onclick = async () => {
@@ -378,6 +381,21 @@
     const row = el('div', 'btn-row');
     row.append(b, test);
     m.append(row, msg, out);
+  }
+
+  async function blockerSection(m) {
+    m.append(el('h2', null, 'Filter lists'));
+    const statusEl = el('div', 'msg'); statusEl.style.marginBottom = '10px';
+    statusEl.textContent = await browser.blockerStatus();
+    const updBtn = el('button', null, 'Update filter lists now');
+    const updMsg = el('div', 'msg'); updMsg.style.marginTop = '8px';
+    updBtn.onclick = async () => {
+      updBtn.disabled = true; updBtn.textContent = 'Downloading…'; updMsg.textContent = '';
+      updMsg.textContent = await browser.blockerUpdate();
+      statusEl.textContent = await browser.blockerStatus();
+      updBtn.disabled = false; updBtn.textContent = 'Update filter lists now';
+    };
+    m.append(statusEl, updBtn, updMsg);
   }
 
   const ICONS = [['classic', 'Classic'], ['color', 'Logo (colour)'], ['blue', 'Logo (blue)'], ['white', 'Logo (white)'], ['blue-m', 'M (blue)'], ['white-m', 'M (white)']];
@@ -632,6 +650,7 @@
     (FIELDS[cur] || []).forEach((d) => m.append(field(d)));
     if (cur === 'startpage') m.append(el('p', 'muted', 'Add, edit, group and reorder speed dials on the start page itself. Drag a tile to reorder it, or drop it on a group tab to move it.'));
     if (cur === 'privacy') clearButtons(m);
+    if (cur === 'adblocker') await blockerSection(m);
     if (cur === 'sync') {
       syncExtras(m);
       if (S.sync.server) {
