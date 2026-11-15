@@ -170,11 +170,6 @@
     will-change: left, top, transform, opacity;
   }
 
-  /* ---- newtab context menu ---- */
-  #newtab-ctx { display:none; position:fixed; background:var(--bg); border:1px solid var(--line); border-radius:10px;
-    box-shadow:0 6px 24px rgba(0,0,0,.35); padding:4px; z-index:999; min-width:160px; }
-  .nctx-item { padding:7px 14px; border-radius:6px; cursor:pointer; font-size:13px; white-space:nowrap; }
-  .nctx-item:hover { background:var(--accent); color:var(--onaccent); }
 </style>
 </head>
 <body>
@@ -602,12 +597,7 @@
       plus.id = 'newtab';
       plus.textContent = s.tabBar === 'left' ? '+  New tab' : '+';
       plus.onclick = () => api.newTab();
-      plus.oncontextmenu = (e) => {
-        e.preventDefault();
-        nctx.style.display = 'block';
-        nctx.style.left = Math.min(e.clientX, innerWidth - 180) + 'px';
-        nctx.style.top = Math.min(e.clientY, innerHeight - 80) + 'px';
-      };
+      plus.oncontextmenu = (e) => { e.preventDefault(); api.newtabMenu(); };
       strip.appendChild(plus);
       // compact mode: shrink tabs when many open
       const n = s.tabs.length;

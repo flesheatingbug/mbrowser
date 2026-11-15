@@ -53,6 +53,7 @@ contextBridge.exposeInMainWorld('api', {
   onState: (cb) => ipcRenderer.on('state', (_e, s) => cb(s)),
   onFocusUrl: (cb) => ipcRenderer.on('focus-url', () => cb()),
   downloadAction: (id, action) => ipcRenderer.invoke('downloads:action', id, action),
+  newtabMenu: () => ipcRenderer.send('tab:newtab-menu'),
   openDownloads: () => ipcRenderer.send('tab:new', 'my://downloads'),
   showDlCtxMenu: (id) => ipcRenderer.send('downloads:ctxmenu', id),
   onOverlayOpen: (cb) => ipcRenderer.on('overlay:open', (_e, mode, data) => cb(mode, data)),

@@ -1708,6 +1708,12 @@ function setupIpc() {
   on('tab:switch', (_e, id) => switchTab(id));
   on('tab:close', (_e, id) => closeTab(id));
   on('tab:menu', (_e, id) => tabMenu(id));
+  on('tab:newtab-menu', () => {
+    const m = new Menu();
+    m.append(new MenuItem({ label: 'New tab', click: () => newTab() }));
+    m.append(new MenuItem({ label: 'New private tab', click: () => newTab(undefined, { private: true }) }));
+    m.popup({ window: cur.win });
+  });
   on('tab:move', (_e, id, beforeId) => {
     const t = tabById.get(id);
     if (!t || !Number.isInteger(id)) return;
