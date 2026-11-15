@@ -2927,7 +2927,7 @@ ipcMain.handle('wizard:connect', async (e, o) => {
     applySetting('sync.server', base);
     const res = await fetch(base + '/api/auth/device-login', {
       method: 'POST', headers: { 'content-type': 'application/json' }, signal: AbortSignal.timeout(15000),
-      body: JSON.stringify({ username: String(o.username || ''), password: String(o.password || ''), totp: String(o.totp || ''), profile: o.profile || '', device: S().sync.device || os.hostname() }),
+      body: JSON.stringify({ username: String(o.username || ''), password: String(o.password || ''), totp: String(o.totp || ''), profile: o.profile || '', create: !!o.create, list: !!o.list, device: S().sync.device || os.hostname() }),
     });
     let data = {};
     try { data = await res.json(); } catch { /* not JSON */ }

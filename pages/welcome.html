@@ -243,7 +243,7 @@ function renderServerForm(card) {
       const url = iServer.value.trim();
       if (!url) { statusEl.className = 'server-status err'; statusEl.textContent = 'Enter the server address.'; connectBtn.disabled = false; connectBtn.textContent = 'Connect'; return; }
       savedCreds = { server: url, username: iUser.value, password: iPw.value };
-      const r = await browser.wizardConnect({ ...savedCreds, profile: selectedServerProfile || '' });
+      const r = await browser.wizardConnect({ ...savedCreds, profile: selectedServerProfile || '', list: true });
       connectBtn.disabled = false; connectBtn.textContent = 'Connect';
       if (r && r.needTotp) { showOtpForm(); return; }
       if (r && r.needProfile) { showProfilePicker(r.profiles); return; }
@@ -275,7 +275,7 @@ function renderServerForm(card) {
 
     verifyBtn.onclick = async () => {
       verifyBtn.disabled = true; verifyBtn.textContent = 'Verifying…'; statusEl.className = 'server-status';
-      const r = await browser.wizardConnect({ ...savedCreds, totp: iOtp.value.replace(/\s/g, ''), profile: selectedServerProfile || '' });
+      const r = await browser.wizardConnect({ ...savedCreds, totp: iOtp.value.replace(/\s/g, ''), profile: selectedServerProfile || '', list: true });
       verifyBtn.disabled = false; verifyBtn.textContent = 'Verify';
       if (r && r.needProfile) { savedCreds.totp = iOtp.value.replace(/\s/g, ''); showProfilePicker(r.profiles); return; }
       if (r && r.ok) {
@@ -341,7 +341,7 @@ function renderServerForm(card) {
       if (!name) { formStatus.className = 'server-status err'; formStatus.textContent = 'Enter a profile name.'; return; }
       createBtn.disabled = true; createBtn.textContent = 'Creating…'; formStatus.className = 'server-status';
       selectedServerProfile = name;
-      const r = await browser.wizardConnect({ ...savedCreds, profile: name });
+      const r = await browser.wizardConnect({ ...savedCreds, profile: name, create: true });
       createBtn.disabled = false; createBtn.textContent = 'Create';
       if (r && r.ok) { serverConnected = true; status = await browser.wizardStatus() || status; step = 3; render(); }
       else { formStatus.className = 'server-status err'; formStatus.textContent = r?.error || 'Failed to create profile.'; }

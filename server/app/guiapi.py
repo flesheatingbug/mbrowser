@@ -91,19 +91,26 @@ def device_login(ctx, req):
     # advance_totp=False: don't burn the OTP code yet — keep it valid for the profile-selection retry
     user = _check_credentials(ctx, req, b, advance_totp=False)
     profiles = ctx.store.list_profiles(user['id'])
-    if not profiles:
-        raise ApiError(409, 'This account has no profile yet. Create one in the web interface first.')
     want = str(b.get('profile') or '').strip()
     chosen = None
-    if want:
+
+    if b.get('create') and want:
+        # Create the named profile, then issue a token for it
+        pid = ctx.store.create_profile(user['id'], want)
+        chosen = ctx.store.get_profile(pid)
+    elif want:
         chosen = next((p for p in profiles if str(p['id']) == want or p['name'].lower() == want.lower()), None)
         if not chosen:
             raise ApiError(404, 'There is no profile with that name.')
+    elif not profiles or b.get('list'):
+        # No profiles yet, or caller asked for the list — let the client pick or create
+        return 200, {'needProfile': True, 'profiles': [{'id': p['id'], 'name': p['name']} for p in profiles]}
     elif len(profiles) == 1:
         chosen = profiles[0]
     else:
-        # Return needProfile without advancing totp_step so the same code works on retry
+        # Multiple profiles — client must pick
         return 200, {'needProfile': True, 'profiles': [{'id': p['id'], 'name': p['name']} for p in profiles]}
+
     # Commit totp_step now that we're issuing a token (prevents replay after this point)
     if '_totp_step' in user:
         ctx.store.set_flags(user['id'], totp_step=user['_totp_step'])
