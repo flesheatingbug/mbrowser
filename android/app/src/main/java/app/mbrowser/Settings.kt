@@ -117,6 +117,22 @@ object Settings {
         return out
     }
 
+    /** Every speed dial address, folders included. */
+    fun dialUrls(): List<String> {
+        val out = ArrayList<String>()
+        fun walk(a: JSONArray?) {
+            if (a == null) return
+            for (i in 0 until a.length()) {
+                val o = a.optJSONObject(i) ?: continue
+                val u = o.optString("url"); if (u.startsWith("http")) out.add(u)
+                walk(o.optJSONArray("dials"))
+            }
+        }
+        val g = value("startPage").optJSONArray("groups") ?: return out
+        for (i in 0 until g.length()) walk(g.getJSONObject(i).optJSONArray("dials"))
+        return out
+    }
+
     private fun collectHosts(a: JSONArray?, out: HashSet<String>) {
         if (a == null) return
         for (i in 0 until a.length()) {

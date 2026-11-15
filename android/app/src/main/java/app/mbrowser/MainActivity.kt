@@ -587,6 +587,63 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /** Keeps a preview for a speed dial site while its page is still on screen (so quick visits are not missed). */
+    private fun saveThumbIfWanted(t: Tab) {
+        val host = Thumbs.hostOf(t.url)
+        if (host.isEmpty() || t.web.progress < 100 || Thumbs.thumb(this, host) != null) return
+        if (host !in Settings.dialHosts()) return
+        capture(t, 360)?.let { Thumbs.saveThumb(this, host, it) }
+    }
+
+    // ---- pictures for speed dials that have none yet: load them one by one in a hidden page view ----
+    private val thumbTried = HashSet<String>()
+    private var thumbBusy = false
+
+    private fun fetchMissingThumbs() {
+        if (thumbBusy || !Settings.thumbnails()) return
+        val queue = ArrayDeque(Settings.dialUrls().filter { u ->
+            val h = Thumbs.hostOf(u); h.isNotEmpty() && Thumbs.thumb(this, h) == null && thumbTried.add(h)
+        }.take(10))
+        if (queue.isEmpty()) return
+        thumbBusy = true
+        val root = findViewById<ViewGroup>(android.R.id.content)
+        val w = resources.displayMetrics.widthPixels
+        val hv = WebView(this)
+        hv.alpha = 0.01f
+        hv.settings.javaScriptEnabled = true; hv.settings.domStorageEnabled = true
+        hv.settings.userAgentString = hv.settings.userAgentString.replace("; wv", "")
+        root.addView(hv, 0, FrameLayout.LayoutParams(w, (w * 0.62f).toInt()))
+        lateinit var next: () -> Unit
+        var current = ""
+        hv.webViewClient = object : WebViewClient() {
+            override fun onPageFinished(view: WebView, url: String) {
+                if (url.startsWith("about:") || current.isEmpty()) return
+                val host = Thumbs.hostOf(current); val at = current
+                ui.postDelayed({
+                    if (at != current) return@postDelayed
+                    try {
+                        val full = Bitmap.createBitmap(w, (w * 0.62f).toInt(), Bitmap.Config.ARGB_8888)
+                        hv.draw(Canvas(full))
+                        Thumbs.saveThumb(this@MainActivity, host, Bitmap.createScaledBitmap(full, 360, (360 * 0.62f).toInt(), true))
+                    } catch (_: Throwable) { }
+                    next()
+                }, 2500)
+            }
+        }
+        next = {
+            val u = queue.removeFirstOrNull()
+            if (u == null || isFinishing) {
+                current = ""; root.removeView(hv); hv.destroy(); thumbBusy = false
+                if (cur()?.home == true) startPage.refresh()
+            } else {
+                current = u; hv.loadUrl(u)
+                val started = u
+                ui.postDelayed({ if (current == started) next() }, 15000)   // give up on pages that never finish
+            }
+        }
+        next()
+    }
+
     private fun capture(tab: Tab, outW: Int): Bitmap? {
         val w = tab.web.width
         val h = tab.web.height
@@ -663,6 +720,7 @@ class MainActivity : AppCompatActivity() {
             urlBar.setText("")
             progress.visibility = View.INVISIBLE
             startPage.refresh()
+            ui.postDelayed({ if (cur()?.home == true) fetchMissingThumbs() }, 1500)
         } else {
             (t.web.parent as? ViewGroup)?.removeView(t.web)
             container.addView(t.web, FrameLayout.LayoutParams(-1, -1))
@@ -855,6 +913,7 @@ class MainActivity : AppCompatActivity() {
 
     /** Back to the speed dial: the page view is emptied so the old pages don't show up or stay in its history. */
     private fun leaveToHome(t: Tab) {
+        if (!t.priv && !t.home) saveThumbIfWanted(t)
         t.home = true; t.url = ""; t.title = ""; t.pending = null
         t.web.loadUrl("about:blank")
         t.fresh = true
