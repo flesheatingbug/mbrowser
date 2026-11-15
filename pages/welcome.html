@@ -8,7 +8,7 @@
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: system-ui, sans-serif; background: var(--bg); color: var(--fg); font-size: 14px; height: 100vh; display: flex; flex-direction: column; }
 input, select { background: var(--tab); border: 1px solid var(--line); border-radius: 8px; color: var(--fg); padding: 8px 12px; font-size: 14px; width: 100%; outline: none; }
-input:focus { border-color: var(--accent); }
+input:focus, select:focus { border-color: var(--accent); }
 button { border: none; border-radius: 8px; padding: 9px 18px; font-size: 14px; cursor: pointer; font-family: inherit; }
 .btn-primary { background: var(--accent); color: var(--onaccent); }
 .btn-primary:hover { opacity: .88; }
@@ -19,7 +19,7 @@ button { border: none; border-radius: 8px; padding: 9px 18px; font-size: 14px; c
 .btn-secondary:hover { border-color: var(--muted); }
 
 /* header */
-.header { padding: 20px 28px 0; display: flex; align-items: center; gap: 10px; }
+.header { padding: 20px 32px 0; display: flex; align-items: center; gap: 10px; }
 .logo { width: 32px; height: 32px; }
 .app-name { font-size: 16px; font-weight: 600; }
 .dots { margin-left: auto; display: flex; gap: 6px; align-items: center; }
@@ -28,13 +28,14 @@ button { border: none; border-radius: 8px; padding: 9px 18px; font-size: 14px; c
 .dot.done { background: var(--muted); }
 
 /* main content */
-.content { flex: 1; padding: 24px 28px 20px; overflow-y: auto; display: flex; flex-direction: column; }
+.content { flex: 1; padding: 24px 32px 20px; overflow-y: auto; display: flex; flex-direction: column; }
 h2 { font-size: 22px; font-weight: 700; margin-bottom: 6px; }
 .subtitle { color: var(--muted); margin-bottom: 24px; line-height: 1.5; }
 .field { margin-bottom: 14px; }
 .field label { display: block; color: var(--muted); font-size: 12px; margin-bottom: 5px; }
 .err { color: #ff6b6b; font-size: 13px; min-height: 18px; margin-top: 4px; }
 .note { font-size: 12px; color: var(--muted); line-height: 1.5; }
+.section-label { font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin-bottom: 10px; }
 
 /* option cards */
 .cards { display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px; }
@@ -52,7 +53,7 @@ h2 { font-size: 22px; font-weight: 700; margin-bottom: 6px; }
 .toggle-label { flex: 1; }
 .toggle-label b { display: block; }
 .toggle-label span { font-size: 12px; color: var(--muted); }
-.toggle { width: 42px; height: 24px; border-radius: 12px; border: none; cursor: pointer; position: relative; flex-none; transition: background .15s; }
+.toggle { width: 42px; height: 24px; border-radius: 12px; border: none; cursor: pointer; position: relative; flex: none; transition: background .15s; }
 .toggle.on { background: var(--accent); }
 .toggle.off { background: var(--line); }
 .toggle::after { content: ''; position: absolute; width: 18px; height: 18px; border-radius: 50%; background: #fff; top: 3px; transition: left .15s; }
@@ -60,7 +61,7 @@ h2 { font-size: 22px; font-weight: 700; margin-bottom: 6px; }
 .toggle.off::after { left: 3px; }
 
 /* footer */
-.footer { padding: 16px 28px; display: flex; align-items: center; justify-content: flex-end; gap: 10px; border-top: 1px solid var(--line); }
+.footer { padding: 16px 32px; display: flex; align-items: center; justify-content: flex-end; gap: 10px; border-top: 1px solid var(--line); }
 
 /* server status */
 .server-status { font-size: 13px; padding: 8px 0; min-height: 24px; }
@@ -82,6 +83,24 @@ h2 { font-size: 22px; font-weight: 700; margin-bottom: 6px; }
 .summary { margin-top: 14px; display: flex; flex-direction: column; gap: 7px; }
 .summary-item { display: flex; align-items: center; gap: 10px; font-size: 13px; }
 .summary-item svg { flex: none; width: 16px; height: 16px; }
+
+/* ---- theme swatches ---- */
+.theme-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; margin-bottom: 24px; }
+.tswatch { border: 2px solid var(--line); border-radius: 10px; overflow: hidden; cursor: pointer; transition: border-color .15s; }
+.tswatch:hover { border-color: var(--muted); }
+.tswatch.selected { border-color: var(--accent); }
+.tswatch-preview { height: 44px; display: flex; flex-direction: column; }
+.tswatch-bar { height: 14px; }
+.tswatch-body { flex: 1; }
+.tswatch-name { padding: 5px 8px 7px; font-size: 12px; font-weight: 500; }
+
+/* ---- search engine grid ---- */
+.engine-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px; margin-bottom: 24px; }
+.ecard { border: 2px solid var(--line); border-radius: 10px; padding: 10px 12px; cursor: pointer; transition: border-color .15s; display: flex; align-items: center; gap: 8px; }
+.ecard:hover { border-color: var(--muted); }
+.ecard.selected { border-color: var(--accent); }
+.ecard-icon { width: 20px; height: 20px; border-radius: 4px; display: grid; place-items: center; font-size: 11px; font-weight: 700; color: #fff; flex: none; }
+.ecard-name { font-size: 13px; font-weight: 500; }
 </style>
 </head>
 <body>
@@ -94,20 +113,25 @@ h2 { font-size: 22px; font-weight: 700; margin-bottom: 6px; }
 <div class="footer" id="footer"></div>
 
 <script>
-const TOTAL_STEPS = 4;
+const TOTAL_STEPS = 5;
 let step = 1;
 let status = {};
 let serverConnected = false;
-let serverProfiles = null; // from server when needProfile
+let serverProfiles = null;
 let selectedServerProfile = null;
-let vaultChoice = null; // 'master' | 'device' | 'join' | 'skip'
-let vaultFor = null;    // whether the default was picked for a synced or a local setup
+let vaultChoice = null;
+let vaultFor = null;
 let vMaster = '', vConfirm = '', vKey = '', vRemember = true;
 let openLast = false;
-let profileName = '';      // name for the existing/server profile
-let localProfileName = 'Default (local)'; // name for new standalone profile
-let standaloneMode = false; // true = create new local profile, false = use existing
+let blockTrackers = true;
+let chosenTheme = null;
+let chosenEngine = null;
+let profileName = '';
+let localProfileName = 'Default (local)';
+let standaloneMode = false;
 let profileRenamed = false;
+let allThemes = [];
+let allEngines = [];
 
 const $ = (id) => document.getElementById(id);
 const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
@@ -120,7 +144,25 @@ async function init() {
   openLast = status.openLastProfile || false;
   vRemember = status.remember !== false;
   serverConnected = status.serverConfigured;
-  standaloneMode = !serverConnected; // default: standalone if no server configured
+  standaloneMode = !serverConnected;
+  blockTrackers = status.blockTrackers !== false;
+
+  const tData = await browser.getThemes();
+  allThemes = [
+    { id: 'system', name: 'Follow system', bg: null },
+    ...(tData.presets || []),
+  ];
+  chosenTheme = tData.current || 'system';
+
+  allEngines = status.searchEngines || [
+    { id: 'ddg', name: 'DuckDuckGo' },
+    { id: 'google', name: 'Google' },
+    { id: 'bing', name: 'Bing' },
+    { id: 'wiki', name: 'Wikipedia' },
+    { id: 'yt', name: 'YouTube' },
+    { id: 'gh', name: 'GitHub' },
+  ];
+  chosenEngine = status.defaultEngine || 'ddg';
   render();
 }
 
@@ -138,10 +180,11 @@ function renderStep1() {
   c.innerHTML = '';
   const wrap = el('div');
   wrap.style.cssText = 'flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;padding:20px 0';
-  const img = el('img'); img.src = 'my://assets/logo.png'; img.style.cssText = 'width:72px;height:72px;margin-bottom:20px';
+  const img = el('img'); img.src = 'my://assets/logo.png'; img.style.cssText = 'width:80px;height:80px;margin-bottom:20px;border-radius:20px';
   const h = el('h2', null, 'Welcome to mbrowser');
+  h.style.marginBottom = '10px';
   const sub = el('p', 'subtitle', "Let's get you set up in a few quick steps.");
-  sub.style.maxWidth = '340px';
+  sub.style.maxWidth = '360px';
   wrap.append(img, h, sub);
   c.append(wrap);
 
@@ -152,14 +195,90 @@ function renderStep1() {
   f.append(next);
 }
 
+// Engine display helpers
+const ENGINE_COLORS = { ddg: '#de5833', google: '#4285f4', bing: '#00809d', wiki: '#636363', yt: '#ff0000', gh: '#24292f' };
+const ENGINE_ICONS = { ddg: 'D', google: 'G', bing: 'B', wiki: 'W', yt: '▶', gh: '' };
+function engineIcon(id) {
+  const color = ENGINE_COLORS[id] || '#5b8cff';
+  const lbl = ENGINE_ICONS[id] ?? id.slice(0, 2).toUpperCase();
+  const ic = el('div', 'ecard-icon', lbl);
+  ic.style.background = color;
+  if (id === 'gh') {
+    ic.innerHTML = `<svg width="14" height="14" viewBox="0 0 16 16" fill="white"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8"/></svg>`;
+  }
+  return ic;
+}
+
 function renderStep2() {
+  const c = $('content');
+  c.innerHTML = '';
+  c.append(el('h2', null, 'Make it yours'));
+  c.append(el('p', 'subtitle', 'Choose a theme and your default search engine.'));
+
+  // --- Theme section ---
+  c.append(el('div', 'section-label', 'Theme'));
+  const grid = el('div', 'theme-grid');
+
+  for (const t of allThemes) {
+    const sw = el('div', 'tswatch' + (chosenTheme === t.id ? ' selected' : ''));
+    if (t.bg) {
+      const preview = el('div', 'tswatch-preview');
+      const bar = el('div', 'tswatch-bar'); bar.style.background = t.active || t.bg;
+      const body = el('div', 'tswatch-body'); body.style.background = t.bg;
+      // accent dot
+      const dot = el('div');
+      dot.style.cssText = `width:10px;height:10px;border-radius:50%;background:${t.accent};position:relative;top:7px;left:8px`;
+      body.append(dot);
+      preview.append(bar, body);
+      sw.append(preview);
+    } else {
+      // system theme: half dark half light
+      const preview = el('div', 'tswatch-preview');
+      preview.style.cssText = 'background:linear-gradient(135deg,#1e1f22 50%,#e4e7ec 50%)';
+      sw.append(preview);
+    }
+    const name = el('div', 'tswatch-name', t.name);
+    sw.append(name);
+    sw.onclick = async () => {
+      chosenTheme = t.id;
+      grid.querySelectorAll('.tswatch').forEach((x) => x.classList.remove('selected'));
+      sw.classList.add('selected');
+      await browser.setSetting('appearance.themeId', t.id);
+    };
+    grid.append(sw);
+  }
+  c.append(grid);
+
+  // --- Search engine section ---
+  c.append(el('div', 'section-label', 'Default search engine'));
+  const egrid = el('div', 'engine-grid');
+  for (const eng of allEngines) {
+    const ec = el('div', 'ecard' + (chosenEngine === eng.id ? ' selected' : ''));
+    ec.append(engineIcon(eng.id), el('span', 'ecard-name', eng.name));
+    ec.onclick = async () => {
+      chosenEngine = eng.id;
+      egrid.querySelectorAll('.ecard').forEach((x) => x.classList.remove('selected'));
+      ec.classList.add('selected');
+      await browser.setSetting('search.default', eng.id);
+    };
+    egrid.append(ec);
+  }
+  c.append(egrid);
+
+  const f = $('footer');
+  f.innerHTML = '';
+  const back = el('button', 'btn-ghost', '← Back'); back.onclick = () => { step = 1; render(); };
+  const next = el('button', 'btn-primary', 'Next →'); next.onclick = () => { step = 3; render(); };
+  f.append(back, next);
+}
+
+function renderStep3() {
   const c = $('content');
   c.innerHTML = '';
   const h = el('h2', null, 'Sync server');
   const sub = el('p', 'subtitle', 'Connect to your self-hosted server to sync bookmarks, passwords and more. Or start standalone — you can connect later in Settings → Sync.');
   c.append(h, sub);
 
-  // Cards
   const cards = el('div', 'cards');
 
   // Server card
@@ -193,7 +312,6 @@ function renderStep2() {
     }
   };
 
-  // Standalone card
   const cardStandalone = el('div', 'card' + (!serverConnected && standaloneMode ? ' selected' : ''));
   const saTitle = el('div', 'card-title', 'Start standalone');
   const saDesc = el('div', 'card-desc', 'All data stays on this device. Connect a server later in Settings → Sync.');
@@ -201,7 +319,6 @@ function renderStep2() {
   cardStandalone.onclick = () => {
     cardStandalone.classList.add('selected'); cardServer.classList.remove('selected'); serverProfiles = null;
     standaloneMode = true;
-    // localProfileName stays fixed as 'Default (local)' — never re-appended
   };
 
   cards.append(cardServer, cardStandalone);
@@ -209,14 +326,14 @@ function renderStep2() {
 
   const f = $('footer');
   f.innerHTML = '';
-  const back = el('button', 'btn-ghost', '← Back'); back.onclick = () => { step = 1; render(); };
-  const next = el('button', 'btn-primary', 'Next →'); next.onclick = () => { step = 3; render(); };
+  const back = el('button', 'btn-ghost', '← Back'); back.onclick = () => { step = 2; render(); };
+  const next = el('button', 'btn-primary', 'Next →'); next.onclick = () => { step = 4; render(); };
   f.append(back, next);
 }
 
 function renderServerForm(card) {
   const wrap = el('div');
-  let savedCreds = null; // set when server asks for OTP or profile pick
+  let savedCreds = null;
 
   function showCredForm() {
     wrap.innerHTML = '';
@@ -250,7 +367,7 @@ function renderServerForm(card) {
       if (r && r.needTotp) { showOtpForm(); return; }
       if (r && r.needProfile) { showProfilePicker(r.profiles); return; }
       if (r && r.ok) {
-        serverConnected = true; status = await browser.wizardStatus() || status; step = 3; render();
+        serverConnected = true; status = await browser.wizardStatus() || status; step = 4; render();
       } else {
         statusEl.className = 'server-status err'; statusEl.textContent = r?.error || 'Connection failed.';
       }
@@ -281,7 +398,7 @@ function renderServerForm(card) {
       verifyBtn.disabled = false; verifyBtn.textContent = 'Verify';
       if (r && r.needProfile) { savedCreds.totp = iOtp.value.replace(/\s/g, ''); showProfilePicker(r.profiles); return; }
       if (r && r.ok) {
-        serverConnected = true; status = await browser.wizardStatus() || status; step = 3; render();
+        serverConnected = true; status = await browser.wizardStatus() || status; step = 4; render();
       } else {
         statusEl.className = 'server-status err'; statusEl.textContent = r?.error || 'Invalid code — try again.';
         iOtp.select();
@@ -310,13 +427,12 @@ function renderServerForm(card) {
         selectedServerProfile = String(p.id);
         list.querySelectorAll('.pitem').forEach(x => x.classList.remove('selected')); item.classList.add('selected');
         const r = await browser.wizardConnect({ ...savedCreds, profile: selectedServerProfile });
-        if (r && r.ok) { serverConnected = true; status = await browser.wizardStatus() || status; step = 3; render(); }
+        if (r && r.ok) { serverConnected = true; status = await browser.wizardStatus() || status; step = 4; render(); }
         else { showCredForm(); }
       };
       list.append(item);
     }
 
-    // Inline create-new-profile form (replaces broken prompt())
     const newSection = el('div'); newSection.style.marginTop = '10px';
     const toggleBtn = el('button', 'btn-ghost', '+ Create new profile on server');
     toggleBtn.style.padding = '6px 0';
@@ -345,14 +461,12 @@ function renderServerForm(card) {
       selectedServerProfile = name;
       const r = await browser.wizardConnect({ ...savedCreds, profile: name, create: true });
       createBtn.disabled = false; createBtn.textContent = 'Create';
-      if (r && r.ok) { serverConnected = true; status = await browser.wizardStatus() || status; step = 3; render(); }
+      if (r && r.ok) { serverConnected = true; status = await browser.wizardStatus() || status; step = 4; render(); }
       else { formStatus.className = 'server-status err'; formStatus.textContent = r?.error || 'Failed to create profile.'; }
     };
     nameInput.onkeydown = (e) => { if (e.key === 'Enter') createBtn.click(); };
 
     newSection.append(toggleBtn, newForm);
-
-    // Auto-expand create form when no profiles exist yet
     if (!profiles.length) { newForm.style.display = 'flex'; setTimeout(() => nameInput.focus(), 50); }
 
     const backBtn = el('button', 'btn-ghost', '← Back'); backBtn.style.marginTop = '4px';
@@ -364,7 +478,7 @@ function renderServerForm(card) {
   return wrap;
 }
 
-function renderStep3() {
+function renderStep4() {
   const c = $('content');
   c.innerHTML = '';
   const h = el('h2', null, standaloneMode ? 'New local profile' : 'Your profile');
@@ -373,7 +487,6 @@ function renderStep3() {
     : 'Customise how mbrowser handles profiles and passwords.');
   c.append(h, sub);
 
-  // Profile name
   const fName = el('div', 'field');
   const lName = el('label', null, standaloneMode ? 'Local profile name' : 'Profile name');
   const iName = el('input'); iName.type = 'text'; iName.value = standaloneMode ? localProfileName : profileName;
@@ -381,22 +494,25 @@ function renderStep3() {
   fName.append(lName, iName);
   c.append(fName);
 
-  // Toggles
   const toggles = el('div'); toggles.style.marginBottom = '20px';
 
-  // Open last profile
   const olRow = el('div', 'toggle-row');
   const olLabel = el('div', 'toggle-label');
-  const olTitle = el('b', null, 'Open last-used profile on launch');
-  const olDesc = el('span', null, 'Skip the profile chooser and jump straight back in.');
-  olLabel.append(olTitle, olDesc);
+  olLabel.append(el('b', null, 'Open last-used profile on launch'), el('span', null, 'Skip the profile chooser and jump straight back in.'));
   const olBtn = el('button', 'toggle ' + (openLast ? 'on' : 'off'));
   olBtn.onclick = () => { openLast = !openLast; olBtn.className = 'toggle ' + (openLast ? 'on' : 'off'); };
   olRow.append(olLabel, olBtn);
-  toggles.append(olRow);
+
+  const btRow = el('div', 'toggle-row');
+  const btLabel = el('div', 'toggle-label');
+  btLabel.append(el('b', null, 'Block trackers & ads'), el('span', null, 'Uses EasyList and uBlock filters.'));
+  const btBtn = el('button', 'toggle ' + (blockTrackers ? 'on' : 'off'));
+  btBtn.onclick = () => { blockTrackers = !blockTrackers; btBtn.className = 'toggle ' + (blockTrackers ? 'on' : 'off'); };
+  btRow.append(btLabel, btBtn);
+
+  toggles.append(olRow, btRow);
   c.append(toggles);
 
-  // Password vault
   const syncing = serverConnected && !standaloneMode;
   const sv = status.serverVault;
   if (vaultChoice === null || vaultFor !== syncing) {
@@ -459,38 +575,35 @@ function renderStep3() {
   const f = $('footer');
   f.innerHTML = '';
   const errEl = el('span', 'err', ''); errEl.style.flex = '1';
-  const back = el('button', 'btn-ghost', '← Back'); back.onclick = () => { step = 2; render(); };
+  const back = el('button', 'btn-ghost', '← Back'); back.onclick = () => { step = 3; render(); };
   const next = el('button', 'btn-primary', 'Finish →');
   next.onclick = async () => {
     next.disabled = true; next.textContent = 'Saving…'; errEl.textContent = '';
+    await browser.setSetting('privacy.blockTrackers', blockTrackers);
     if (standaloneMode) {
-      // Create a new local profile and set it as default
       const name = localProfileName.trim() || 'Default (local)';
       const r = await browser.wizardCreateProfile(name);
       if (r && r.error) { errEl.textContent = r.error; next.disabled = false; next.textContent = 'Finish →'; return; }
       profileRenamed = true;
     } else {
-      // Rename existing profile if changed
       if (profileName.trim() && profileName !== status.profileName) {
         const r = await browser.wizardRenameProfile(profileName.trim());
         if (r && r.error) { errEl.textContent = r.error; next.disabled = false; next.textContent = 'Finish →'; return; }
         profileRenamed = true;
       }
     }
-    // Open last profile
     await browser.wizardSetOpenLast(openLast);
-    // Vault device mode
     if (!status.vaultExists && vaultChoice && vaultChoice !== 'skip') {
       const r = await browser.wizardVaultSetup({ mode: vaultChoice, master: vMaster, confirm: vConfirm, key: vKey, remember: vRemember });
       if (r && r.error) { errEl.textContent = 'Vault: ' + r.error; next.disabled = false; next.textContent = 'Finish →'; return; }
       status.vaultExists = true;
     }
-    step = 4; render();
+    step = 5; render();
   };
   f.append(errEl, back, next);
 }
 
-function renderStep4() {
+function renderStep5() {
   const c = $('content');
   c.innerHTML = '';
   c.style.alignItems = 'center';
@@ -503,14 +616,19 @@ function renderStep4() {
   const sub = el('div', 'done-sub', 'mbrowser is ready to use.');
 
   const items = [];
+  const themeObj = allThemes.find((t) => t.id === chosenTheme);
+  if (themeObj) items.push('Theme: ' + themeObj.name);
+  const engObj = allEngines.find((e) => e.id === chosenEngine);
+  if (engObj) items.push('Search: ' + engObj.name);
   if (serverConnected) items.push('Connected to sync server');
   const shownName = standaloneMode ? localProfileName : profileName;
   if (standaloneMode) items.push(`New local profile: ${shownName || 'Default (local)'}`);
   else if (profileRenamed || (shownName && shownName !== status.profileName)) items.push(`Profile: ${shownName}`);
   if (openLast) items.push('Opens last-used profile on launch');
-  if (vaultChoice === 'master' || (vaultChoice === 'join' && !(status.serverVault && status.serverVault.device))) items.push('Password vault: master password' + (vRemember ? ' (remembered on this computer)' : ''));
+  if (!blockTrackers) items.push('Ad/tracker blocking off');
+  if (vaultChoice === 'master' || (vaultChoice === 'join' && !(status.serverVault && status.serverVault.device))) items.push('Password vault: master password' + (vRemember ? ' (remembered)' : ''));
   else if (vaultChoice === 'join') items.push('Password vault: joined the server’s vault');
-  else if (vaultChoice === 'device') items.push('Password vault: this computer only (no master password)');
+  else if (vaultChoice === 'device') items.push('Password vault: this computer only');
 
   const summary = el('div', 'summary');
   summary.style.textAlign = 'left';
@@ -525,7 +643,6 @@ function renderStep4() {
   start.onclick = async () => { await browser.wizardDone(); };
 
   c.append(icon, title, sub, ...(items.length ? [summary] : []), start);
-
   $('footer').innerHTML = '';
 }
 
@@ -539,6 +656,7 @@ function render() {
   else if (step === 2) renderStep2();
   else if (step === 3) renderStep3();
   else if (step === 4) renderStep4();
+  else if (step === 5) renderStep5();
 }
 
 init();

@@ -3226,7 +3226,7 @@ ipcMain.on('gate:cancel', (e) => { if (e.sender.id === gateWcId && gateResolve) 
 function showWizard() {
   wizardActive = true;
   return new Promise((resolve) => {
-    const win = new BaseWindow({ width: 540, height: 600, title: 'mbrowser setup', icon: appIconImage(), resizable: false, backgroundColor: '#0a0e1f' });
+    const win = new BaseWindow({ width: 660, height: 740, title: 'mbrowser setup', icon: appIconImage(), resizable: true, minWidth: 520, minHeight: 580, backgroundColor: '#17191e' });
     try { if (typeof win.removeMenu === 'function') win.removeMenu(); } catch { /* ignore */ }
     const view = new WebContentsView({
       webPreferences: { preload: path.join(__dirname, 'page-preload.js'), contextIsolation: true, sandbox: true },
@@ -3273,6 +3273,9 @@ ipcMain.handle('wizard:status', async (e) => {
     vaultDeviceMode: vault.isDevice(),
     remember: !!S().passwords.remember,
     safeStorageAvailable: safeStorage.isEncryptionAvailable(),
+    blockTrackers: S().privacy.blockTrackers,
+    searchEngines: S().search.engines,
+    defaultEngine: S().search.default,
   };
 });
 
