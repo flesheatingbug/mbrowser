@@ -15,7 +15,7 @@ class Prefs(ctx: Context) {
 
     // app updates
     var wallpaper: String
-        get() = str("wallpaper", "grey")
+        get() = str("wallpaper", "none")
         set(v) = put("wallpaper", v)
     var dialStyle: String
         get() = str("dialStyle", "cards")

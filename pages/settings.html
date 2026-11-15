@@ -162,7 +162,7 @@
     } else if (def.type === 'wallpaper') {
       row.className = 'row col';
       const grid = el('div'); grid.style.cssText = 'display:flex;gap:10px;flex-wrap:wrap;margin-top:10px';
-      const IDS = [['none', 'None'], ['custom', 'Your picture…'], ['grey', 'Grey'], ['aurora', 'Aurora'], ['dusk', 'Dusk'], ['ocean', 'Ocean'], ['dunes', 'Dunes'], ['mist', 'Mist'], ['forest', 'Forest'], ['ember', 'Ember'], ['orchid', 'Orchid'], ['slate', 'Slate'], ['nebula', 'Nebula'], ['peaks', 'Peaks'], ['paper', 'Paper']];
+      const IDS = [['none', 'Theme colours'], ['custom', 'Your picture…'], ['grey', 'Grey'], ['aurora', 'Aurora'], ['dusk', 'Dusk'], ['ocean', 'Ocean'], ['dunes', 'Dunes'], ['mist', 'Mist'], ['forest', 'Forest'], ['ember', 'Ember'], ['orchid', 'Orchid'], ['slate', 'Slate'], ['nebula', 'Nebula'], ['peaks', 'Peaks'], ['paper', 'Paper']];
       for (const [id, name] of IDS) {
         const b = el('button'); b.type = 'button'; b.title = name;
         b.style.cssText = 'width:128px;height:76px;padding:0;border-radius:10px;overflow:hidden;position:relative;background:var(--tab);color:var(--muted);cursor:pointer;border:' + (val === id ? '3px solid var(--accent)' : '1px solid var(--line)');
@@ -170,7 +170,7 @@
         if (hasPic) {
           const im = el('img'); im.src = 'my://wallpaper/' + id + '?v=' + (S.startPage.wallpaperRev || 0); im.style.cssText = 'width:100%;height:100%;object-fit:cover;display:block';
           b.append(im);
-        } else b.textContent = id === 'none' ? '✕  None' : '＋  Your picture…';
+        } else b.textContent = id === 'none' ? '◐  Theme colours' : '＋  Your picture…';
         const lab = el('span', null, name); lab.style.cssText = 'position:absolute;left:0;right:0;bottom:0;padding:2px 6px;font-size:11px;color:#fff;background:linear-gradient(transparent,rgba(0,0,0,.65));text-align:left';
         if (hasPic) b.append(lab);
         b.onclick = async () => {

@@ -242,7 +242,7 @@ class SettingsActivity : BaseActivity() {
                 val lp = LinearLayout.LayoutParams(-2, -2); lp.setMargins(dp(5), 0, dp(5), 0)
                 row.addView(col, lp)
             }
-            tile("none", "None", null) { prefs.wallpaper = "none"; build() }
+            tile("none", "Theme colours", null) { prefs.wallpaper = "none"; build() }
             tile("custom", "Your photo", if (Wallpapers.hasCustom(this)) Wallpapers.thumb(this, "custom") else null) { wpPicker.launch("image/*") }
             for ((id, name) in Wallpapers.LIST) tile(id, name, Wallpapers.thumb(this, id)) { prefs.wallpaper = id; build() }
         }
