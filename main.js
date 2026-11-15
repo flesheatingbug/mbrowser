@@ -2560,11 +2560,10 @@ function setupIpc() {
   }, BOTH);
 
   handle('app:resetAll', async () => {
-    // Pass --reset-on-start so the new process knows to wipe data before loading.
-    // We can't use a flag file because the file would be inside the dir we're deleting.
-    // Skip privacy-clearing (quitCleared) so the lock is released before relaunch (Linux).
+    // Strip --profile so the relaunched process starts as default (the others are gone).
+    const cleanArgs = process.argv.slice(1).filter((a) => !a.startsWith('--profile='));
     quitCleared = true;
-    app.relaunch({ args: [...process.argv.slice(1), '--reset-on-start'] });
+    app.relaunch({ args: [...cleanArgs, '--reset-on-start'] });
     app.quit();
     return { ok: true };
   }, BOTH);
@@ -3338,9 +3337,9 @@ app.whenReady().then(async () => {
   // If a reset was requested in the previous session, wipe the userData directory NOW —
   // before Chromium loads anything from it — then continue with a fresh data directory.
   if (process.argv.includes('--reset-on-start')) {
-    // Wipe everything under userData (profiles.json, all profile subdirs, Chromium data).
-    // Also clean up old-layout scattered files in appData in case they still exist.
-    try { fs.rmSync(app.getPath('userData'), { recursive: true, force: true }); } catch { /* ignore */ }
+    // Wipe everything. Use profiles.dirFor('default') — the root mbrowser dir — not
+    // app.getPath('userData'), which has already been redirected to a profile subdir.
+    try { fs.rmSync(profiles.dirFor('default'), { recursive: true, force: true }); } catch { /* ignore */ }
     const appDataDir = app.getPath('appData');
     try {
       for (const entry of fs.readdirSync(appDataDir)) {
