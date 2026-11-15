@@ -41,6 +41,7 @@ contextBridge.exposeInMainWorld('api', {
   resetZoom: send('zoom:reset'),
   setZoom: send('zoom:set'),
   go: send('nav:go'),
+  urlMenu: (hasSel) => ipcRenderer.send('url:menu', !!hasSel),
   back: send('nav:back'),
   forward: send('nav:forward'),
   reload: send('nav:reload'),

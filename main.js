@@ -2417,6 +2417,18 @@ function setupIpc() {
     const t = activeTab();
     if (t) { go(t, text); t.wc.focus(); }
   }, BOTH);
+  on('url:menu', (e, hasSel) => {
+    const ui = e.sender;
+    const clip = clipboard.readText();
+    popup(Menu.buildFromTemplate([
+      { label: 'Cut', enabled: !!hasSel, click: () => ui.cut() },
+      { label: 'Copy', enabled: !!hasSel, click: () => ui.copy() },
+      { label: 'Paste', enabled: !!clip, click: () => ui.paste() },
+      { label: 'Paste and Go', enabled: !!clip.trim(), click: () => { const t = activeTab(); if (t) { go(t, clip.trim()); t.wc.focus(); } } },
+      { type: 'separator' },
+      { label: 'Select All', click: () => ui.selectAll() },
+    ]));
+  }, BOTH);
   on('nav:back', () => activeWc()?.navigationHistory.goBack());
   on('nav:forward', () => activeWc()?.navigationHistory.goForward());
   on('nav:reload', () => activeWc()?.reload());

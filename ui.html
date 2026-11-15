@@ -255,6 +255,7 @@
   let lastState = null, lastActiveId = null;
   const urlInput = $('url');
   const TAB_MIME = 'application/x-mybrowser-tab';
+  urlInput.addEventListener('contextmenu', (e) => { e.preventDefault(); urlInput.focus(); api.urlMenu(urlInput.selectionStart !== urlInput.selectionEnd); });
 
   // tabs-wrap: drop on empty space moves tab to end
   $('tabs-wrap').addEventListener('dragover', (e) => { if (e.dataTransfer.types.includes(TAB_MIME)) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; } });
