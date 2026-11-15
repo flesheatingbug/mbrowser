@@ -60,7 +60,7 @@ class StartPage(
         root.postDelayed({ refreshPending = false; if (!reorder) grid.adapter?.notifyDataSetChanged() }, 400)
     }
 
-    /** Swipe right: next speed dial (on the last one, offers a new one). Swipe left: back to the previous one. */
+    /** Swipe left: next speed dial (on the last one, offers a new one). Swipe right: back to the previous one. */
     private fun swipeDial(forward: Boolean) {
         if (reorder) return
         val sp = Settings.value("startPage")
@@ -73,7 +73,7 @@ class StartPage(
         if (n >= g.length()) { newDialPrompt(); return }
         prefs.currentDial = g.getJSONObject(n).optString("id"); path.clear(); refresh()
         val w = grid.width.toFloat()
-        grid.translationX = if (forward) -w * 0.35f else w * 0.35f; grid.alpha = 0.3f
+        grid.translationX = if (forward) w * 0.35f else -w * 0.35f; grid.alpha = 0.3f
         grid.animate().translationX(0f).alpha(1f).setDuration(180).start()
     }
 
@@ -96,7 +96,7 @@ class StartPage(
             override fun onFling(a: android.view.MotionEvent?, b: android.view.MotionEvent, vx: Float, vy: Float): Boolean {
                 if (a == null) return false
                 val dx = b.x - a.x; val dy = b.y - a.y
-                if (Math.abs(dx) > act.dp(70) && Math.abs(dx) > Math.abs(dy) * 1.8f && Math.abs(vx) > 600) { swipeDial(dx > 0); return true }
+                if (Math.abs(dx) > act.dp(70) && Math.abs(dx) > Math.abs(dy) * 1.8f && Math.abs(vx) > 600) { swipeDial(dx < 0); return true }
                 return false
             }
         })
