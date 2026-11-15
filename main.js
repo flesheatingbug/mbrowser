@@ -3015,6 +3015,15 @@ function createWindow(opts = {}) {
 }
 
 function onWindowClosed(w) {
+  // Flush session BEFORE windows.delete(w) so this window's tabs are still reachable.
+  clearTimeout(sessionTimer);
+  sessionTimer = null;
+  const sessionList = [...windows]
+    .flatMap((win) => win.order.map((id) => win.tabs.get(id)))
+    .filter((t) => t && !t.private && /^https?:\/\//i.test(t.wc.getURL()))
+    .map((t) => ({ url: t.wc.getURL(), pinned: t.pinned }));
+  try { save('session.json', { tabs: sessionList }); } catch { /* ignore */ }
+
   windows.delete(w);
   // Save all non-private tabs to recently-closed before tearing down
   for (const id of w.order) {
@@ -3378,14 +3387,16 @@ app.on('certificate-error', (event, _wc, url, _error, _cert, callback) => {
 
 let quitCleared = false;
 app.on('before-quit', (e) => {
-  // Always flush the session synchronously so tabs survive the quit.
-  // The debounced timer may not have fired yet if the user closes quickly.
+  // Session flush: only needed if windows are still open (e.g. app.quit() called
+  // programmatically before any window closes). onWindowClosed handles the normal case.
   clearTimeout(sessionTimer);
   sessionTimer = null;
-  const list = [...windows].flatMap((w) => w.order.map((id) => w.tabs.get(id)))
-    .filter((t) => t && !t.private && /^https?:\/\//i.test(t.wc.getURL()))
-    .map((t) => ({ url: t.wc.getURL(), pinned: t.pinned }));
-  try { save('session.json', { tabs: list }); } catch { /* ignore */ }
+  if (windows.size > 0) {
+    const list = [...windows].flatMap((w) => w.order.map((id) => w.tabs.get(id)))
+      .filter((t) => t && !t.private && /^https?:\/\//i.test(t.wc.getURL()))
+      .map((t) => ({ url: t.wc.getURL(), pinned: t.pinned }));
+    try { save('session.json', { tabs: list }); } catch { /* ignore */ }
+  }
   if (quitCleared || !store) return;
   const c = S().privacy.clearOnExit;
   const what = c.history && c.cookies && c.cache ? 'all' : null;
