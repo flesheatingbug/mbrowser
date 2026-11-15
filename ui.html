@@ -55,7 +55,9 @@
   body.vertical #newtab { text-align:left; height:32px; }
 
   /* ---- toolbar ---- */
-  #bar { display:flex; gap:6px; padding:6px; background:var(--active); height:50px; align-items:center; }
+  #bar { display:flex; gap:6px; padding:6px 6px 0; background:var(--active); height:50px; align-items:center; flex-wrap:wrap; }
+  #dl-bar { height:3px; background:var(--accent); width:0%; transition:width .4s ease; opacity:0; flex:0 0 100%; margin:0 -6px; }
+  #dl-bar.active { opacity:1; }
   #bar button { background:none; border:0; color:var(--fg); font-size:16px; min-width:34px; height:34px;
     border-radius:6px; cursor:pointer; position:relative; }
   #bar button:hover:not(:disabled) { background:var(--tab); }
@@ -216,6 +218,7 @@
     <button id="dlbtn" class="ic" title="Downloads"><span id="dlbtn-ic"></span><span class="n" id="dlbtn-n"></span></button>
     <button id="star" class="ic" title="Bookmark (Ctrl+D)"></button>
     <button id="profile" title="Profiles"><span id="pchip"></span></button>
+    <div id="dl-bar"></div>
   </div>
   <div id="translate-bar">
     <span class="tl-msg" id="tl-msg">This page is in a different language</span>
@@ -559,6 +562,18 @@
     const activeDl = dls.find((d) => d.state === 'progressing' || d.state === 'paused');
     if (activeDl && !_prevDlActive) triggerDownloadWhoosh();
     _prevDlActive = !!activeDl;
+    const dlBar = $('dl-bar');
+    if (activeDl && activeDl.total > 0) {
+      const pctW = Math.round(activeDl.received / activeDl.total * 100);
+      dlBar.style.width = pctW + '%';
+      dlBar.classList.add('active');
+    } else if (activeDl) {
+      dlBar.style.width = '40%';
+      dlBar.classList.add('active');
+    } else {
+      dlBar.style.width = '0%';
+      dlBar.classList.remove('active');
+    }
     const pill = $('dl-pill');
     const dlbtn = $('dlbtn');
     const shownStillPresent = dlDoneVisible && dls.some((d) => d.id === dlDoneShownId);

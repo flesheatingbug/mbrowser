@@ -225,10 +225,7 @@ async function promptInstallUpdate(info) {
   });
   if (response !== 0) return;
   if (!info.canInstall) { shell.openExternal(info.url); return; }
-  await downloadAndInstall(info.url, isWin, isAppImage, (pct) => {
-    for (const w of windows) { try { w.win.setProgressBar(pct); } catch { /* ignore */ } }
-  });
-  for (const w of windows) { try { w.win.setProgressBar(-1); } catch { /* ignore */ } }
+  await downloadAndInstall(info.url, isWin, isAppImage, () => {});
 }
 
 async function downloadAndInstall(url, isWin, isAppImage, onProgress) {
@@ -473,7 +470,7 @@ function stateFor() {
     blockerOn: S().privacy.blockTrackers,
     siteAllowed: !!host && allow.some((h) => host === h || host.endsWith('.' + h)),
     private: !!(t && t.private),
-    downloads: downloads.slice(0, 5).map((d) => ({ id: d.id, name: d.name, url: d.url, path: d.path, state: d.state, received: d.received, total: d.total })),
+    downloads: downloads.filter((d) => !d.winUid || d.winUid === cur.uid).slice(0, 5).map((d) => ({ id: d.id, name: d.name, url: d.url, path: d.path, state: d.state, received: d.received, total: d.total })),
     tabs: cur.order.map((id) => {
       const x = cur.tabs.get(id);
       return {
@@ -696,6 +693,12 @@ function closeTab(id) {
   tabById.delete(id);
   tabByWc.delete(wcId);
   blockedCounts.delete(wcId);
+  if (t.private) {
+    const anyPrivate = [...windows].some((w) => [...w.tabs.values()].some((x) => x.private));
+    if (!anyPrivate) {
+      session.fromPartition('private').clearStorageData().catch(() => {});
+    }
+  }
   if (cur.order.length === 0) {
     cur.activeId = null;
     if (windows.size > 1) { cur.win.close(); return; } // last tab of an extra window closes it
@@ -1354,6 +1357,7 @@ function tabMenu(id) {
 const downloads = [];
 const dlItems = new Map();
 let dlCounter = 0;
+let winUidCounter = 0;
 
 const downloadDir = () => S().downloads.directory || app.getPath('downloads');
 
@@ -1365,9 +1369,11 @@ function uniquePath(dir, name) {
 }
 
 function onWillDownload(_e, item) {
+  const ownerTab = _e.sender ? tabByWc.get(_e.sender.id) : null;
   const rec = {
     id: ++dlCounter, name: item.getFilename(), url: item.getURL(),
     total: item.getTotalBytes(), received: 0, state: 'progressing', path: '',
+    winUid: ownerTab ? ownerTab.owner.uid : (cur ? cur.uid : null),
   };
   downloads.unshift(rec);
   dlItems.set(rec.id, item);
@@ -2577,9 +2583,7 @@ function setupIpc() {
     const sender = e.sender;
     await downloadAndInstall(info.url, isWin, isAppImage, (pct) => {
       try { if (!sender.isDestroyed()) sender.send('app:dl-progress', pct); } catch { /* ignore */ }
-      for (const w of windows) { try { w.win.setProgressBar(pct); } catch { /* ignore */ } }
     });
-    for (const w of windows) { try { w.win.setProgressBar(-1); } catch { /* ignore */ } }
     return { ok: true };
   }, BOTH);
 
@@ -2945,6 +2949,7 @@ function createWindow(opts = {}) {
     const b = cur.win.getBounds();
     geo = { x: b.x + 40, y: b.y + 40, width: b.width, height: b.height };
   }
+  w.uid = ++winUidCounter;
   windows.add(w);
   use(w);
   // No system title bar by default (our tab strip is the title bar). Use --native-titlebar or the
