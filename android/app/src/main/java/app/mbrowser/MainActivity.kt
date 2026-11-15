@@ -373,7 +373,6 @@ class MainActivity : BaseActivity() {
         val scroll = findViewById<View>(R.id.suggestScroll)
         val list = findViewById<LinearLayout>(R.id.suggestList)
         val q = q0.trim().lowercase()
-        if (cur()?.priv == true) { scroll.visibility = View.GONE; return }
         class Hit(val url: String, val title: String, var score: Int, val star: Boolean)
         val hits = LinkedHashMap<String, Hit>()
         fun bare(u: String) = u.removePrefix("https://").removePrefix("http://").removePrefix("www.")
