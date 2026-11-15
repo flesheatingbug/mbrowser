@@ -123,51 +123,6 @@ window.addEventListener('wheel', (e) => {
   ipcRenderer.send('zoom:ctrl-wheel', e.deltaY > 0 ? -1 : 1);
 }, { passive: false, capture: true });
 
-// ---- Google sign-in: spoof navigator.userAgentData brands to include "Google Chrome" ----
-if (/^https?:$/.test(location.protocol)) {
-  const { webFrame } = require('electron');
-  const isWin = process.platform === 'win32';
-  const platStr = isWin ? 'Windows' : 'Linux';
-  const platVerStr = isWin ? '15.0.0' : '5.15.0';
-  const chromeVer = process.versions.chrome || '130.0.6723.117';
-  const chromeMajor = chromeVer.split('.')[0];
-  webFrame.executeJavaScript(`
-    (function() {
-      var brands = [
-        { brand: 'Not?A_Brand', version: '8' },
-        { brand: 'Chromium', version: '${chromeMajor}' },
-        { brand: 'Google Chrome', version: '${chromeMajor}' }
-      ];
-      var full = [
-        { brand: 'Not?A_Brand', version: '8.0.0.0' },
-        { brand: 'Chromium', version: '${chromeVer}' },
-        { brand: 'Google Chrome', version: '${chromeVer}' }
-      ];
-      var uad = {
-        brands: brands, mobile: false, platform: '${platStr}',
-        getHighEntropyValues: function(h) {
-          var r = {};
-          if (h.includes('brands')) r.brands = brands;
-          if (h.includes('mobile')) r.mobile = false;
-          if (h.includes('platform')) r.platform = '${platStr}';
-          if (h.includes('platformVersion')) r.platformVersion = '${platVerStr}';
-          if (h.includes('architecture')) r.architecture = 'x86';
-          if (h.includes('bitness')) r.bitness = '64';
-          if (h.includes('model')) r.model = '';
-          if (h.includes('uaFullVersion')) r.uaFullVersion = '${chromeVer}';
-          if (h.includes('fullVersionList')) r.fullVersionList = full;
-          if (h.includes('wow64')) r.wow64 = false;
-          return Promise.resolve(r);
-        },
-        toJSON: function() { return { brands: brands, mobile: false, platform: '${platStr}' }; }
-      };
-      try {
-        Object.defineProperty(navigator, 'userAgentData', { get: function() { return uad; }, configurable: true });
-      } catch (e) {}
-    })();
-  `);
-}
-
 // ---- page language detection (for translate bar) ----
 if (/^https?:$/.test(location.protocol)) {
   const sendLang = () => {

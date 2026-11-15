@@ -453,9 +453,11 @@ function maskUserAgentData(wc) {
   // Override navigator.userAgentData via CDP so Google sign-in doesn't see "Electron" in the brand list.
   // ses.setUserAgent() patches navigator.userAgent but not the Client Hints API.
   if (S().general.browserId === 'none') return;
-  try { wc.debugger.attach('1.3'); } catch { return; }
+  // Don't bail on attach failure (e.g. debugger already attached by DevTools) — just send the command anyway.
+  try { wc.debugger.attach('1.3'); } catch { /* already attached is fine */ }
   const plat = process.platform === 'win32' ? 'Windows' : 'Linux';
   const ua = `Mozilla/5.0 ${plat === 'Windows' ? '(Windows NT 10.0; Win64; x64)' : '(X11; Linux x86_64)'} AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${CHROME_VER} Safari/537.36`;
+  const platVer = os.release();
   wc.debugger.sendCommand('Emulation.setUserAgentOverride', {
     userAgent: ua,
     userAgentMetadata: {
@@ -470,11 +472,42 @@ function maskUserAgentData(wc) {
         { brand: 'Google Chrome', version: CHROME_VER },
       ],
       platform: plat,
-      platformVersion: os.release(),
+      platformVersion: platVer,
       architecture: 'x86',
       model: '',
       mobile: false,
     },
+  }).catch(() => {});
+  // Inject window.chrome shim before any page scripts. Real Chrome exposes
+  // window.chrome.runtime (a stub) even in non-extension tabs; Google sign-in
+  // checks for its presence. Page.addScriptToEvaluateOnNewDocument runs in
+  // the main world before the page's own JavaScript.
+  wc.debugger.sendCommand('Page.addScriptToEvaluateOnNewDocument', {
+    source: `(function(){
+      var c = window.chrome || (window.chrome = {});
+      if (!c.runtime) c.runtime = {
+        id: undefined,
+        connect: function(){},
+        sendMessage: function(){},
+        onMessage: { addListener: function(){}, removeListener: function(){}, hasListener: function(){ return false; } },
+        onConnect: { addListener: function(){}, removeListener: function(){} },
+      };
+      if (!c.loadTimes) c.loadTimes = function(){ return {
+        requestTime: performance.timing ? performance.timing.navigationStart/1000 : 0,
+        startLoadTime: performance.timing ? performance.timing.navigationStart/1000 : 0,
+        commitLoadTime: performance.timing ? performance.timing.responseEnd/1000 : 0,
+        finishDocumentLoadTime: 0, finishLoadTime: 0,
+        firstPaintTime: 0, firstPaintAfterLoadTime: 0,
+        navigationType: 'Other', wasFetchedViaSpdy: false,
+        wasNpnNegotiated: true, npnNegotiatedProtocol: 'h2',
+        wasAlternateProtocolAvailable: false, connectionInfo: 'h2',
+      }; };
+      if (!c.csi) c.csi = function(){ return {
+        startE: performance.timing ? performance.timing.navigationStart : 0,
+        onloadT: performance.timing ? performance.timing.loadEventEnd : 0,
+        pageT: performance.now(), tran: 15,
+      }; };
+    })();`,
   }).catch(() => {});
 }
 
