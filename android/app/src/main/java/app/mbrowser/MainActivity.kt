@@ -544,6 +544,11 @@ class MainActivity : BaseActivity() {
 
     private fun applyUa(tab: Tab) {
         val s = tab.web.settings
+        // WebView adds "X-Requested-With: app.mbrowser" to every request; Google uses it to spot embedded browsers. Send nothing.
+        try {
+            if (androidx.webkit.WebViewFeature.isFeatureSupported(androidx.webkit.WebViewFeature.REQUESTED_WITH_HEADER_ALLOW_LIST))
+                androidx.webkit.WebSettingsCompat.setRequestedWithHeaderOriginAllowList(s, emptySet())
+        } catch (_: Exception) { }
         if (tab.desktop) {
             s.userAgentString = UserAgents.desktop(prefs.uaMode)
             s.useWideViewPort = true
