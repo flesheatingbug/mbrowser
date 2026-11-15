@@ -109,6 +109,16 @@ jobs:
           **Changes in this build**
           ${CHANGES}"
 
+          # Inject releaseNotes into the electron-updater metadata YMLs so the
+          # in-app update notification can show the changelog.
+          NOTES_YAML=$(echo "$CHANGES" | sed 's/^/  /')
+          for YML in release-assets/latest-linux.yml release-assets/latest.yml; do
+            [ -f "$YML" ] || continue
+            # Remove any existing releaseNotes block, then append a fresh one
+            sed -i '/^releaseNotes:/,/^[^ ]/{ /^[^ ]/!d; /^releaseNotes:/d }' "$YML"
+            printf 'releaseNotes: |\n%s\n' "$NOTES_YAML" >> "$YML"
+          done
+
           gh release delete "$TAG" --yes --cleanup-tag 2>/dev/null || true
           gh release create "$TAG" release-assets/* \
             --title "mbrowser Build ${{ github.run_number }}" \
