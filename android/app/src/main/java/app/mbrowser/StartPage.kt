@@ -474,12 +474,17 @@ class StartPage(
                     // icons-only look: just a round +, no text
                     pill.text = "+"; pill.textSize = 30f; pill.gravity = Gravity.CENTER
                     pill.setCompoundDrawables(null, null, null, null)
-                    pill.minWidth = act.dp(60); pill.minHeight = act.dp(60)
+                    // same size as the icons and lined up with their top edge
+                    val wpx = act.resources.displayMetrics.widthPixels - act.dp(20 + 18 * cols)
+                    val sz = minOf(act.dp(78), ((wpx / cols) * 0.8f).toInt())
+                    pill.minWidth = 0; pill.minHeight = 0
+                    pill.layoutParams = FrameLayout.LayoutParams(sz, sz, Gravity.TOP or Gravity.CENTER_HORIZONTAL)
                     pill.setPadding(0, 0, 0, act.dp(4))
                     pill.contentDescription = "Add speed dial"
                 } else {
                     pill.textSize = 16f; pill.gravity = Gravity.CENTER_VERTICAL
                     pill.minWidth = 0; pill.minHeight = 0
+                    pill.layoutParams = FrameLayout.LayoutParams(-2, -2, Gravity.CENTER)
                     pill.setCompoundDrawablesRelativeWithIntrinsicBounds(R.drawable.ic_add, 0, 0, 0)
                     pill.setPadding(act.dp(22), act.dp(14), act.dp(22), act.dp(14))
                 }
