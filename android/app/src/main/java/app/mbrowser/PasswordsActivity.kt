@@ -37,6 +37,7 @@ class PasswordsActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_passwords)
         prefs = Prefs(this)
+        Vault.tryAutoUnlock(this)
         status = findViewById(R.id.pwStatus); main = findViewById(R.id.pwMain)
         filter = findViewById(R.id.pwFilter); list = findViewById(R.id.pwList); bar = findViewById(R.id.pwBar)
         list.layoutManager = LinearLayoutManager(this)
@@ -47,7 +48,10 @@ class PasswordsActivity : AppCompatActivity() {
         })
         findViewById<View>(R.id.pwAdd).setOnClickListener { edit(null) }
         findViewById<View>(R.id.pwSync).setOnClickListener { sync(true) }
-        findViewById<View>(R.id.pwLock).setOnClickListener { Vault.lock(); refresh() }
+        findViewById<View>(R.id.pwLock).setOnClickListener {
+            if (Vault.isDevice(this)) DeviceKey.clear(this)
+            Vault.lock(); refresh()
+        }
         refresh()
         // fetch the server's vault (or changes) in the background when opening
         if (prefs.syncConfigured && prefs.syncVault) sync(false)
@@ -56,11 +60,19 @@ class PasswordsActivity : AppCompatActivity() {
     private fun refresh() {
         main.visibility = View.GONE; filter.visibility = View.GONE; bar.visibility = View.GONE
         list.adapter = null
+        val device = Vault.exists(this) && Vault.isDevice(this)
+        findViewById<TextView>(R.id.pwLock).text = if (device) "Forget key" else "Lock"
         when {
             Vault.unlocked() -> {
                 status.text = prefs.vaultStatus.ifBlank { "Unlocked" }
                 filter.visibility = View.VISIBLE; bar.visibility = View.VISIBLE
                 showList()
+            }
+            device -> {
+                status.text = "Your passwords were downloaded from your server. Give this phone the vault key once: on your desktop browser open Passwords and press “📱 Phone key”, then paste it here." +
+                    (if (prefs.vaultStatus.isNotBlank()) "\n\n" + prefs.vaultStatus else "")
+                main.text = "Enter vault key"; main.visibility = View.VISIBLE
+                main.setOnClickListener { askKey() }
             }
             Vault.exists(this) -> {
                 status.text = "Your passwords are locked." + (if (prefs.vaultStatus.isNotBlank()) "\n" + prefs.vaultStatus else "")
@@ -68,11 +80,20 @@ class PasswordsActivity : AppCompatActivity() {
                 main.setOnClickListener { askUnlock() }
             }
             else -> {
-                status.text = if (prefs.syncConfigured) "No password vault found yet. Checking your server…\nIf you have none, you can make a new one."
-                else "No password vault yet. Make one here, or connect to your server in Settings to get the one from your desktop browser."
-                main.text = "Create a vault"; main.visibility = View.VISIBLE
-                main.setOnClickListener { askCreate() }
+                status.text = if (prefs.syncConfigured) "No passwords found on your server yet. Open Passwords in your desktop browser and let it sync, then tap Download."
+                else "Connect to your server in Settings to get the passwords from your desktop browser."
+                if (prefs.syncConfigured) { main.text = "Download"; main.visibility = View.VISIBLE; main.setOnClickListener { sync(true) } }
             }
+        }
+    }
+
+    private fun askKey() {
+        promptFields(this, "Vault key", listOf("Paste the key from your desktop"), listOf(""), "Unlock") { v ->
+            val k = try { android.util.Base64.decode(v[0].trim(), android.util.Base64.DEFAULT) } catch (_: Exception) { ByteArray(0) }
+            if (Vault.unlockWithKey(this, k)) {
+                DeviceKey.save(this, k)
+                refresh(); if (prefs.syncConfigured && prefs.syncVault) sync(false)
+            } else Toast.makeText(this, "That key does not open this vault", Toast.LENGTH_LONG).show()
         }
     }
 
@@ -86,15 +107,6 @@ class PasswordsActivity : AppCompatActivity() {
                     else { refresh(); if (prefs.syncConfigured && prefs.syncVault) sync(false) }
                 }
             }.start()
-        }
-    }
-
-    private fun askCreate() {
-        promptFields(this, "New master password", listOf("Master password", "Repeat it"), listOf("", ""), "Create", password = true) { v ->
-            if (v[0].length < 8) { Toast.makeText(this, "Use at least 8 characters", Toast.LENGTH_LONG).show(); return@promptFields }
-            if (v[0] != v[1]) { Toast.makeText(this, "The two passwords differ", Toast.LENGTH_LONG).show(); return@promptFields }
-            status.text = "Creating…"
-            Thread { Vault.create(this, v[0]); ui.post { refresh(); if (prefs.syncConfigured && prefs.syncVault) sync(false) } }.start()
         }
     }
 

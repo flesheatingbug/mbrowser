@@ -910,6 +910,7 @@ class MainActivity : AppCompatActivity() {
     private fun fillLogin() {
         val t = cur()
         if (t == null || t.home) { Toast.makeText(this, "Open a login page first", Toast.LENGTH_SHORT).show(); return }
+        Vault.tryAutoUnlock(this)
         if (!Vault.unlocked()) {
             Toast.makeText(this, "Unlock your passwords first", Toast.LENGTH_SHORT).show()
             picker.launch(Intent(this, PasswordsActivity::class.java)); return

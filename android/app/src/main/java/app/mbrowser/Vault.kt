@@ -22,6 +22,7 @@ object Vault {
     private var folders = mutableListOf<String>()
     private var kdf: JSONObject = DEFAULT_KDF
     private var salt = ""
+    private var device = false   // device mode: no master password, the key is kept on the device
 
     private fun file(ctx: Context) = File(ctx.applicationContext.filesDir, "vault.json")
     private fun b64(b: ByteArray) = Base64.encodeToString(b, Base64.NO_WRAP)
@@ -30,6 +31,25 @@ object Vault {
     fun blobText(ctx: Context): String? = try { file(ctx).readText() } catch (_: Exception) { null }
     fun exists(ctx: Context): Boolean = try { JSONObject(blobText(ctx) ?: "").has("data") } catch (_: Exception) { false }
     fun unlocked() = key != null
+    fun isDevice(ctx: Context): Boolean = try { JSONObject(blobText(ctx) ?: "").optBoolean("device") } catch (_: Exception) { false }
+
+    /** Opens a device-mode vault with the raw 32-byte key (no master password). */
+    fun unlockWithKey(ctx: Context, k: ByteArray): Boolean {
+        val blob = try { JSONObject(blobText(ctx) ?: return false) } catch (_: Exception) { return false }
+        if (!blob.optBoolean("device") || k.size != 32) return false
+        return try {
+            val (es, fs) = decrypt(blob, k)
+            key = k.copyOf(); entries = es; folders = fs
+            kdf = blob.getJSONObject("kdf"); salt = blob.optString("salt"); device = true
+            true
+        } catch (_: Exception) { false }
+    }
+
+    /** Opens a device-mode vault with the key remembered on this phone, if there is one. */
+    fun tryAutoUnlock(ctx: Context) {
+        if (key != null || !exists(ctx) || !isDevice(ctx)) return
+        DeviceKey.load(ctx)?.let { unlockWithKey(ctx, it) }
+    }
     fun sha(s: String): String = MessageDigest.getInstance("SHA-256").digest(s.toByteArray()).joinToString("") { "%02x".format(it) }
 
     private fun derive(master: String, saltBytes: ByteArray, k: JSONObject): ByteArray =
@@ -61,11 +81,13 @@ object Vault {
         val data = out.copyOfRange(0, out.size - 16); val tag = out.copyOfRange(out.size - 16, out.size)
         val blob = JSONObject().put("v", 1).put("kdf", kdf).put("salt", salt)
             .put("iv", b64(iv)).put("tag", b64(tag)).put("data", b64(data))
+        if (device) blob.put("device", true)
         val f = file(ctx); val tmp = File(f.path + ".tmp")
         tmp.writeText(blob.toString()); tmp.renameTo(f)
     }
 
     fun create(ctx: Context, master: String) {
+        device = false
         val s = ByteArray(16).also { SecureRandom().nextBytes(it) }
         kdf = JSONObject(DEFAULT_KDF.toString()); salt = b64(s)
         key = derive(master, s, kdf)
@@ -80,7 +102,7 @@ object Vault {
             val k = derive(master, unb64(blob.getString("salt")), blob.getJSONObject("kdf"))
             val (es, fs) = decrypt(blob, k)
             key = k; entries = es; folders = fs
-            kdf = blob.getJSONObject("kdf"); salt = blob.getString("salt")
+            kdf = blob.getJSONObject("kdf"); salt = blob.getString("salt"); device = false
             true
         } catch (_: Exception) { false }
     }
@@ -124,11 +146,12 @@ object Vault {
     /** Replaces the local file with the server's; stays unlocked only if the current key still opens it. */
     fun adopt(ctx: Context, blob: JSONObject) {
         val clean = JSONObject().put("v", blob.optInt("v", 1)).put("kdf", blob.getJSONObject("kdf"))
-        for (k in listOf("salt", "iv", "tag", "data")) clean.put(k, blob.getString(k))
+        for (k in listOf("salt", "iv", "tag", "data")) clean.put(k, blob.optString(k))
+        if (blob.optBoolean("device")) clean.put("device", true)
         val f = file(ctx); val tmp = File(f.path + ".tmp")
         tmp.writeText(clean.toString()); tmp.renameTo(f)
         val k = key ?: return
-        try { val (es, fs) = decrypt(clean, k); entries = es; folders = fs; kdf = clean.getJSONObject("kdf"); salt = clean.getString("salt") }
+        try { val (es, fs) = decrypt(clean, k); entries = es; folders = fs; kdf = clean.getJSONObject("kdf"); salt = clean.optString("salt"); device = clean.optBoolean("device") }
         catch (_: Exception) { lock() }
     }
 
@@ -160,6 +183,39 @@ object Vault {
     }
 }
 
+/** Keeps the vault key on this phone, wrapped by a key that never leaves the Android Keystore. */
+object DeviceKey {
+    private const val ALIAS = "mbrowser_vault_wrap"
+    private fun prefs(ctx: Context) = ctx.applicationContext.getSharedPreferences("vaultkey", Context.MODE_PRIVATE)
+
+    private fun wrapKey(): javax.crypto.SecretKey {
+        val ks = java.security.KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+        (ks.getKey(ALIAS, null) as? javax.crypto.SecretKey)?.let { return it }
+        val g = javax.crypto.KeyGenerator.getInstance(android.security.keystore.KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore")
+        g.init(android.security.keystore.KeyGenParameterSpec.Builder(ALIAS,
+            android.security.keystore.KeyProperties.PURPOSE_ENCRYPT or android.security.keystore.KeyProperties.PURPOSE_DECRYPT)
+            .setBlockModes(android.security.keystore.KeyProperties.BLOCK_MODE_GCM)
+            .setEncryptionPaddings(android.security.keystore.KeyProperties.ENCRYPTION_PADDING_NONE).build())
+        return g.generateKey()
+    }
+
+    fun save(ctx: Context, k: ByteArray) {
+        val c = Cipher.getInstance("AES/GCM/NoPadding")
+        c.init(Cipher.ENCRYPT_MODE, wrapKey())
+        val ct = c.doFinal(k)
+        prefs(ctx).edit().putString("k", Base64.encodeToString(c.iv, Base64.NO_WRAP) + ":" + Base64.encodeToString(ct, Base64.NO_WRAP)).apply()
+    }
+
+    fun load(ctx: Context): ByteArray? = try {
+        val v = prefs(ctx).getString("k", null)?.split(":") ?: return null
+        val c = Cipher.getInstance("AES/GCM/NoPadding")
+        c.init(Cipher.DECRYPT_MODE, wrapKey(), GCMParameterSpec(128, Base64.decode(v[0], Base64.DEFAULT)))
+        c.doFinal(Base64.decode(v[1], Base64.DEFAULT))
+    } catch (_: Exception) { null }
+
+    fun clear(ctx: Context) { prefs(ctx).edit().clear().apply() }
+}
+
 /** Keeps the vault in step with the server (the server only ever sees ciphertext). Same rules as the desktop. */
 object VaultSync {
     private fun same(a: JSONObject?, b: JSONObject?) = a != null && b != null &&
@@ -168,6 +224,7 @@ object VaultSync {
     /** Returns a short status message. */
     fun run(ctx: Context, api: Api): String {
         val prefs = Prefs(ctx)
+        Vault.tryAutoUnlock(ctx)
         val localText = Vault.blobText(ctx)
         val local = try { JSONObject(localText ?: "") } catch (_: Exception) { null }
         val remote = api.request("GET", "/api/vault")
@@ -188,7 +245,7 @@ object VaultSync {
             !rExists && local == null -> "No password vault yet"
             !rExists -> if (upload(0)) "Passwords uploaded (encrypted)" else "The server changed, will retry"
             rBlob == null -> "The server vault is unreadable"
-            local == null -> { take(rBlob, rVer); "Passwords downloaded. Unlock them with your master password." }
+            local == null -> { take(rBlob, rVer); "Passwords downloaded." }
             same(local, rBlob) -> { prefs.vaultVer = rVer; prefs.vaultHash = Vault.sha(localText!!); "Passwords are up to date" }
             else -> {
                 val localChanged = Vault.sha(localText!!) != prefs.vaultHash

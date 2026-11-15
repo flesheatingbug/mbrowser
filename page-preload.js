@@ -58,6 +58,7 @@ if (location.protocol === 'my:') {
     onBookmarksChanged: (cb) => ipcRenderer.on('bookmarks:changed', () => cb()),
     vaultStatus: invoke('vault:status'),
     vaultEnsureDevice: invoke('vault:ensureDevice'),
+    vaultExportKey: invoke('vault:exportKey'),
     vaultListCards: invoke('vault:listCards'),
     vaultSaveCard: invoke('vault:saveCard'),
     vaultRevealCard: invoke('vault:revealCard'),

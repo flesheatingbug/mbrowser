@@ -1910,6 +1910,17 @@ function setupIpc() {
     return { ok: true };
   }, PAGE_ONLY);
   handle('vault:lock', () => { if (!vault.isDevice()) { vault.lock(); clearTimeout(vaultTimer); } return true; }, PAGE_ONLY);
+  // the device key, so that another device of yours (the Android app) can be given the same key once
+  handle('vault:exportKey', () => {
+    try {
+      const keyFile = file('vault-device.key');
+      const plainFile = file('vault-device.key.plain');
+      if (safeStorage.isEncryptionAvailable() && fs.existsSync(keyFile))
+        return { key: safeStorage.decryptString(Buffer.from(fs.readFileSync(keyFile, 'utf8'), 'base64')) };
+      if (fs.existsSync(plainFile)) return { key: fs.readFileSync(plainFile, 'utf8').trim() };
+    } catch { /* fall through */ }
+    return { error: 'This computer has no device key (the vault uses a master password).' };
+  }, PAGE_ONLY);
   handle('vault:ensureDevice', () => {
     if (vault.unlocked()) return { ok: true };
     const keyFile = file('vault-device.key');
