@@ -125,7 +125,7 @@ const EARLY_ID = (() => {
   const _uaPlat = _win ? '(Windows NT 10.0; Win64; x64)' : '(X11; Linux x86_64)';
   const _uaChr = process.versions.chrome || '130.0.0.0';
   let _ua = `Mozilla/5.0 ${_uaPlat} AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${_uaChr} Safari/537.36`;
-  if (EARLY_ID === 'firefox') _ua = `Mozilla/5.0 (${_win ? 'Windows NT 10.0; Win64; x64' : 'X11; Linux x86_64'}; rv:140.0) Gecko/20100101 Firefox/140.0`;
+  if (EARLY_ID === 'firefox' || EARLY_ID === 'auto') _ua = `Mozilla/5.0 (${_win ? 'Windows NT 10.0; Win64; x64' : 'X11; Linux x86_64'}; rv:140.0) Gecko/20100101 Firefox/140.0`;
   else if (EARLY_ID === 'safari') _ua = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.6 Safari/605.1.15';
   if (EARLY_ID !== 'none') app.commandLine.appendSwitch('user-agent', _ua);
 }
@@ -731,18 +731,11 @@ function wire(tab) {
     if (!isAuth) maskUserAgentData(newWin.webContents);
     applyAutoIdentity(newWin.webContents);
   });
+  // The menu is shown from here and only here. During a right-button drag (a gesture) the page cancels the contextmenu event,
+  // so this does not fire; on Linux the page asks for it back after the button is released (see the 'ctxmenu' message below).
   wc.on('context-menu', h((_e, params) => {
-    // Always store params. Chromium fires this event before dispatching the DOM
-    // contextmenu event to the renderer, so ctxParams is set by the time any
-    // ctxmenu IPC from the renderer arrives.
-    tab.ctxParams = params;
-    if (!S().mouse.gestures) {
-      showContextMenu(tab, params);
-      tab.ctxParams = null;
-    }
-    // Gestures enabled: ctxmenu IPC will arrive (either from mouseup when
-    // contextmenu fired on press, or from the contextmenu handler when it fires
-    // after mouseup on some Wayland configs).
+    tab.ctxParams = null;
+    showContextMenu(tab, params);
   }));
   wc.on('found-in-page', h((_e, result) => {
     if (cur.overlayMode === 'find' && tab.id === cur.activeId) cur.overlay.webContents.send('find:result', result);
@@ -2464,13 +2457,8 @@ function setupIpc() {
     if (!t) return;
     use(t.owner);
     if (t.id !== cur.activeId) return;
-    if (t.ctxParams) {
-      showContextMenu(t, t.ctxParams);
-      t.ctxParams = null;
-    } else {
-      // Race fallback: ctxmenu IPC arrived before wc.on('context-menu') stored params.
-      e.sender.sendInputEvent({ type: 'contextMenu', x: Math.round(x), y: Math.round(y) });
-    }
+    // the page blocked the first contextmenu (it could have been a gesture); now that the button is up, ask Chromium for it again
+    e.sender.sendInputEvent({ type: 'contextMenu', x: Math.round(x), y: Math.round(y) });
   });
 
   // internal my:// pages (and chrome)
@@ -3031,22 +3019,32 @@ const FIREFOX_UA = process.platform === 'win32'
   ? 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0'
   : 'Mozilla/5.0 (X11; Linux x86_64; rv:140.0) Gecko/20100101 Firefox/140.0';
 
-// "Automatic": Chrome everywhere, Firefox on Google's own sites. Nothing is faked: the user agent is set per page, and the client hints are off.
+// "Automatic": the whole browser (every frame, worker and request) says Firefox, which is what Google's sign-in accepts. Pages that are
+// not Google's get a Chrome identity on top of that, set per page. A page that moves between the two is loaded again with the right one,
+// because the identity a page sees is fixed when its navigation starts.
 function applyAutoIdentity(wc) {
   if (S().general.browserId !== 'auto') return;
   const chromeUA = uaForMode('chrome');
-  let last = '';
-  const set = (url) => { const ua = isGoogleUrl(url) ? FIREFOX_UA : chromeUA; if (ua !== last) { last = ua; try { wc.setUserAgent(ua); } catch { /* closed */ } } };
+  let last = FIREFOX_UA;   // what the process says by default
+  const set = (url) => { const ua = isGoogleUrl(url) ? FIREFOX_UA : chromeUA; if (ua !== last) { last = ua; try { wc.setUserAgent(ua); } catch { /* closed */ } return true; } return false; };
   const orig = wc.loadURL.bind(wc);
-  wc.loadURL = (url, opts) => { set(url); return orig(url, opts); };   // the address bar loads pages this way and fires no will-navigate
-  wc.on('will-navigate', (_e, url) => set(url));
-  wc.on('will-redirect', (_e, url) => set(url));
-  wc.on('did-start-navigation', (d) => { if (d && d.isMainFrame) set(d.url); });
+  let reloading = false;
+  wc.loadURL = (url, opts) => { set(url); return orig(url, opts); };   // the address bar loads pages this way
+  const cross = (e, url) => {
+    if (reloading || !/^https?:/i.test(url)) return;
+    if (set(url)) {   // the identity changes: stop this navigation and start it again under the new one
+      e.preventDefault(); reloading = true;
+      setImmediate(() => { reloading = false; });
+      orig(url).catch(() => {});
+    }
+  };
+  wc.on('will-navigate', cross);
+  wc.on('will-redirect', cross);
 }
 
 function uaForMode(mode) {
   const win = process.platform === 'win32';
-  if (mode === 'firefox') return FIREFOX_UA;
+  if (mode === 'firefox' || mode === 'auto') return FIREFOX_UA;
   if (mode === 'safari') return 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.6 Safari/605.1.15';
   if (mode === 'none') return app.userAgentFallback;
   return `Mozilla/5.0 ${win ? '(Windows NT 10.0; Win64; x64)' : '(X11; Linux x86_64)'} AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${CHROME_VER} Safari/537.36`;
