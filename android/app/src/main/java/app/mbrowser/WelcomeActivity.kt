@@ -86,6 +86,12 @@ class WelcomeActivity : BaseActivity() {
     }
 
     private fun finishSetup() {
+        // a fresh, standalone install starts with a few sample speed dials (not when joining a server that has its own)
+        if (!prefs.syncConfigured && Store.bookmarkList().isEmpty()) {
+            for ((u, t) in listOf("https://duckduckgo.com/" to "DuckDuckGo", "https://en.wikipedia.org/" to "Wikipedia",
+                "https://www.youtube.com/" to "YouTube", "https://github.com/" to "GitHub", "https://www.openstreetmap.org/" to "OpenStreetMap",
+                "https://news.ycombinator.com/" to "Hacker News")) Store.upsert(u, t, "")
+        }
         prefs.firstRunDone = true
         finish()
     }

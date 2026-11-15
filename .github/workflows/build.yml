@@ -87,6 +87,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Download all build artifacts
         uses: actions/download-artifact@v4
@@ -102,6 +104,10 @@ jobs:
           # Use "latest-desktop" for branch pushes and manual runs; keep the tag for version tags
           if [[ "$TAG" != v* ]]; then TAG="latest-desktop"; fi
 
+          BEFORE="${{ github.event.before }}"
+          if [ -n "$BEFORE" ] && [ "$BEFORE" != "0000000000000000000000000000000000000000" ] && git cat-file -e "$BEFORE" 2>/dev/null; then RANGE="$BEFORE..HEAD"; else RANGE="-n 10"; fi
+          CHANGES=$(git log $RANGE --pretty='format:- %s (%h)')
+
           NOTES="**Download mbrowser** — Build ${{ github.run_number }}
 
           | Platform | File |
@@ -110,7 +116,10 @@ jobs:
           | 🪟 Windows | [mbrowser-windows-setup.exe](https://github.com/${{ github.repository }}/releases/download/${TAG}/mbrowser-windows-setup.exe) |
           | 🤖 Android | [mbrowser.apk](https://github.com/${{ github.repository }}/releases/download/latest-apk/mbrowser.apk) |
 
-          Build ${{ github.run_number }} from commit \`${GITHUB_SHA::7}\`."
+          Build ${{ github.run_number }} from commit \`${GITHUB_SHA::7}\`.
+
+          **Changes in this build**
+          ${CHANGES}"
 
           gh release delete "$TAG" --yes --cleanup-tag 2>/dev/null || true
           gh release create "$TAG" release-assets/* \
