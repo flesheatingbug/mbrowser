@@ -14,6 +14,9 @@ class Prefs(ctx: Context) {
     private fun putB(k: String, v: Boolean) = p.edit().putBoolean(k, v).apply()
 
     // app updates
+    var uaMode: String
+        get() = str("uaMode", "chrome")
+        set(v) = put("uaMode", v)
     var translateLang: String
         get() = str("translateLang", java.util.Locale.getDefault().language.ifEmpty { "en" })
         set(v) = put("translateLang", v)

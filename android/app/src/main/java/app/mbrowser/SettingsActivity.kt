@@ -132,6 +132,8 @@ class SettingsActivity : BaseActivity() {
             Thumbs.clear(this); toast("Thumbnails cleared")
         }
 
+        choiceRow("Identify as", UserAgents.MODES.map { it.second }, { UserAgents.MODES.indexOfFirst { it.first == prefs.uaMode }.coerceAtLeast(0) },
+            { prefs.uaMode = UserAgents.MODES[it].first; toast("Applied to open tabs when you return to the browser") })
         choiceRow("Translate to", Translate.LANGS.map { it.second }, { Translate.LANGS.indexOfFirst { it.first == prefs.translateLang }.coerceAtLeast(0) },
             { prefs.translateLang = Translate.LANGS[it].first })
 

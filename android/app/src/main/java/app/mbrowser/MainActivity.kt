@@ -523,12 +523,12 @@ class MainActivity : BaseActivity() {
     private fun applyUa(tab: Tab) {
         val s = tab.web.settings
         if (tab.desktop) {
-            s.userAgentString = DESKTOP_UA
+            s.userAgentString = UserAgents.desktop(prefs.uaMode)
             s.useWideViewPort = true
             s.loadWithOverviewMode = true
         } else {
             // drop the "; wv" marker so sites (Google sign-in in particular) are less likely to treat this as an embedded view
-            s.userAgentString = WebSettingsDefault.mobile(this).replace(MOBILE_FIX, "")
+            s.userAgentString = UserAgents.mobile(prefs.uaMode, WebSettingsDefault.mobile(this))
             s.useWideViewPort = true
             s.loadWithOverviewMode = true
         }
@@ -1149,9 +1149,16 @@ class MainActivity : BaseActivity() {
         if (r != null) v.setImageResource(r) else v.setImageResource(R.mipmap.ic_launcher)
     }
 
+    private var appliedUa = ""
+
     override fun onResume() {
         super.onResume()
         applyLogo()
+        if (appliedUa != prefs.uaMode) {
+            val first = appliedUa.isEmpty()
+            appliedUa = prefs.uaMode
+            if (!first) { tabs.forEach { applyUa(it) }; cur()?.let { if (!it.home) it.web.reload() } }
+        }
     }
 }
 
