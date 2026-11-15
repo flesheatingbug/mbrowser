@@ -721,16 +721,20 @@ function wire(tab) {
     if (!isAuth) maskUserAgentData(newWin.webContents);
   });
   wc.on('context-menu', h((_e, params) => {
-    // Store the params so the ctxmenu IPC handler can use them without
-    // having to re-synthesise the event via sendInputEvent (unreliable on Wayland).
     tab.ctxParams = params;
     if (!S().mouse.gestures) {
-      // Gestures disabled: show immediately (no IPC will arrive to trigger it).
       showContextMenu(tab, params);
       tab.ctxParams = null;
+    } else {
+      // Gestures enabled: ctxmenu IPC should arrive from the renderer on mouseup.
+      // If it doesn't (Wayland timing: contextmenu can fire after mouseup, leaving
+      // the preload deferred=false before our fix, or IPC races), show after 250ms.
+      clearTimeout(tab._ctxFallback);
+      tab._ctxFallback = setTimeout(() => {
+        tab._ctxFallback = null;
+        if (tab.ctxParams === params) { showContextMenu(tab, params); tab.ctxParams = null; }
+      }, 250);
     }
-    // Gestures enabled: wait for ctxmenu IPC which arrives on mouseup after
-    // the renderer confirms no gesture was performed.
   }));
   wc.on('found-in-page', h((_e, result) => {
     if (cur.overlayMode === 'find' && tab.id === cur.activeId) cur.overlay.webContents.send('find:result', result);
@@ -2440,7 +2444,8 @@ function setupIpc() {
   ipcMain.on('gesture', (e, g) => {
     const t = tabByWc.get(e.sender.id);
     if (!t) return;
-    t.ctxParams = null; // gesture consumed the right-drag; discard any saved context-menu params
+    clearTimeout(t._ctxFallback); t._ctxFallback = null;
+    t.ctxParams = null;
     use(t.owner);
     if (!S().mouse.gestures || t.id !== cur.activeId) return;
     const id = GESTURES[g];
@@ -2451,14 +2456,11 @@ function setupIpc() {
     if (!t) return;
     use(t.owner);
     if (t.id !== cur.activeId) return;
+    clearTimeout(t._ctxFallback); t._ctxFallback = null;
     if (t.ctxParams) {
-      // Use the params captured from wc.on('context-menu') — avoids sendInputEvent
-      // which requires the webContents to already be focused (unreliable on Wayland).
       showContextMenu(t, t.ctxParams);
       t.ctxParams = null;
     } else {
-      // Fallback: params weren't captured yet (Wayland timing where contextmenu
-      // fires after mouseup, so this IPC arrives first).
       e.sender.sendInputEvent({ type: 'contextMenu', x: Math.round(x), y: Math.round(y) });
     }
   });

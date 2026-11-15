@@ -572,10 +572,7 @@
     }
     const pill = $('dl-pill');
     const dlbtn = $('dlbtn');
-    if (!dls.length) {
-      pill.style.display = 'none'; pill.classList.remove('active');
-      dlbtn.className = 'ic'; $('dlbtn-n').textContent = '';
-    } else if (activeDl) {
+    if (activeDl) {
       const pct = activeDl.total ? ' · ' + Math.round(activeDl.received / activeDl.total * 100) + '%' : '';
       pill.style.display = 'flex'; pill.classList.add('active');
       pill.textContent = '⬇ ' + activeDl.name + pct;
@@ -583,7 +580,7 @@
       $('dlbtn-n').textContent = activeDl.total ? Math.round(activeDl.received / activeDl.total * 100) + '%' : '…';
     } else {
       pill.style.display = 'none'; pill.classList.remove('active');
-      dlbtn.className = 'ic show done'; $('dlbtn-n').textContent = '';
+      dlbtn.className = 'ic'; $('dlbtn-n').textContent = '';
     }
 
     if (part === 'tabs') {

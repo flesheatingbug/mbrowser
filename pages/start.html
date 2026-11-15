@@ -125,27 +125,54 @@
   .mbtns { display: flex; gap: 8px; margin-top: 16px; }
 
   /* customize panel */
-  #panel { display: none; position: fixed; top: 48px; right: 16px; width: min(290px, calc(100vw - 32px));
+  #panel { display: none; position: fixed; top: 48px; right: 16px; width: min(300px, calc(100vw - 32px));
     max-height: calc(100vh - 64px); overflow-y: auto; background: var(--tab); border: 1px solid var(--line);
-    border-radius: 12px; padding: 14px; z-index: 299;
+    border-radius: 14px; padding: 16px; z-index: 299;
     box-shadow: 0 8px 32px rgba(0,0,0,.45), 0 0 0 1px rgba(255,255,255,.04); }
-  #panel .ph { font-size: 11px; text-transform: uppercase; letter-spacing: .05em;
-    color: var(--muted); margin: 12px 0 4px; }
+  #panel .ph { font-size: 10px; text-transform: uppercase; letter-spacing: .07em;
+    color: var(--muted); margin: 14px 0 6px; font-weight: 600; }
   #panel .ph:first-child { margin-top: 0; }
   #panel label { display: flex; justify-content: space-between; align-items: center;
-    gap: 10px; margin: 6px 0; font-size: 13px; }
-  #panel input[type=range] { width: 100px; padding: 0; }
-  #panel input[type=number] { width: 56px; }
-  #panel input[type=color] { width: 32px; height: 28px; padding: 2px; border-radius: 4px; cursor: pointer; flex: none; }
+    gap: 10px; padding: 4px 0; font-size: 13px; cursor: pointer; }
+  #panel label:hover { color: var(--fg); }
+  #panel input[type=range] { flex: 1; padding: 0; accent-color: var(--accent); }
+  #panel .rval { font-size: 12px; color: var(--muted); min-width: 32px; text-align: right; }
+  #panel input[type=number] { width: 54px; }
+  #panel input[type=color] { width: 28px; height: 24px; padding: 2px; border-radius: 4px; cursor: pointer; flex: none; }
+  /* dial style selector */
+  .style-sel { display: flex; gap: 4px; margin-bottom: 2px; }
+  .style-btn { flex: 1; padding: 6px 0; border: 1px solid var(--line); border-radius: 8px; background: none;
+    color: var(--muted); font-size: 12px; cursor: pointer; transition: all .15s; font-family: inherit; }
+  .style-btn:hover { color: var(--fg); }
+  .style-btn.on { background: color-mix(in srgb, var(--accent) 18%, var(--tab)); border-color: var(--accent); color: var(--accent); font-weight: 600; }
+  /* toggle switch */
+  .tog { position: relative; display: inline-block; width: 30px; height: 17px; flex: none; }
+  .tog input { opacity: 0; width: 0; height: 0; position: absolute; }
+  .tog .ts { position: absolute; inset: 0; background: var(--line); border-radius: 9px; cursor: pointer; transition: background .15s; }
+  .tog .ts:before { content: ''; position: absolute; width: 13px; height: 13px; left: 2px; top: 2px; background: #fff; border-radius: 50%; transition: transform .15s; }
+  .tog input:checked + .ts { background: var(--accent); }
+  .tog input:checked + .ts:before { transform: translateX(13px); }
+  /* background */
   .bgrow { display: flex; gap: 6px; align-items: center; margin-top: 4px; }
   .bgrow input[type=text] { flex: 1; min-width: 0; font-size: 12px; }
   .swatches { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 6px; }
-  .swatch { width: 26px; height: 26px; border-radius: 6px; border: 2px solid transparent;
-    cursor: pointer; flex: none; padding: 0; }
-  .swatch:hover { border-color: var(--fg); }
-  #panel .link { text-align: center; margin-top: 12px; font-size: 12px; }
-  #panel .link a { color: var(--muted); cursor: pointer; }
-  #panel .link a:hover { color: var(--fg); }
+  .swatch { width: 26px; height: 26px; border-radius: 6px; border: 2px solid transparent; cursor: pointer; flex: none; padding: 0; }
+  .swatch:hover, .swatch.on { border-color: var(--fg); }
+  .swatch.on { box-shadow: 0 0 0 2px var(--accent); }
+  /* wallpaper grid */
+  .wp-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; margin-top: 4px; }
+  .wp-sw { aspect-ratio: 16/9; border-radius: 6px; border: 2px solid transparent; cursor: pointer;
+    background-size: cover; background-position: center; padding: 0; }
+  .wp-sw:hover { border-color: var(--fg); }
+  .wp-sw.on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+  .wp-none { background: var(--bg); display: grid; place-items: center; font-size: 10px; color: var(--muted); }
+  .wp-upload { grid-column: 1 / -1; padding: 5px 8px; border: 1px dashed var(--line); border-radius: 6px;
+    background: none; color: var(--muted); font-size: 12px; cursor: pointer; text-align: center; font-family: inherit; }
+  .wp-upload:hover { color: var(--fg); border-color: var(--fg); }
+  /* all settings link */
+  #panel .plink { text-align: center; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); font-size: 12px; }
+  #panel .plink a { color: var(--muted); cursor: pointer; }
+  #panel .plink a:hover { color: var(--fg); }
 </style>
 </head>
 <body>
@@ -691,86 +718,131 @@ gridRo.observe($('grid'));
 // --- customize panel ---
 function renderPanel() {
   const p = $('panel'); p.textContent = '';
-  const ph = (t) => { const h = document.createElement('div'); h.className = 'ph'; h.textContent = t; p.append(h); };
-  const row = (txt, ctrl) => {
-    const l = document.createElement('label'); const s = document.createElement('span'); s.textContent = txt;
-    l.append(s, ctrl); p.append(l); return ctrl;
-  };
-  const cb = (val, fn) => {
-    const c = Object.assign(document.createElement('input'), { type: 'checkbox', checked: !!val });
-    c.onchange = () => fn(c.checked); return c;
-  };
-
-  ph('Tiles');
-  const szLbl = document.createElement('span'); szLbl.textContent = 'Size ' + SP.tileSize + 'px';
-  const szR = Object.assign(document.createElement('input'), { type: 'range', min: 90, max: 260, step: 10, value: SP.tileSize });
-  szR.style.width = '100px';
-  szR.oninput = () => { SP.tileSize = +szR.value; szLbl.textContent = 'Size ' + SP.tileSize + 'px'; applyLook(); };
-  szR.onchange = save;
-  const szRow = document.createElement('label'); szRow.append(szLbl, szR); p.append(szRow);
-
-  const colI = Object.assign(document.createElement('input'), { type: 'number', min: 0, max: 12, value: SP.columns || 0 });
-  colI.style.width = '56px';
-  colI.onchange = () => { SP.columns = Math.max(0, +colI.value || 0); save(); renderGrid(); };
-  row('Columns (0 = auto)', colI);
-  row('Thumbnails',  cb(SP.thumbnails, (v) => { SP.thumbnails = v; save(); renderGrid(); }));
-  row('Search bar',  cb(SP.showSearch !== false, (v) => { SP.showSearch = v; save(); applyLook(); }));
-  row('Logo & name', cb(SP.showBrand  !== false, (v) => { SP.showBrand  = v; save(); applyLook(); }));
-  row('Tile titles', cb(SP.showTitles !== false, (v) => { SP.showTitles = v; save(); applyLook(); }));
-  row('Add button',  cb(SP.showAddButton !== false, (v) => { SP.showAddButton = v; save(); renderGrid(); }));
-
-  ph('Tabs');
-  const et = SP.extraTabs || {};
-  row('Bookmarks',         cb(et.bookmarks !== false, (v) => { SP.extraTabs = { ...et, bookmarks: v }; save(); renderTabBar(); }));
-  row('History',           cb(et.history   !== false, (v) => { SP.extraTabs = { ...et, history:   v }; save(); renderTabBar(); }));
-  row('Notes',             cb(et.notes     !== false, (v) => { SP.extraTabs = { ...et, notes:     v }; save(); renderTabBar(); }));
-  if (syncServer) row('Server dashboard', cb(!!SP.showDashboard, (v) => { SP.showDashboard = v; save(); renderTabBar(); }));
-
-  ph('Background (this group)');
   const ai = activeIdx();
+  const et = SP.extraTabs || {};
+  const curWp = SP.wallpaper || 'none';
   const curBg = SP.groups[ai].background || '';
 
+  const ph = (t) => { const h = document.createElement('div'); h.className = 'ph'; h.textContent = t; p.append(h); };
+  const row = (txt, ctrl) => {
+    const l = document.createElement('label');
+    l.append(Object.assign(document.createElement('span'), { textContent: txt }), ctrl);
+    p.append(l); return ctrl;
+  };
+  const tog = (val, fn) => {
+    const wrap = document.createElement('label'); wrap.className = 'tog';
+    const inp = Object.assign(document.createElement('input'), { type: 'checkbox', checked: !!val });
+    const slider = document.createElement('span'); slider.className = 'ts';
+    wrap.append(inp, slider);
+    inp.onchange = () => fn(inp.checked);
+    return wrap;
+  };
+
+  // ----- Style -----
+  ph('Style');
+
+  const styleSel = document.createElement('div'); styleSel.className = 'style-sel';
+  ['Cards', 'Icons'].forEach((label) => {
+    const val = label.toLowerCase();
+    const b = document.createElement('button');
+    b.className = 'style-btn' + (SP.dialStyle === val ? ' on' : '');
+    b.textContent = label;
+    b.onclick = () => { SP.dialStyle = val; save(); applyLook(); renderGrid(); renderPanel(); };
+    styleSel.append(b);
+  });
+  p.append(styleSel);
+
+  const szVal = document.createElement('span'); szVal.className = 'rval'; szVal.textContent = SP.tileSize + 'px';
+  const szR = Object.assign(document.createElement('input'), { type: 'range', min: 90, max: 260, step: 10, value: SP.tileSize });
+  szR.oninput = () => { SP.tileSize = +szR.value; szVal.textContent = SP.tileSize + 'px'; applyLook(); };
+  szR.onchange = save;
+  const szRow = document.createElement('label');
+  szRow.append(Object.assign(document.createElement('span'), { textContent: 'Tile size' }), szR, szVal);
+  p.append(szRow);
+
+  const colI = Object.assign(document.createElement('input'), { type: 'number', min: 0, max: 12, value: SP.columns || 0 });
+  colI.onchange = () => { SP.columns = Math.max(0, +colI.value || 0); save(); renderGrid(); };
+  row('Columns (0 = auto)', colI);
+
+  // ----- Display -----
+  ph('Display');
+  row('Search bar',  tog(SP.showSearch  !== false, (v) => { SP.showSearch  = v; save(); applyLook(); }));
+  row('Logo & name', tog(SP.showBrand   !== false, (v) => { SP.showBrand   = v; save(); applyLook(); }));
+  row('Tile titles', tog(SP.showTitles  !== false, (v) => { SP.showTitles  = v; save(); applyLook(); }));
+  row('Add button',  tog(SP.showAddButton !== false, (v) => { SP.showAddButton = v; save(); renderGrid(); }));
+  if (SP.dialStyle !== 'icons') {
+    row('Thumbnails', tog(SP.thumbnails, (v) => { SP.thumbnails = v; save(); renderGrid(); }));
+  }
+
+  // ----- Quick links -----
+  ph('Quick links');
+  row('Bookmarks', tog(et.bookmarks !== false, (v) => { SP.extraTabs = { ...et, bookmarks: v }; save(); renderTabBar(); }));
+  row('History',   tog(et.history   !== false, (v) => { SP.extraTabs = { ...et, history:   v }; save(); renderTabBar(); }));
+  row('Notes',     tog(et.notes     !== false, (v) => { SP.extraTabs = { ...et, notes:     v }; save(); renderTabBar(); }));
+  if (syncServer)  row('Server dashboard', tog(!!SP.showDashboard, (v) => { SP.showDashboard = v; save(); renderTabBar(); }));
+
+  // ----- Wallpaper -----
+  ph('Wallpaper');
+  const wpGrid = document.createElement('div'); wpGrid.className = 'wp-grid';
+
+  const wpNone = document.createElement('button');
+  wpNone.className = 'wp-sw wp-none' + (curWp === 'none' ? ' on' : '');
+  wpNone.textContent = 'None';
+  wpNone.onclick = () => { SP.wallpaper = 'none'; save(); applyLook(); renderPanel(); };
+  wpGrid.append(wpNone);
+
+  ['aurora','dusk','ocean','dunes','mist','forest','ember','orchid','slate','nebula','peaks','grey','paper'].forEach((id) => {
+    const s = document.createElement('button');
+    s.className = 'wp-sw' + (curWp === id ? ' on' : '');
+    s.title = id.charAt(0).toUpperCase() + id.slice(1);
+    s.style.backgroundImage = `url("my://wallpaper/${id}")`;
+    s.onclick = () => { SP.wallpaper = id; save(); applyLook(); renderPanel(); };
+    wpGrid.append(s);
+  });
+
+  const wpUp = document.createElement('button'); wpUp.className = 'wp-upload';
+  wpUp.textContent = curWp === 'custom' ? '✓ Custom — upload new…' : '+ Upload wallpaper…';
+  wpUp.onclick = async () => {
+    const r = await browser.wallpaperPick();
+    if (r && r.ok) { SP.wallpaper = 'custom'; SP.wallpaperRev = (SP.wallpaperRev || 0) + 1; save(); applyLook(); renderPanel(); }
+    else if (r && r.error) alert(r.error);
+  };
+  wpGrid.append(wpUp);
+  p.append(wpGrid);
+
+  // ----- Background (this page) -----
+  ph('Background (this page)');
   const bgRowEl = document.createElement('div'); bgRowEl.className = 'bgrow';
-  const bgI = Object.assign(document.createElement('input'), { type: 'text', value: curBg, placeholder: 'CSS or url(…)' });
+  const bgI = Object.assign(document.createElement('input'), { type: 'text', value: curBg, placeholder: 'CSS colour or gradient' });
   const bgC = Object.assign(document.createElement('input'), { type: 'color', value: /^#[0-9a-f]{6}/i.test(curBg) ? curBg : '#1e1f22' });
   bgC.oninput = () => { bgI.value = bgC.value; SP.groups[ai].background = bgC.value; save(); applyLook(); };
   bgI.onchange = () => { SP.groups[ai].background = bgI.value; if (/^#[0-9a-f]{6}/i.test(bgI.value)) bgC.value = bgI.value; save(); applyLook(); };
   bgRowEl.append(bgI, bgC); p.append(bgRowEl);
 
-  // Sample gradient swatches
   const swatches = document.createElement('div'); swatches.className = 'swatches';
   SAMPLE_BGS.forEach(([name, bg]) => {
-    const s = document.createElement('button'); s.className = 'swatch'; s.title = name;
+    const s = document.createElement('button'); s.className = 'swatch' + (curBg === bg ? ' on' : ''); s.title = name;
     s.style.background = bg;
-    s.onclick = () => { SP.groups[ai].background = bg; bgI.value = bg; save(); applyLook(); };
+    s.onclick = () => { SP.groups[ai].background = bg; bgI.value = bg; save(); applyLook(); renderPanel(); };
     swatches.append(s);
   });
   p.append(swatches);
 
-  // Upload image
-  const upBtn = document.createElement('button'); upBtn.textContent = 'Upload image…';
-  upBtn.style.cssText = 'width:100%;margin-top:8px;font-size:12px';
-  const fileIn = document.createElement('input'); fileIn.type = 'file'; fileIn.accept = 'image/*'; fileIn.style.display = 'none';
-  fileIn.onchange = () => {
-    const file = fileIn.files[0]; if (!file) return;
+  const bgFileIn = document.createElement('input'); bgFileIn.type = 'file'; bgFileIn.accept = 'image/*'; bgFileIn.style.display = 'none';
+  bgFileIn.onchange = () => {
+    const f = bgFileIn.files[0]; if (!f) return;
     const reader = new FileReader();
-    reader.onload = () => {
-      const bg = `url("${reader.result}")`;
-      SP.groups[ai].background = bg; bgI.value = '(uploaded image)'; save(); applyLook();
-    };
-    reader.readAsDataURL(file);
+    reader.onload = () => { SP.groups[ai].background = `url("${reader.result}")`; bgI.value = '(image)'; save(); applyLook(); };
+    reader.readAsDataURL(f);
   };
-  upBtn.onclick = () => fileIn.click();
-  p.append(upBtn, fileIn);
+  const bgUp = document.createElement('button'); bgUp.className = 'wp-upload'; bgUp.style.marginTop = '5px'; bgUp.textContent = '+ Upload image…';
+  bgUp.onclick = () => bgFileIn.click();
+  const bgClr = document.createElement('button'); bgClr.className = 'wp-upload'; bgClr.style.marginTop = '3px'; bgClr.textContent = 'Clear background';
+  bgClr.onclick = () => { SP.groups[ai].background = ''; bgI.value = ''; save(); applyLook(); renderPanel(); };
+  p.append(bgUp, bgFileIn, bgClr);
 
-  // Clear button
-  const clr = document.createElement('button'); clr.textContent = 'Clear background';
-  clr.style.cssText = 'width:100%;margin-top:4px;font-size:12px';
-  clr.onclick = () => { SP.groups[ai].background = ''; bgI.value = ''; save(); applyLook(); };
-  p.append(clr);
-
-  const lnk = document.createElement('div'); lnk.className = 'link';
-  lnk.innerHTML = '<a onclick="browser.go(\'my://settings#startpage\')">All settings…</a>';
+  const lnk = document.createElement('div'); lnk.className = 'plink';
+  lnk.innerHTML = '<a onclick="browser.go(\'my://settings#startpage\')">All start page settings…</a>';
   p.append(lnk);
 }
 
