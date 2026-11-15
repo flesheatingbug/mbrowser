@@ -46,33 +46,37 @@ class WelcomeActivity : BaseActivity() {
 
     override fun onSaveInstanceState(out: Bundle) { super.onSaveInstanceState(out); out.putString("step", step) }
 
-    /** The full set of colour themes, each as a small preview of the browser in those colours. */
+    /** One list of themes: the default (follows the system light/dark setting) first, then every other colour theme. */
     private fun themePicker() {
-        body("More themes", 22).also { it.setTextColor(tc(R.attr.mbText)) }
-        val hs = android.widget.HorizontalScrollView(this)
-        hs.isHorizontalScrollBarEnabled = false
-        val rowv = LinearLayout(this)
-        rowv.orientation = LinearLayout.HORIZONTAL
-        rowv.setPadding(0, dp(8), 0, dp(8))
-        for ((id, name) in Themes.LIST) {
+        body("Theme", 22).also { it.setTextColor(tc(R.attr.mbText)) }
+        var rowv: LinearLayout? = null
+        Themes.LIST.forEachIndexed { n, (id, name) ->
+            if (n % 3 == 0) {
+                rowv = LinearLayout(this).also { it.orientation = LinearLayout.HORIZONTAL; it.setPadding(0, dp(8), 0, 0) }
+                box.addView(rowv, LinearLayout.LayoutParams(-1, -2))
+            }
             val w = android.view.ContextThemeWrapper(this, Themes.styleId(this, id))
             val on = prefs.themeId == id
             val col = LinearLayout(this)
             col.orientation = LinearLayout.VERTICAL
             col.gravity = Gravity.CENTER_HORIZONTAL
             col.addView(ThemePreview(this, w.tc(R.attr.mbBg), w.tc(R.attr.mbBar), w.tc(R.attr.mbPill), w.tc(R.attr.mbText), w.tc(R.attr.mbAccent),
-                if (on) tc(R.attr.mbAccent) else w.tc(R.attr.mbLine), on), LinearLayout.LayoutParams(dp(88), dp(124)))
+                if (on) tc(R.attr.mbAccent) else w.tc(R.attr.mbLine), on), LinearLayout.LayoutParams(dp(92), dp(128)))
             val l = TextView(this)
-            l.text = name.substringBefore(" (")
+            l.text = (if (id == "system") "Default" else name.substringBefore(" ("))
             l.textSize = 12f; l.maxLines = 1; l.gravity = Gravity.CENTER
             l.setTextColor(tc(if (on) R.attr.mbText else R.attr.mbMuted))
-            col.addView(l, LinearLayout.LayoutParams(dp(88), -2))
-            col.setOnClickListener { prefs.themeId = id; recreate() }
-            val lp = LinearLayout.LayoutParams(-2, -2); lp.setMargins(0, 0, dp(10), 0)
-            rowv.addView(col, lp)
+            col.addView(l, LinearLayout.LayoutParams(-2, -2))
+            col.setOnClickListener {
+                prefs.themeId = id
+                if (id == "system") { prefs.themeMode = 0; App.applyTheme(0) }
+                recreate()
+            }
+            rowv!!.addView(col, LinearLayout.LayoutParams(0, -2, 1f))
         }
-        hs.addView(rowv)
-        box.addView(hs)
+        // pad the last row so its tiles keep their width
+        val rem = Themes.LIST.size % 3
+        if (rem != 0) for (k in rem until 3) rowv!!.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f))
     }
 
     private fun finishSetup() {
@@ -166,23 +170,6 @@ class WelcomeActivity : BaseActivity() {
                 }
                 if (current.isEmpty()) Settings.setDefaultEngine(engines[0].id)
                 paintEngines()
-                body("Theme", 22).also { it.setTextColor(tc(R.attr.mbText)) }
-                val themes = listOf("Follow system", "Light", "Dark")
-                val tchips = ArrayList<TextView>()
-                fun paintThemes() {
-                    tchips.forEachIndexed { i, tv ->
-                        val on = prefs.themeMode == i
-                        tv.setTextColor(tc(if (on) R.attr.mbAccent else R.attr.mbText))
-                        tv.text = (if (on) "●  " else "○  ") + themes[i]
-                    }
-                }
-                themes.forEachIndexed { i, _ ->
-                    val tv = TextView(this)
-                    tv.textSize = 16f; tv.setPadding(dp(4), dp(12), dp(4), dp(12))
-                    tv.setOnClickListener { prefs.themeMode = i; App.applyTheme(i); paintThemes() }
-                    tchips.add(tv); box.addView(tv)
-                }
-                paintThemes()
                 themePicker()
                 primary("Start browsing") { finishSetup() }
                 link("Back") { show("start") }
