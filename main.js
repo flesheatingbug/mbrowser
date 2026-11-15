@@ -1422,15 +1422,57 @@ function profileMenu() {
 }
 
 function mainMenu() {
-  const item = (id) => { const c = COMMANDS.find((x) => x.id === id); return { label: c.label, accelerator: undefined, click: c.run }; };
+  const cmd = (id) => COMMANDS.find((x) => x.id === id);
+  const item = (id, overrides) => {
+    const c = cmd(id);
+    const keys = effectiveKeys(c);
+    return Object.assign({ label: c.label, accelerator: keys[0] || undefined, click: c.run }, overrides);
+  };
+  const wc = activeWc();
+  const url = wc ? wc.getURL() : '';
+  const host = hostOf(url);
+  const webPage = isWeb(url);
+  const allow = S().privacy.allowSites;
+  const siteAllowed = host && allow.some((h) => host === h || host.endsWith('.' + h));
+  const blockerOn = S().privacy.blockTrackers;
+  const zoomPct = wc ? Math.round(wc.getZoomFactor() * 100) : 100;
+
   popup(Menu.buildFromTemplate([
-    item('tab-new'), item('tab-new-private'), item('window-new'), item('window-new-private'), { type: 'separator' },
-    item('app-start'), item('page-add-speeddial'), { type: 'separator' },
-    item('page-find'), item('page-print'), item('page-screenshot'), item('page-fullscreen'), { type: 'separator' },
-    item('app-history'), item('app-bookmarks'), item('app-downloads'), item('app-passwords'), item('app-profiles'), item('app-quick-commands'),
+    item('tab-new'), item('tab-new-private'), item('window-new'), item('window-new-private'),
     { type: 'separator' },
+    item('app-history'), item('app-bookmarks'), item('app-downloads'), item('app-passwords'), item('app-notes'),
+    { type: 'separator' },
+    item('page-zoom-in'), item('page-zoom-out'),
+    item('page-zoom-reset', { label: `Reset Zoom (${zoomPct}%)` }),
+    { type: 'separator' },
+    item('page-find'), item('page-print'), item('page-translate', { enabled: webPage }),
+    { type: 'separator' },
+    {
+      label: 'Block Trackers on This Site', type: 'checkbox',
+      checked: !!(blockerOn && !siteAllowed && host),
+      enabled: !!(host && blockerOn),
+      click: toggleSiteBlocking,
+    },
+    { type: 'separator' },
+    {
+      label: 'More Tools',
+      submenu: [
+        item('app-start'), item('page-add-speeddial', { enabled: webPage }),
+        item('app-quick-commands'),
+        { type: 'separator' },
+        item('page-screenshot'), item('page-fullscreen'),
+        item('page-source', { enabled: webPage }), item('page-devtools'),
+        { type: 'separator' },
+        item('app-profiles'), item('app-library'), item('app-import'),
+        item('app-server-admin'),
+        { type: 'separator' },
+        item('sync-now'),
+      ],
+    },
+    { type: 'separator' },
+    item('app-settings'),
     { label: 'Appearance', click: () => openInternal('settings#appearance') },
-    item('app-settings'), { type: 'separator' },
+    { type: 'separator' },
     { label: 'Check for updates', click: () => checkForUpdates(true) },
     { label: 'Quit', click: () => app.quit() },
   ]));
