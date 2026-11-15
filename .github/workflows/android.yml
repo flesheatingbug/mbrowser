@@ -51,7 +51,8 @@ jobs:
           if [ -n "$BEFORE" ] && [ "$BEFORE" != "0000000000000000000000000000000000000000" ] && git cat-file -e "$BEFORE" 2>/dev/null; then RANGE="$BEFORE..HEAD"; else RANGE="-n 10"; fi
           NL=$'\n'
           CHANGES=$(git log $RANGE --pretty='format:- %s (%h)')
+          retry() { for n in 1 2 3 4; do "$@" && return 0; echo "attempt $n failed, retrying"; sleep $((n*15)); done; return 1; }
           gh release delete latest-apk --yes --cleanup-tag || true
-          gh release create latest-apk mbrowser.apk --title "mbrowser Android (latest build)" --notes "Build ${GITHUB_RUN_NUMBER}, commit ${GITHUB_SHA::7}. Install the .apk on your phone.${NL}${NL}**Changes in this build**${NL}${CHANGES}" --target "$GITHUB_SHA"
+          retry gh release create latest-apk mbrowser.apk --title "mbrowser Android (latest build)" --notes "Build ${GITHUB_RUN_NUMBER}, commit ${GITHUB_SHA::7}. Install the .apk on your phone.${NL}${NL}**Changes in this build**${NL}${CHANGES}" --target "$GITHUB_SHA"
           # keep every build as its own numbered release so older versions stay available
-          gh release create "apk-build-${GITHUB_RUN_NUMBER}" mbrowser.apk --prerelease --latest=false --title "mbrowser Android build ${GITHUB_RUN_NUMBER}" --notes "Archived build ${GITHUB_RUN_NUMBER}, commit ${GITHUB_SHA::7}.${NL}${NL}**Changes in this build**${NL}${CHANGES}" --target "$GITHUB_SHA"
+          retry gh release create "apk-build-${GITHUB_RUN_NUMBER}" mbrowser.apk --prerelease --latest=false --title "mbrowser Android build ${GITHUB_RUN_NUMBER}" --notes "Archived build ${GITHUB_RUN_NUMBER}, commit ${GITHUB_SHA::7}.${NL}${NL}**Changes in this build**${NL}${CHANGES}" --target "$GITHUB_SHA"
