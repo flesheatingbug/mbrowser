@@ -137,152 +137,62 @@ const S = () => store.get();
 // ---------- build / update ----------
 const BUILD_NUMBER = 0; // replaced by CI — do not edit
 const UPDATE_REPO = 'flesheatingbug/mbrowser';
-const UPDATE_TAG  = 'latest-desktop';
-let _pendingUpdatePath = null; // downloaded AppImage ready to relaunch
+const RELEASE_URL = `https://github.com/${UPDATE_REPO}/releases`;
 
-// Copy then delete — works across filesystems (EXDEV on rename otherwise)
-function moveFile(src, dest) {
-  fs.copyFileSync(src, dest);
-  try { fs.unlinkSync(src); } catch { /* ignore cleanup failure */ }
+let _euInfo = null;      // UpdateInfo from electron-updater when an update is found
+let _euDownloaded = false;
+
+function broadcastUpd(ch, data) {
+  for (const w of windows) { try { w.statusView.webContents.send(ch, data); } catch { /* ignore */ } }
+}
+
+function getAutoUpdater() {
+  if (!app.isPackaged) return null;
+  try { return require('electron-updater').autoUpdater; } catch { return null; }
+}
+
+// Convert electron-updater's UpdateInfo to the info shape the UI expects
+function euToInfo(info, downloading = false) {
+  const patch = String(info.version || '').split('.')[2] || '';
+  const build = /^\d+$/.test(patch) ? parseInt(patch, 10) : info.version;
+  return { build, currentBuild: BUILD_NUMBER, version: info.version, releaseUrl: RELEASE_URL, canInstall: true, downloading };
+}
+
+function initAutoUpdater() {
+  const au = getAutoUpdater();
+  if (!au) return;
+  au.logger = null;
+  au.autoDownload = false;
+  au.autoInstallOnAppQuit = false;
+
+  au.on('update-available', (info) => {
+    _euInfo = info;
+    broadcastUpd('app:update-available', euToInfo(info, true));
+    au.downloadUpdate().catch(() => {});
+  });
+  au.on('download-progress', ({ percent }) => {
+    broadcastUpd('app:update-downloading', percent / 100);
+  });
+  au.on('update-downloaded', (info) => {
+    _euInfo = info; _euDownloaded = true;
+    broadcastUpd('app:update-ready', euToInfo(info));
+  });
+  au.on('error', (err) => { console.error('[updater]', err.message); });
 }
 
 async function checkForUpdates(manual = false) {
+  const au = getAutoUpdater();
+  if (!au) {
+    if (manual) dialog.showMessageBox({ type: 'info', title: 'mbrowser', message: 'Running from source — updates apply to packaged builds only.' });
+    return;
+  }
   try {
-    const r = await fetch(`https://api.github.com/repos/${UPDATE_REPO}/releases/tags/${UPDATE_TAG}`, {
-      headers: { 'User-Agent': 'mbrowser-desktop', Accept: 'application/vnd.github+json' },
-    });
-    if (!r.ok) {
-      if (manual) dialog.showErrorBox('Update check failed', `GitHub returned HTTP ${r.status}.`);
-      return;
-    }
-    const j = await r.json();
-    const notes = j.body || '';
-    const m = notes.match(/[Bb]uild\s+(\d+)/);
-    const remote = m ? parseInt(m[1], 10) : 0;
-    if (BUILD_NUMBER > 0 && remote <= BUILD_NUMBER) {
-      if (manual) dialog.showMessageBox({ type: 'info', title: 'mbrowser', message: `You are up to date (build ${BUILD_NUMBER}).` });
-      return;
-    }
-    const isWin = process.platform === 'win32';
-    const isAppImage = !!process.env.APPIMAGE;
-    const assetName = isWin ? 'mbrowser-windows-setup.exe' : 'mbrowser-linux.AppImage';
-    const asset = (j.assets || []).find((a) => a.name === assetName);
-    const downloadUrl = asset?.browser_download_url || j.html_url;
-    const info = { build: remote, currentBuild: BUILD_NUMBER, url: downloadUrl, releaseUrl: j.html_url, canInstall: !!(asset && (isWin || isAppImage)) };
-    if (isAppImage && info.canInstall) {
-      silentAppImageUpdate(info);
-    } else {
-      for (const w of windows) { try { w.statusView.webContents.send('app:update-available', info); } catch { /* ignore */ } }
-      if (manual) promptInstallUpdate(info);
+    const r = await au.checkForUpdates();
+    if (manual && !r?.updateInfo) {
+      dialog.showMessageBox({ type: 'info', title: 'mbrowser', message: `You are up to date (build ${BUILD_NUMBER}).` });
     }
   } catch (e) {
     if (manual) dialog.showErrorBox('Update check failed', e.message);
-  }
-}
-
-async function silentAppImageUpdate(info, autoInstall = false) {
-  // Save next to the running AppImage so moveFile stays on the same filesystem
-  const dest = path.join(path.dirname(process.env.APPIMAGE), '.mbrowser-update.AppImage');
-  const broadcast = (ch, data) => {
-    for (const w of windows) { try { w.statusView.webContents.send(ch, data); } catch { /* ignore */ } }
-  };
-  broadcast('app:update-available', { ...info, downloading: true });
-  try {
-    await new Promise((resolve, reject) => {
-      const follow = (u, depth) => {
-        if (depth > 6) return reject(new Error('Too many redirects'));
-        const mod = u.startsWith('https') ? require('https') : require('http');
-        mod.get(u, { headers: { 'User-Agent': 'mbrowser-desktop' } }, (res) => {
-          if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) { res.resume(); return follow(res.headers.location, depth + 1); }
-          if (res.statusCode !== 200) return reject(new Error('HTTP ' + res.statusCode));
-          const total = parseInt(res.headers['content-length'] || '0', 10);
-          let received = 0;
-          const ws = fs.createWriteStream(dest);
-          res.on('data', (chunk) => {
-            received += chunk.length;
-            if (total > 0) broadcast('app:update-downloading', received / total);
-          });
-          res.pipe(ws);
-          ws.on('finish', resolve); ws.on('error', reject);
-        }).on('error', reject);
-      };
-      follow(info.url, 0);
-    });
-    fs.chmodSync(dest, 0o755);
-    _pendingUpdatePath = dest;
-    if (autoInstall) {
-      try { moveFile(_pendingUpdatePath, process.env.APPIMAGE); app.relaunch({ execPath: process.env.APPIMAGE }); app.exit(0); } catch (e) { dialog.showErrorBox('Update failed', e.message); }
-    } else {
-      broadcast('app:update-ready', info);
-    }
-  } catch { /* silent — user can manually check in About */ }
-}
-
-async function promptInstallUpdate(info) {
-  const isWin = process.platform === 'win32';
-  const isAppImage = !!process.env.APPIMAGE;
-  const releaseUrl = info.releaseUrl || `https://github.com/${UPDATE_REPO}/releases/tag/${UPDATE_TAG}`;
-  const msg = `Build ${info.build || '?'} is available` + (info.currentBuild ? ` (you have build ${info.currentBuild})` : '') + '.';
-  if (!info.canInstall) {
-    const { response } = await dialog.showMessageBox({
-      type: 'info', title: 'Update available', message: msg,
-      buttons: ['See release changes', 'Later'], defaultId: 0,
-    });
-    if (response === 0) newTab(releaseUrl);
-    return;
-  }
-  const { response } = await dialog.showMessageBox({
-    type: 'info', title: 'Update available', message: msg,
-    detail: 'The update will be downloaded and applied, then the browser will restart.',
-    buttons: ['Update now', 'See release changes', 'Later'], defaultId: 0,
-  });
-  if (response === 2) return;
-  if (response === 1) { newTab(releaseUrl); return; }
-  // Update now — download and apply immediately
-  if (isAppImage) {
-    await silentAppImageUpdate(info, true);
-  } else if (isWin) {
-    await downloadAndInstall(info.url, true, false, () => {});
-  }
-}
-
-async function downloadAndInstall(url, isWin, isAppImage, onProgress) {
-  const ext = isWin ? '.exe' : '.AppImage';
-  const dest = path.join(os.tmpdir(), `mbrowser-update${ext}`);
-  try {
-    await new Promise((resolve, reject) => {
-      const follow = (u, depth) => {
-        if (depth > 6) return reject(new Error('Too many redirects'));
-        const mod = u.startsWith('https') ? require('https') : require('http');
-        mod.get(u, { headers: { 'User-Agent': 'mbrowser-desktop' } }, (res) => {
-          if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) { res.resume(); return follow(res.headers.location, depth + 1); }
-          if (res.statusCode !== 200) return reject(new Error('HTTP ' + res.statusCode));
-          const total = parseInt(res.headers['content-length'] || '0', 10);
-          let received = 0;
-          const ws = fs.createWriteStream(dest);
-          res.on('data', (chunk) => {
-            received += chunk.length;
-            if (onProgress && total > 0) onProgress(received / total);
-          });
-          res.pipe(ws);
-          ws.on('finish', resolve); ws.on('error', reject);
-        }).on('error', reject);
-      };
-      follow(url, 0);
-    });
-    if (isAppImage) {
-      fs.chmodSync(dest, 0o755);
-      const target = process.env.APPIMAGE;
-      moveFile(dest, target);
-      app.relaunch({ execPath: target });
-      app.exit(0);
-    } else {
-      // Windows: launch installer then quit
-      shell.openPath(dest);
-      setTimeout(() => app.quit(), 2000);
-    }
-  } catch (e) {
-    dialog.showErrorBox('Update failed', e.message);
   }
 }
 
@@ -2585,54 +2495,27 @@ function setupIpc() {
   handle('blocker:status', () => blocker.getStatus(), BOTH);
   handle('blocker:update', async () => { const r = await blocker.download(); return r; }, BOTH);
   handle('app:check-updates', async () => { await checkForUpdates(true); }, BOTH);
-  handle('app:install-update', async (_e, info) => {
-    const isAppImage = !!process.env.APPIMAGE;
-    if (isAppImage && _pendingUpdatePath) {
-      try {
-        moveFile(_pendingUpdatePath, process.env.APPIMAGE);
-        app.relaunch({ execPath: process.env.APPIMAGE });
-        app.exit(0);
-      } catch (e) { dialog.showErrorBox('Update failed', e.message); }
-    } else {
-      await promptInstallUpdate(info || {});
+  handle('app:install-update', async () => {
+    const au = getAutoUpdater();
+    if (au && _euDownloaded) {
+      au.quitAndInstall(false, true);
+    } else if (!au) {
+      dialog.showMessageBox({ type: 'info', title: 'mbrowser', message: 'Running from source — updates apply to packaged builds only.' });
     }
   }, BOTH);
   handle('app:build-number', () => BUILD_NUMBER, BOTH);
   handle('app:update-info', async () => {
-    try {
-      const r = await fetch(`https://api.github.com/repos/${UPDATE_REPO}/releases/tags/${UPDATE_TAG}`, {
-        headers: { 'User-Agent': 'mbrowser-desktop', Accept: 'application/vnd.github+json' },
-      });
-      if (!r.ok) return { error: `HTTP ${r.status}` };
-      const j = await r.json();
-      const notes = j.body || '';
-      const mt = notes.match(/[Bb]uild\s+(\d+)/);
-      const remote = mt ? parseInt(mt[1], 10) : 0;
-      if (BUILD_NUMBER > 0 && remote <= BUILD_NUMBER) return { upToDate: true, build: BUILD_NUMBER };
-      const isWin = process.platform === 'win32';
-      const isAppImage = !!process.env.APPIMAGE;
-      const assetName = isWin ? 'mbrowser-windows-setup.exe' : 'mbrowser-linux.AppImage';
-      const asset = (j.assets || []).find((a) => a.name === assetName);
-      const downloadUrl = asset?.browser_download_url || j.html_url;
-      return { build: remote, currentBuild: BUILD_NUMBER, url: downloadUrl, releaseUrl: j.html_url, canInstall: !!(asset && (isWin || isAppImage)) };
-    } catch (e) {
-      return { error: e.message };
-    }
+    if (!getAutoUpdater()) return { currentBuild: BUILD_NUMBER, releaseUrl: RELEASE_URL };
+    if (_euInfo) return euToInfo(_euInfo, !_euDownloaded);
+    return { upToDate: true, build: BUILD_NUMBER };
   }, BOTH);
-  handle('app:auto-install', async (e, info) => {
-    const isWin = process.platform === 'win32';
-    const isAppImage = !!process.env.APPIMAGE;
-    if (!info.canInstall) { newTab(info.releaseUrl || info.url); return { ok: true }; }
-    if (isAppImage && _pendingUpdatePath) {
-      try { moveFile(_pendingUpdatePath, process.env.APPIMAGE); } catch { /* ignore if already moved */ }
-      app.relaunch({ execPath: process.env.APPIMAGE });
-      app.exit(0);
-      return { ok: true };
+  handle('app:auto-install', async () => {
+    const au = getAutoUpdater();
+    if (au && _euDownloaded) {
+      au.quitAndInstall(false, true);
+    } else {
+      newTab(RELEASE_URL);
     }
-    const sender = e.sender;
-    await downloadAndInstall(info.url, isWin, isAppImage, (pct) => {
-      try { if (!sender.isDestroyed()) sender.send('app:dl-progress', pct); } catch { /* ignore */ }
-    });
     return { ok: true };
   }, BOTH);
 
@@ -3435,8 +3318,8 @@ app.whenReady().then(async () => {
 
   setInterval(syncAll, 60 * 1000);
 
-  // Check for updates ~60s after launch, then every 24h
-  // automatic checks can be switched off in Settings → General
+  // Wire up electron-updater events, then check ~60s after launch
+  initAutoUpdater();
   const autoCheck = () => { if (S().general.autoUpdate !== false) checkForUpdates(false); };
   setTimeout(autoCheck, 60_000);
   setInterval(autoCheck, 6 * 60 * 60 * 1000);

@@ -42,10 +42,11 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Stamp build number into main.js
+      - name: Stamp build number and version
         shell: bash
         run: |
           sed -i "s/const BUILD_NUMBER = 0;/const BUILD_NUMBER = ${{ github.run_number }};/" main.js
+          npm version "0.9.${{ github.run_number }}" --no-git-tag-version
 
       - name: Build (Linux)
         if: matrix.platform == 'linux'
@@ -58,28 +59,15 @@ jobs:
           # prevents winCodeSign from requiring Developer Mode on the CI runner
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
 
-      - name: Rename artifacts to stable names (Linux)
-        if: matrix.platform == 'linux'
-        run: |
-          cd dist
-          APPIMAGE=$(ls *.AppImage | head -1)
-          cp "$APPIMAGE" mbrowser-linux.AppImage
-
-      - name: Rename artifacts to stable names (Windows)
-        if: matrix.platform == 'windows'
-        shell: pwsh
-        run: |
-          cd dist
-          $exe = Get-ChildItem *.exe | Select-Object -First 1
-          Copy-Item $exe.FullName "mbrowser-windows-setup.exe"
-
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
           name: mbrowser-${{ matrix.platform }}
           path: |
             dist/mbrowser-linux.AppImage
+            dist/latest-linux.yml
             dist/mbrowser-windows-setup.exe
+            dist/latest.yml
           if-no-files-found: ignore
 
   release:
