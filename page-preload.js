@@ -131,7 +131,12 @@ if (/^https?:$/.test(location.protocol)) {
   const { webFrame } = require('electron');
   const isWin = process.platform === 'win32';
   const platStr = isWin ? 'Windows' : 'Linux';
-  const platVer = process.getSystemVersion();
+  // Chrome sends "" for Linux, and "10.0.0"/"15.0.0" for Windows (not the raw kernel build).
+  const platVer = (() => {
+    if (!isWin) return '';
+    const build = parseInt((process.getSystemVersion().split('.')[2] || '0'), 10);
+    return build >= 22000 ? '15.0.0' : '10.0.0';
+  })();
   const chromeVer = process.versions.chrome || '130.0.6723.117';
   const chromeMajor = chromeVer.split('.')[0];
   webFrame.executeJavaScript(`(function(){

@@ -461,7 +461,7 @@ function maskUserAgentData(wc) {
   try { wc.debugger.attach('1.3'); } catch { /* already attached is fine */ }
   const plat = process.platform === 'win32' ? 'Windows' : 'Linux';
   const ua = `Mozilla/5.0 ${plat === 'Windows' ? '(Windows NT 10.0; Win64; x64)' : '(X11; Linux x86_64)'} AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${CHROME_VER} Safari/537.36`;
-  const platVer = os.release();
+  const platVer = chromePlatformVersion();
   wc.debugger.sendCommand('Emulation.setUserAgentOverride', {
     userAgent: ua,
     userAgentMetadata: {
@@ -2715,6 +2715,15 @@ function handleMy(req) {
 const uaSessions = new Set();
 const CHROME_VER = process.versions.chrome || '130.0.0.0';
 const CHROME_MAJOR = CHROME_VER.split('.')[0];
+
+// Returns the sec-ch-ua-platform-version Chrome sends for this OS.
+// Linux: always "" (Chrome never reveals the kernel version).
+// Windows: "10.0.0" for Win10, "15.0.0" for Win11 (build >= 22000).
+function chromePlatformVersion() {
+  if (process.platform !== 'win32') return '';
+  const build = parseInt((os.release().split('.')[2] || '0'), 10);
+  return build >= 22000 ? '15.0.0' : '10.0.0';
+}
 function uaForMode(mode) {
   const win = process.platform === 'win32';
   if (mode === 'firefox') return win ? 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:132.0) Gecko/20100101 Firefox/132.0' : 'Mozilla/5.0 (X11; Linux x86_64; rv:132.0) Gecko/20100101 Firefox/132.0';
@@ -2750,7 +2759,7 @@ function setupSession(ses) {
   // the blocker's DNT logic so that functionality is not lost.
   const uaPlatHint = process.platform === 'win32' ? '"Windows"' : '"Linux"';
   const googlePattern = /^https?:\/\/([^/]*\.)?(google\.[a-z]{2,}|gmail\.com|googleapis\.com)\//i;
-  const uaPlatVerHint = JSON.stringify(os.release());
+  const uaPlatVerHint = JSON.stringify(chromePlatformVersion());
   ses.webRequest.onBeforeSendHeaders({ urls: ['<all_urls>'] }, (details, callback) => {
     const h = details.requestHeaders;
     // DNT for all requests (mirrors blocker's removed handler)
