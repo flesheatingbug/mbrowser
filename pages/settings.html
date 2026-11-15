@@ -52,7 +52,7 @@
   const CATS = [
     ['general', 'General'], ['appearance', 'Appearance'], ['startpage', 'Start Page'], ['tabs', 'Tabs'], ['search', 'Search'],
     ['privacy', 'Privacy'], ['adblocker', 'Adblocker'], ['passwords', 'Passwords'], ['downloads', 'Downloads'], ['mouse', 'Mouse'], ['keyboard', 'Keyboard'],
-    ['sync', 'Sync'], ['server', 'Server admin'], ['import', 'Import'], ['profiles', 'Profiles'], ['about', 'About'],
+    ['sync', 'Sync'], ['server', 'Server Admin'], ['import', 'Import'], ['profiles', 'Profiles'], ['about', 'About'],
   ];
   const FIELDS = {
     general: [
@@ -638,12 +638,13 @@
         const popBtn = el('button'); popBtn.textContent = '⬡ Open in tab'; popBtn.style.cssText = 'padding:2px 10px;font-size:12px;';
         popBtn.onclick = () => browser.openUrl('my://server-admin', 'tab');
         bar.append(dot, urlLbl, reloadBtn, popBtn);
-        // iframe fills the rest
-        const frame = el('iframe'); frame.style.cssText = 'flex:1;border:0;width:100%;';
-        frame.src = serverUrl;
-        frame.onload = () => { dot.style.background = '#4cc38a'; };
-        frame.onerror = () => { dot.style.background = '#e5534b'; };
-        reloadBtn.onclick = () => { frame.src = ''; frame.src = serverUrl; };
+        // webview fills the rest — iframe can't load http:// from a my:// origin
+        const frame = document.createElement('webview');
+        frame.style.cssText = 'flex:1;border:0;width:100%;';
+        frame.setAttribute('src', serverUrl);
+        frame.addEventListener('dom-ready', () => { dot.style.background = '#4cc38a'; });
+        frame.addEventListener('did-fail-load', (_e) => { dot.style.background = '#e5534b'; });
+        reloadBtn.onclick = () => { try { frame.reload(); } catch { frame.setAttribute('src', serverUrl); } };
         m.append(bar, frame);
         // ping for dot colour
         browser.invoke('server:ping', serverUrl).then((r) => {
@@ -661,7 +662,7 @@
       syncExtras(m);
       if (S.sync.server) {
         const adminLink = el('div'); adminLink.style.marginTop = '18px';
-        const a = el('a', null, 'Server admin →'); a.href = '#'; a.style.fontSize = '14px';
+        const a = el('a', null, 'Server Admin →'); a.href = '#'; a.style.fontSize = '14px';
         a.onclick = (e) => { e.preventDefault(); cur = 'server'; render(); };
         adminLink.append(a);
         m.append(adminLink);

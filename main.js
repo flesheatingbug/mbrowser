@@ -485,6 +485,7 @@ function createView(isPrivate) {
       contextIsolation: true,
       nodeIntegration: false,
       nodeIntegrationInSubFrames: true,
+      webviewTag: true,
       preload: path.join(__dirname, 'page-preload.js'),
       partition: isPrivate ? 'private' : undefined,
     },
