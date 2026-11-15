@@ -2521,14 +2521,16 @@ function setupIpc() {
   }), BOTH);
   handle('profiles:resetData', async (_e, id) => {
     const target = String(id || profileId);
-    const result = profiles.resetProfile(target);
-    if (target === profileId && result.ok) {
-      bookmarks = []; history = []; notes = []; bookmarkFolders = [];
-      save('bookmarks.json', []); save('history.json', []); save('notes.json', []); save('bookmark-folders.json', []);
-      if (vault.unlocked()) vault.lock();
-      await clearData('all');
+    if (target === profileId) {
+      // Current profile: files are locked on Windows while the process runs.
+      // Use the same two-step approach as app:resetAll — flag + relaunch so the
+      // new process can wipe the directory before Chromium opens any files.
+      profiles.setPendingProfileReset(target);
+      app.relaunch(); app.quit();
+      return { ok: true };
     }
-    return result;
+    // Other profiles are not running, so we can delete directly.
+    return profiles.resetProfile(target);
   }, BOTH);
   handle('blocker:status', () => blocker.getStatus(), BOTH);
   handle('blocker:update', async () => { const r = await blocker.download(); return r; }, BOTH);
@@ -3328,7 +3330,15 @@ app.whenReady().then(async () => {
     profiles.clearPendingReset();
     const dataDir = app.getPath('userData');
     try { if (fs.existsSync(dataDir)) fs.rmSync(dataDir, { recursive: true, force: true }); } catch { /* ignore */ }
-    // Also clear the Electron session so cookies / IndexedDB don't survive.
+    try { await session.defaultSession.clearStorageData(); } catch { /* ignore */ }
+    try { await session.defaultSession.clearCache(); } catch { /* ignore */ }
+  }
+
+  const pendingProfileId = profiles.pendingProfileReset();
+  if (pendingProfileId) {
+    profiles.clearPendingProfileReset();
+    const profileDir = profiles.dirFor(pendingProfileId);
+    try { if (fs.existsSync(profileDir)) fs.rmSync(profileDir, { recursive: true, force: true }); } catch { /* ignore */ }
     try { await session.defaultSession.clearStorageData(); } catch { /* ignore */ }
     try { await session.defaultSession.clearCache(); } catch { /* ignore */ }
   }
