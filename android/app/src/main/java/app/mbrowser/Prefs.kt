@@ -91,6 +91,12 @@ class Prefs(ctx: Context) {
     var profileName: String
         get() = str("profileName", "")
         set(v) = put("profileName", v)
+    var profileColor: String
+        get() = str("profileColor", "")
+        set(v) = put("profileColor", v)
+    var profileAvatar: String
+        get() = str("profileAvatar", "")
+        set(v) = put("profileAvatar", v)
     var profileId: String
         get() = str("profileId", "")
         set(v) = put("profileId", v)

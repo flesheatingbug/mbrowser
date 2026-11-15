@@ -1271,6 +1271,58 @@ class MainActivity : BaseActivity() {
         IconStyle.apply(this, onWallpaper)
     }
 
+    /** Lists the profiles on the server and switches this phone to the one that is tapped. */
+    private fun showProfiles() {
+        val app = applicationContext
+        Thread {
+            val res = try { Api(prefs.server, prefs.token, prefs.device).request("GET", "/api/profiles") } catch (e: Exception) { null }
+            ui.post {
+                val arr = res?.optJSONArray("profiles")
+                if (arr == null) { Toast.makeText(this, "Could not reach the server", Toast.LENGTH_LONG).show(); return@post }
+                val box = LinearLayout(this); box.orientation = LinearLayout.VERTICAL; box.setPadding(dp(8), dp(8), dp(8), dp(8))
+                val dlg = androidx.appcompat.app.AlertDialog.Builder(this).setTitle("Switch profile").setView(box).setNegativeButton("Close", null).create()
+                for (i in 0 until arr.length()) {
+                    val o = arr.getJSONObject(i)
+                    val name = o.optString("name"); val cur = o.optBoolean("current")
+                    if (cur) { prefs.profileName = name; prefs.profileColor = o.optString("color"); prefs.profileAvatar = o.optString("avatar") }
+                    val r = LinearLayout(this); r.orientation = LinearLayout.HORIZONTAL; r.gravity = Gravity.CENTER_VERTICAL; r.setPadding(dp(8), 0, dp(8), 0)
+                    r.foreground = TypedValueHolder.selectable(this)
+                    val av = ImageView(this); av.setImageDrawable(Avatars.make(this, name, o.optString("color"), o.optString("avatar"), dp(40)))
+                    r.addView(av, LinearLayout.LayoutParams(dp(40), dp(40)))
+                    val tv = TextView(this); tv.text = name; tv.textSize = 16f; tv.setTextColor(tc(R.attr.mbText)); tv.setPadding(dp(14), 0, 0, 0)
+                    r.addView(tv, LinearLayout.LayoutParams(0, -2, 1f))
+                    if (cur) { val ck = TextView(this); ck.text = "Current"; ck.textSize = 13f; ck.setTextColor(tc(R.attr.mbAccent)); r.addView(ck) }
+                    r.setOnClickListener {
+                        if (cur) { dlg.dismiss(); return@setOnClickListener }
+                        androidx.appcompat.app.AlertDialog.Builder(this).setTitle("Switch to “$name”?")
+                            .setMessage("This phone will show that profile's bookmarks, history, tabs, settings and passwords. Nothing is lost: the profile you leave stays on the server.")
+                            .setNegativeButton("Cancel", null)
+                            .setPositiveButton("Switch") { _, _ ->
+                                dlg.dismiss()
+                                Toast.makeText(this, "Switching to $name…", Toast.LENGTH_SHORT).show()
+                                Thread {
+                                    try {
+                                        val sw = Api(prefs.server, prefs.token, prefs.device).request("POST", "/api/switch", org.json.JSONObject().put("profile", o.optInt("id")).put("device", prefs.device))
+                                        ui.post {
+                                            Store.resetAll(); Settings.reset(); Vault.forgetLocal(app)
+                                            prefs.bmRev = 0; prefs.histRev = 0; prefs.otherTabs = "[]"; prefs.lookHash = ""
+                                            prefs.token = sw.getString("token")
+                                            prefs.profileId = sw.getJSONObject("profile").get("id").toString()
+                                            prefs.profileName = name; prefs.profileColor = o.optString("color"); prefs.profileAvatar = o.optString("avatar")
+                                            syncNow(true)
+                                            recreate()
+                                        }
+                                    } catch (e: Exception) { ui.post { Toast.makeText(this, "Could not switch: ${e.message}", Toast.LENGTH_LONG).show() } }
+                                }.start()
+                            }.show()
+                    }
+                    box.addView(r, LinearLayout.LayoutParams(-1, dp(56)))
+                }
+                dlg.show()
+            }
+        }.start()
+    }
+
     private fun showMenu(anchor: View) {
         val t = cur()
         // remember what is selected on the page now: opening the menu can clear the selection
@@ -1290,6 +1342,24 @@ class MainActivity : BaseActivity() {
         bg.cornerRadius = dp(22).toFloat(); bg.setColor(tc(R.attr.mbCard)); bg.setStroke(dp(1), tc(R.attr.mbLine))
         card.background = bg
         card.setPadding(dp(8), dp(10), dp(8), dp(10))
+
+        // who is signed in: the profile picture from the desktop browser, tap to change profile
+        if (prefs.syncConfigured) {
+            val who = LinearLayout(this)
+            who.orientation = LinearLayout.HORIZONTAL; who.gravity = Gravity.CENTER_VERTICAL
+            who.setPadding(dp(10), dp(4), dp(10), dp(8))
+            who.foreground = TypedValueHolder.selectable(this)
+            val name = prefs.profileName.ifBlank { "Profile" }
+            val av = ImageView(this); av.setImageDrawable(Avatars.make(this, name, prefs.profileColor, prefs.profileAvatar, dp(40)))
+            who.addView(av, LinearLayout.LayoutParams(dp(40), dp(40)))
+            val col = LinearLayout(this); col.orientation = LinearLayout.VERTICAL; col.setPadding(dp(12), 0, 0, 0)
+            val n1 = TextView(this); n1.text = name; n1.textSize = 16f; n1.setTextColor(tc(R.attr.mbText)); n1.setTypeface(null, android.graphics.Typeface.BOLD)
+            val n2 = TextView(this); n2.text = "Switch profile"; n2.textSize = 13f; n2.setTextColor(tc(R.attr.mbMuted))
+            col.addView(n1); col.addView(n2)
+            who.addView(col, LinearLayout.LayoutParams(0, -2, 1f))
+            who.setOnClickListener { pop.dismiss(); showProfiles() }
+            card.addView(who, LinearLayout.LayoutParams(-1, -2))
+        }
 
         // quick row: back, home, forward, bookmark, reload
         val quick = LinearLayout(this)

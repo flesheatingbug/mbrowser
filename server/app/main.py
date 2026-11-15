@@ -55,7 +55,7 @@ def route(method, pattern, auth='session', limit=256 * KB):
 
 def _info(ctx, req):
     return 200, {'name': 'mbrowser-sync', 'version': VERSION, 'accounts': True,
-                 'features': ['bookmarks', 'history', 'tabs', 'vault', 'settings', 'wallpaper', 'pair', 'accounts']}
+                 'features': ['bookmarks', 'history', 'tabs', 'vault', 'settings', 'wallpaper', 'pair', 'profiles', 'accounts']}
 
 
 def _health(ctx, req):
@@ -130,6 +130,38 @@ def _pair(ctx, req):
 
 
 route('POST', '/api/pair', 'token')(_pair)
+
+def _my_profiles(ctx, req):
+    """The profiles of this token's account, with the avatar each one syncs from its desktop browser."""
+    me = ctx.store.get_profile(req.profile_id)
+    out = []
+    for p in ctx.store.list_profiles(me['owner_id']) if me and me.get('owner_id') is not None else ([me] if me else []):
+        meta = {}
+        try:
+            with ctx.store.pdb(p['id']) as c:
+                r = syncapi.settings_get(c)
+            meta = ((r.get('doc') or {}).get('groups') or {}).get('profileMeta', {}).get('value') or {}
+        except Exception:
+            pass
+        av = str(meta.get('avatar') or '')
+        out.append({'id': p['id'], 'name': p['name'], 'color': str(meta.get('color') or ''),
+                    'avatar': av if len(av) <= 120_000 else '', 'current': p['id'] == req.profile_id})
+    return 200, {'profiles': out}
+
+
+def _switch_profile(ctx, req):
+    """Gives this device a key for another profile of the same account (so a phone can change profile without signing in again)."""
+    b = req.json()
+    me, target = ctx.store.get_profile(req.profile_id), ctx.store.get_profile(int(b.get('profile') or 0))
+    if not me or not target or me.get('owner_id') is None or target.get('owner_id') != me.get('owner_id'):
+        raise ApiError(404, 'That profile is not available.')
+    device = re.sub(r'\s+', ' ', str(b.get('device') or 'Phone')).strip()[:40] or 'Phone'
+    _, token = ctx.store.replace_device_token(target['id'], device)
+    return 200, {'token': token, 'profile': {'id': target['id'], 'name': target['name']}}
+
+
+route('GET', '/api/profiles', 'token')(_my_profiles)
+route('POST', '/api/switch', 'token')(_switch_profile)
 route('GET', '/api/wallpaper', 'token')(_with_profile(lambda c, r: syncapi.wallpaper_get(c)))
 route('PUT', '/api/wallpaper', 'token', 5 * MB)(_with_profile(lambda c, r: syncapi.wallpaper_put(c, r.json())))
 route('GET', '/api/settings', 'token')(_with_profile(lambda c, r: syncapi.settings_get(c)))

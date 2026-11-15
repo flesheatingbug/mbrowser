@@ -54,6 +54,8 @@ object Vault {
     fun reapplyPolicy(ctx: Context) { if (key != null) remember(ctx) else if (Prefs(ctx).vaultKeep == "app") DeviceKey.clear(ctx) }
 
     fun lockAndForget(ctx: Context) { DeviceKey.clear(ctx); lock() }
+    /** Used when the phone moves to another server profile: that profile has its own vault. */
+    fun forgetLocal(ctx: Context) { lockAndForget(ctx); try { file(ctx).delete() } catch (_: Exception) { }; val p = Prefs(ctx); p.vaultVer = 0; p.vaultHash = "" }
     fun isDevice(ctx: Context): Boolean = try { JSONObject(blobText(ctx) ?: "").optBoolean("device") } catch (_: Exception) { false }
 
     /** Opens the vault with the raw 32-byte key: a device key, or the key a master password makes (from a QR code). */
