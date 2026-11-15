@@ -8,10 +8,12 @@
 <style>
   .layout { display:flex; min-height:100vh; }
   nav { width:230px; padding:28px 12px; border-right:1px solid var(--line); position:sticky; top:0; height:100vh; flex:none; }
-  nav h1 { font-size:18px; padding:0 14px; margin-bottom:16px; }
+  nav h1 { font-size:18px; padding:0 14px; margin-bottom:12px; }
   nav button { display:block; width:100%; text-align:left; border:0; background:none; padding:10px 14px; border-radius:8px; }
   nav button:hover { background:var(--tab); }
   nav button.on { background:var(--accent); color:var(--onaccent); }
+  #settings-search { width:100%; padding:7px 10px; margin-bottom:8px; border:1px solid var(--line); border-radius:8px; background:var(--bg); color:var(--fg); font:inherit; font-size:13px; outline:none; box-sizing:border-box; }
+  #settings-search:focus { border-color:var(--accent); }
   main { flex:1; max-width:820px; padding:40px 56px 100px; }
   .row { display:flex; align-items:center; justify-content:space-between; gap:20px; padding:14px 0; border-bottom:1px solid var(--line); }
   .row.col { flex-direction:column; align-items:stretch; }
@@ -40,7 +42,10 @@
 </head>
 <body>
 <div class="layout">
-  <nav id="nav"><h1>Settings</h1></nav>
+  <nav id="nav">
+    <h1>Settings</h1>
+    <input type="search" id="settings-search" placeholder="Search settings…" autocomplete="off">
+  </nav>
   <main id="main"></main>
 </div>
 <script>
@@ -129,7 +134,7 @@
 
   const $ = (id) => document.getElementById(id);
   const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
-  let S = null, cur = (location.hash || '#general').slice(1);
+  let S = null, cur = (location.hash || '#general').slice(1), searchQuery = '';
 
   const get = (p) => p.split('.').reduce((o, k) => (o == null ? o : o[k]), S);
   async function set(p, v) {
@@ -473,20 +478,42 @@
     m.append(r);
   }
 
+  function renderSearchResults(m) {
+    const q = searchQuery.trim().toLowerCase();
+    m.append(el('h1', null, 'Search results'));
+    let found = 0;
+    for (const [catId, catName] of CATS) {
+      const all = FIELDS[catId] || [];
+      if (!all.length) continue;
+      const matches = catName.toLowerCase().includes(q)
+        ? all
+        : all.filter((f) => f.label.toLowerCase().includes(q) || (f.help || '').toLowerCase().includes(q));
+      if (!matches.length) continue;
+      m.append(el('h2', null, catName));
+      matches.forEach((d) => m.append(field(d)));
+      found += matches.length;
+    }
+    if (!found) {
+      const p = el('p', 'muted', 'No settings match "' + searchQuery.trim() + '".');
+      m.append(p);
+    }
+  }
+
   async function render() {
     S = await browser.getSettings();
     const nav = $('nav');
-    nav.textContent = '';
-    nav.append(el('h1', null, 'Settings'));
+    nav.querySelectorAll('button').forEach((b) => b.remove());
     for (const [id, name] of CATS) {
       if (id === 'server' && !S.sync.server) continue;
-      const b = el('button', id === cur ? 'on' : '', name);
-      b.onclick = () => { cur = id; location.hash = id; render(); };
+      const active = !searchQuery && id === cur;
+      const b = el('button', active ? 'on' : '', name);
+      b.onclick = () => { cur = id; searchQuery = ''; $('settings-search').value = ''; location.hash = id; render(); };
       nav.append(b);
     }
     const m = $('main');
     m.style.cssText = '';
     m.textContent = '';
+    if (searchQuery.trim()) { renderSearchResults(m); return; }
     if (cur !== 'server') m.append(el('h1', null, CATS.find((c) => c[0] === cur)[1]));
 
     if (cur === 'search') { searchSection(m); return; }
@@ -623,6 +650,10 @@
     }
   }
   if (!CATS.some((c) => c[0] === cur)) cur = 'general';
+  $('settings-search').addEventListener('input', () => {
+    searchQuery = $('settings-search').value;
+    render();
+  });
   render();
 </script>
 </body>

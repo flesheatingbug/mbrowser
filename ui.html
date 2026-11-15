@@ -133,8 +133,10 @@
   #st-zoom-range { width:72px; height:3px; accent-color:var(--accent); cursor:pointer; }
   #st-zoom-pct { font-size:11px; min-width:34px; text-align:right; cursor:pointer; }
   #update-pill { display:none; align-items:center; gap:5px; background:var(--accent); color:var(--onaccent);
-    border-radius:10px; padding:1px 8px 1px 6px; font-size:11px; cursor:pointer; white-space:nowrap; }
+    border-radius:10px; padding:1px 8px 1px 6px; font-size:11px; cursor:pointer; white-space:nowrap; transition:background .3s; }
   #update-pill:hover { opacity:.88; }
+  #update-pill.ready { background:#3ba55c; }
+  #update-pill.downloading { background:color-mix(in srgb, var(--accent) 55%, var(--tab)); cursor:default; }
   #update-pill .upd-x { margin-left:4px; opacity:.7; font-size:13px; line-height:1; }
   #update-pill .upd-x:hover { opacity:1; }
   #star.on { color:#f7c948; }
@@ -201,7 +203,7 @@
     <span id="st-tabs"></span>
     <span id="st-time"></span>
     <span id="update-pill" title="Click to install update">
-      <span>⬆ Update available</span>
+      <span id="upd-text">⬆ Update available</span>
       <span class="upd-x" id="update-dismiss" title="Dismiss">×</span>
     </span>
   </div>
@@ -315,14 +317,36 @@
   setInterval(updateTime, 60000);
 
   // ---- update notification ----
-  let _updateInfo = null;
+  let _updateInfo = null, _updateReady = false;
   api.onUpdateAvailable((info) => {
     _updateInfo = info;
-    $('update-pill').style.display = 'flex';
+    _updateReady = false;
+    const pill = $('update-pill');
+    pill.className = info.downloading ? 'downloading' : '';
+    $('upd-text').textContent = info.downloading ? 'Downloading update…' : '⬆ Update available';
+    pill.title = info.downloading ? 'Downloading in background…' : 'Click to install update';
+    pill.style.display = 'flex';
+  });
+  api.onUpdateDownloading((pct) => {
+    const pill = $('update-pill');
+    pill.className = 'downloading';
+    $('upd-text').textContent = 'Downloading' + (pct > 0 ? ' ' + Math.round(pct * 100) + '%' : '') + '…';
+    pill.title = 'Downloading update in background…';
+    pill.style.display = 'flex';
+  });
+  api.onUpdateReady((info) => {
+    _updateInfo = info;
+    _updateReady = true;
+    const pill = $('update-pill');
+    pill.className = 'ready';
+    $('upd-text').textContent = '↺ Restart to update';
+    pill.title = 'Click to restart and apply update';
+    pill.style.display = 'flex';
   });
   $('update-pill').onclick = (e) => {
     if (e.target.id === 'update-dismiss') { $('update-pill').style.display = 'none'; return; }
-    if (_updateInfo) api.installUpdate(_updateInfo);
+    if (!_updateReady && !_updateInfo) return;
+    api.installUpdate(_updateInfo);
   };
 
   // scroll wheel on tab strip to switch tabs

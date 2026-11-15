@@ -103,7 +103,7 @@ protocol.registerSchemesAsPrivileged([
 ]);
 
 const START = 'my://start';
-const TAB_H = 38, TOOL_H = 50, TRANSLATE_H = 34, SIDE_W = 220, STATUS_H = 22, PANEL_HEAD = 46;
+const TAB_H = 38, TOOL_H = 50, TRANSLATE_H = 34, SIDE_W = 220, STATUS_H = 26, PANEL_HEAD = 46;
 const MOBILE_UA = 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36';
 
 let store, blocker, vault;
@@ -136,6 +136,7 @@ const S = () => store.get();
 const BUILD_NUMBER = 0; // replaced by CI — do not edit
 const UPDATE_REPO = 'flesheatingbug/mbrowser';
 const UPDATE_TAG  = 'latest-desktop';
+let _pendingUpdatePath = null; // downloaded AppImage ready to relaunch
 
 async function checkForUpdates(manual = false) {
   try {
@@ -160,12 +161,48 @@ async function checkForUpdates(manual = false) {
     const asset = (j.assets || []).find((a) => a.name === assetName);
     const downloadUrl = asset?.browser_download_url || j.html_url;
     const info = { build: remote, currentBuild: BUILD_NUMBER, url: downloadUrl, canInstall: !!(asset && (isWin || isAppImage)) };
-    // Notify all browser chrome windows (status bar)
-    for (const w of windows) { try { w.statusView.webContents.send('app:update-available', info); } catch { /* ignore */ } }
-    if (manual) promptInstallUpdate(info);
+    if (isAppImage && info.canInstall) {
+      silentAppImageUpdate(info);
+    } else {
+      for (const w of windows) { try { w.statusView.webContents.send('app:update-available', info); } catch { /* ignore */ } }
+      if (manual) promptInstallUpdate(info);
+    }
   } catch (e) {
     if (manual) dialog.showErrorBox('Update check failed', e.message);
   }
+}
+
+async function silentAppImageUpdate(info) {
+  const dest = path.join(os.tmpdir(), 'mbrowser-update.AppImage');
+  const broadcast = (ch, data) => {
+    for (const w of windows) { try { w.statusView.webContents.send(ch, data); } catch { /* ignore */ } }
+  };
+  broadcast('app:update-available', { ...info, downloading: true });
+  try {
+    await new Promise((resolve, reject) => {
+      const follow = (u, depth) => {
+        if (depth > 6) return reject(new Error('Too many redirects'));
+        const mod = u.startsWith('https') ? require('https') : require('http');
+        mod.get(u, { headers: { 'User-Agent': 'mbrowser-desktop' } }, (res) => {
+          if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) { res.resume(); return follow(res.headers.location, depth + 1); }
+          if (res.statusCode !== 200) return reject(new Error('HTTP ' + res.statusCode));
+          const total = parseInt(res.headers['content-length'] || '0', 10);
+          let received = 0;
+          const ws = fs.createWriteStream(dest);
+          res.on('data', (chunk) => {
+            received += chunk.length;
+            if (total > 0) broadcast('app:update-downloading', received / total);
+          });
+          res.pipe(ws);
+          ws.on('finish', resolve); ws.on('error', reject);
+        }).on('error', reject);
+      };
+      follow(info.url, 0);
+    });
+    fs.chmodSync(dest, 0o755);
+    _pendingUpdatePath = dest;
+    broadcast('app:update-ready', info);
+  } catch { /* silent — user can manually check in About */ }
 }
 
 async function promptInstallUpdate(info) {
@@ -2455,7 +2492,18 @@ function setupIpc() {
     return result;
   }, BOTH);
   handle('app:check-updates', async () => { await checkForUpdates(true); }, BOTH);
-  handle('app:install-update', async (_e, info) => { await promptInstallUpdate(info); }, BOTH);
+  handle('app:install-update', async (_e, info) => {
+    const isAppImage = !!process.env.APPIMAGE;
+    if (isAppImage && _pendingUpdatePath) {
+      try {
+        fs.renameSync(_pendingUpdatePath, process.env.APPIMAGE);
+        app.relaunch({ execPath: process.env.APPIMAGE });
+        app.exit(0);
+      } catch (e) { dialog.showErrorBox('Update failed', e.message); }
+    } else {
+      await promptInstallUpdate(info || {});
+    }
+  }, BOTH);
   handle('app:build-number', () => BUILD_NUMBER, BOTH);
   handle('app:update-info', async () => {
     try {
@@ -2482,6 +2530,12 @@ function setupIpc() {
     const isWin = process.platform === 'win32';
     const isAppImage = !!process.env.APPIMAGE;
     if (!info.canInstall) { newTab(info.url); return { ok: true }; }
+    if (isAppImage && _pendingUpdatePath) {
+      try { fs.renameSync(_pendingUpdatePath, process.env.APPIMAGE); } catch { /* ignore if already moved */ }
+      app.relaunch({ execPath: process.env.APPIMAGE });
+      app.exit(0);
+      return { ok: true };
+    }
     const sender = e.sender;
     await downloadAndInstall(info.url, isWin, isAppImage, (pct) => {
       try { if (!sender.isDestroyed()) sender.send('app:dl-progress', pct); } catch { /* ignore */ }

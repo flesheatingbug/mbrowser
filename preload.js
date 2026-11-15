@@ -58,6 +58,8 @@ contextBridge.exposeInMainWorld('api', {
   onOverlayOpen: (cb) => ipcRenderer.on('overlay:open', (_e, mode, data) => cb(mode, data)),
   onFindResult: (cb) => ipcRenderer.on('find:result', (_e, r) => cb(r)),
   onUpdateAvailable: (cb) => ipcRenderer.on('app:update-available', (_e, info) => cb(info)),
+  onUpdateDownloading: (cb) => ipcRenderer.on('app:update-downloading', (_e, pct) => cb(pct)),
+  onUpdateReady: (cb) => ipcRenderer.on('app:update-ready', (_e, info) => cb(info)),
   checkUpdates: () => ipcRenderer.invoke('app:check-updates'),
   installUpdate: (info) => ipcRenderer.invoke('app:install-update', info),
   invoke: (ch, ...a) => ipcRenderer.invoke(ch, ...a),
