@@ -2642,10 +2642,15 @@ function setupIpc() {
       // Close all browser windows without quitting the app
       resetInProgress = true;
       for (const w of [...windows]) { try { w.win.close(); } catch {} }
-      // Show wizard, then open a fresh browser window
+      // Show wizard, then open a fresh browser window (or launch the new default profile)
       try { await showWizard(); } catch {}
       resetInProgress = false;
-      createWindow({ first: true });
+      const defId = profiles.getDefaultProfile();
+      if (defId !== profileId && profiles.get(defId)) {
+        launchProfile(defId, false);
+      } else {
+        createWindow({ first: true });
+      }
     });
     return { ok: true };
   }, BOTH);
@@ -3354,8 +3359,19 @@ ipcMain.handle('wizard:rename-profile', (e, name) => {
 
 ipcMain.handle('wizard:create-profile', (e, name) => {
   if (!isWizard(e)) return null;
+  const all = profiles.list();
+  // After a factory reset there is only the bare "Default" profile; rename it
+  // instead of creating a second redundant profile.
+  if (all.length === 1 && all[0].id === 'default') {
+    const r = profiles.update('default', { name: String(name || '').trim() });
+    if (r.ok) profiles.setDefaultProfile('default');
+    return r;
+  }
   const result = profiles.create({ name: String(name || '').trim() });
-  if (result.ok) profiles.setDefaultProfile(result.id);
+  if (result.ok) {
+    profiles.clearFirstRun(result.id); // wizard IS the first run; no repeat needed
+    profiles.setDefaultProfile(result.id);
+  }
   return result;
 });
 
