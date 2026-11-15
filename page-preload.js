@@ -126,13 +126,12 @@ window.addEventListener('wheel', (e) => {
 // ---- Google sign-in: belt-and-suspenders userAgentData fix ----
 // CDP (Emulation.setUserAgentOverride) is the primary mechanism; this JS
 // injection is a fallback in case CDP doesn't fire for sandboxed renderers.
-// Uses require('os') so the platformVersion matches the actual kernel version
-// that the HTTP header sec-ch-ua-platform-version also sends.
+// process.getSystemVersion() works in sandboxed preloads; require('os') does not.
 if (/^https?:$/.test(location.protocol)) {
   const { webFrame } = require('electron');
   const isWin = process.platform === 'win32';
   const platStr = isWin ? 'Windows' : 'Linux';
-  const platVer = require('os').release();
+  const platVer = process.getSystemVersion();
   const chromeVer = process.versions.chrome || '130.0.6723.117';
   const chromeMajor = chromeVer.split('.')[0];
   webFrame.executeJavaScript(`(function(){
