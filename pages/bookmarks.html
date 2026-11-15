@@ -415,6 +415,36 @@
   }
 
   // ---- add to speed dial ----
+
+  // Build a folder-dial tree mirroring the bookmark folder hierarchy, recursively.
+  function buildDialFolder(folderPath) {
+    const items = [];
+    for (const b of D.bookmarks) {
+      if (!b.url || b.recycleBin || b.folder !== folderPath) continue;
+      items.push({ title: b.title || b.url, url: b.url });
+    }
+    const prefix = folderPath + SEP;
+    for (const child of D.folders.filter((f) => f.startsWith(prefix) && !f.slice(prefix.length).includes(SEP))) {
+      items.push(buildDialFolder(child));
+    }
+    return { title: leaf(folderPath), type: 'folder', items };
+  }
+
+  // Deep-merge src folder dial into dst folder dial; returns count of newly added items.
+  function mergeDialFolder(dst, src) {
+    let added = 0;
+    for (const item of src.items || []) {
+      if (item.type === 'folder') {
+        let existing = (dst.items || []).find((d) => d.type === 'folder' && d.title === item.title);
+        if (!existing) { existing = { title: item.title, type: 'folder', items: [] }; dst.items.push(existing); }
+        added += mergeDialFolder(existing, item);
+      } else {
+        if (!(dst.items || []).some((d) => d.url === item.url)) { dst.items.push(item); added++; }
+      }
+    }
+    return added;
+  }
+
   async function addToSpeedDial(bms) {
     const S = await browser.getSettings();
     const group = S.startPage.groups[0];
@@ -438,29 +468,13 @@
     const S = await browser.getSettings();
     const group = S.startPage.groups[0];
     const folderName = leaf(folderPath);
-    const bms = D.bookmarks.filter((b) => b.folder === folderPath);
-    // find existing folder dial or create one
+    const src = buildDialFolder(folderPath);
     let fdial = group.dials.find((d) => d.type === 'folder' && d.title === folderName);
     if (!fdial) { fdial = { title: folderName, type: 'folder', items: [] }; group.dials.push(fdial); }
-    let added = 0;
-    for (const b of bms) {
-      if (!b.url || b.recycleBin) continue;
-      if (!fdial.items.some((d) => d.url === b.url)) { fdial.items.push({ title: b.title || b.url, url: b.url }); added++; }
-    }
-    // recurse into sub-folders
-    const subs = D.folders.filter((f) => f.startsWith(folderPath + SEP));
-    for (const sub of subs) {
-      const subName = leaf(sub);
-      let sdial = fdial.items.find((d) => d.type === 'folder' && d.title === subName);
-      if (!sdial) { sdial = { title: subName, type: 'folder', items: [] }; fdial.items.push(sdial); }
-      for (const b of D.bookmarks.filter((bk) => bk.folder === sub)) {
-        if (!b.url) continue;
-        if (!sdial.items.some((d) => d.url === b.url)) { sdial.items.push({ title: b.title || b.url, url: b.url }); added++; }
-      }
-    }
+    const added = mergeDialFolder(fdial, src);
     if (added) {
       await browser.setSetting('startPage.groups', S.startPage.groups);
-      alert('"' + folderName + '" folder added to Speed Dial (' + added + ' bookmark(s)).');
+      alert('"' + folderName + '" added to Speed Dial (' + added + ' bookmark(s)).');
     } else {
       alert('All bookmarks in this folder are already in Speed Dial.');
     }
@@ -483,12 +497,9 @@
     const r = await ask('New Speed Dial from folder', [{ key: 'name', label: 'Speed Dial name', value: leaf(folderPath) }], 'Create');
     if (!r) return;
     const S = await browser.getSettings();
-    const newGroup = { name: r.name || leaf(folderPath), dials: [] };
-    const bms = D.bookmarks.filter((b) => b.folder === folderPath || b.folder.startsWith(folderPath + SEP));
-    for (const b of bms) {
-      if (!b.url || b.recycleBin) continue;
-      newGroup.dials.push({ title: b.title || b.url, url: b.url });
-    }
+    // Build the full recursive tree; use its items as the speed dial's top-level dials
+    const src = buildDialFolder(folderPath);
+    const newGroup = { name: r.name || leaf(folderPath), dials: src.items };
     S.startPage.groups.push(newGroup);
     await browser.setSetting('startPage.groups', S.startPage.groups);
   }
