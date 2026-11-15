@@ -1122,9 +1122,10 @@ class MainActivity : BaseActivity() {
         if (on) { if (iv.drawable !== wp) iv.setImageDrawable(wp); iv.visibility = View.VISIBLE } else iv.visibility = View.GONE
         findViewById<View>(R.id.content).setBackgroundColor(if (on) android.graphics.Color.TRANSPARENT else tc(R.attr.mbBg))
         val barBg = if (on) android.graphics.Color.TRANSPARENT else tc(R.attr.mbBar)
-        findViewById<View>(R.id.topBar).setBackgroundColor(barBg)
+        // the top bar and the engine strip share the page's own colour in every theme, so the top looks seamless
+        findViewById<View>(R.id.topBar).setBackgroundColor(android.graphics.Color.TRANSPARENT)
         findViewById<View>(R.id.bottomBar).setBackgroundColor(barBg)
-        findViewById<View>(R.id.engineStrip).setBackgroundColor(barBg)   // the search engine strip: no dark band over the wallpaper
+        findViewById<View>(R.id.engineStrip).setBackgroundColor(android.graphics.Color.TRANSPARENT)   // the search engine strip: no dark band over the wallpaper
         if (on) {
             val g = android.graphics.drawable.GradientDrawable(); g.cornerRadius = dp(26).toFloat(); g.setColor(android.graphics.Color.argb(0xCC, 0x1C, 0x1A, 0x1A))
             findViewById<View>(R.id.addressPill).background = g
@@ -1146,7 +1147,7 @@ class MainActivity : BaseActivity() {
         onWallpaper = on
         startPage.setOnWallpaper(on)
         IconStyle.apply(this, on)
-        val lightBars = !on && androidx.core.graphics.ColorUtils.calculateLuminance(tc(R.attr.mbBar)) > 0.5
+        val lightBars = !on && androidx.core.graphics.ColorUtils.calculateLuminance(tc(R.attr.mbBg)) > 0.5
         androidx.core.view.WindowCompat.getInsetsController(window, window.decorView).let {
             it.isAppearanceLightStatusBars = lightBars; it.isAppearanceLightNavigationBars = lightBars
         }

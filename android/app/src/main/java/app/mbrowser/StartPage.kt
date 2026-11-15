@@ -48,7 +48,7 @@ class StartPage(
     fun setOnWallpaper(on: Boolean) {
         if (wp == on) return
         wp = on
-        root.findViewById<View>(R.id.dialBar).setBackgroundColor(if (on) Color.TRANSPARENT else act.tc(R.attr.mbBar))
+        root.findViewById<View>(R.id.dialBar).setBackgroundColor(Color.TRANSPARENT)
         root.findViewById<ImageButton>(R.id.btnTune).imageTintList = android.content.res.ColorStateList.valueOf(if (on) Color.WHITE else act.tc(R.attr.mbText))
         refresh()
     }
@@ -103,6 +103,7 @@ class StartPage(
         grid.addOnItemTouchListener(object : RecyclerView.SimpleOnItemTouchListener() {
             override fun onInterceptTouchEvent(rv: RecyclerView, e: android.view.MotionEvent): Boolean { swipes.onTouchEvent(e); return false }
         })
+        root.findViewById<View>(R.id.dialBar).setBackgroundColor(Color.TRANSPARENT)
         root.findViewById<ImageButton>(R.id.btnTune).setOnClickListener { tuneMenu() }
         crumb.setOnClickListener { up() }
         val helper = ItemTouchHelper(object : ItemTouchHelper.Callback() {
