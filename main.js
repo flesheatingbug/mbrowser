@@ -1827,7 +1827,7 @@ function setupIpc() {
     const t = tabByWc.get(e.sender.id);
     if (!t || !d || typeof d.password !== 'string') return;
     use(t.owner);
-    if (!S().passwords.enabled || t.private || !d.password || d.password.length > 1024) return;
+    if (!S().passwords.enabled || (t.private && S().passwords.inPrivate === false) || !d.password || d.password.length > 1024) return;
     const origin = tabOrigin(t);
     if (!origin || S().passwords.neverSave.includes(origin)) return;
     const username = String(d.username || '').slice(0, 512);
