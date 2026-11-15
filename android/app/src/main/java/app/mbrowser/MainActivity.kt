@@ -126,6 +126,27 @@ class MainActivity : BaseActivity() {
         r.data?.getStringExtra("url")?.let { newTab(it) }
     }
 
+    private val voice = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { r ->
+        val s = r.data?.getStringArrayListExtra(android.speech.RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()
+        if (r.resultCode == RESULT_OK && !s.isNullOrBlank()) { urlBar.setText(s); navigate(s) }
+    }
+    private val qrScan = registerForActivityResult(com.journeyapps.barcodescanner.ScanContract()) { r ->
+        r.contents?.takeIf { it.isNotBlank() }?.let { urlBar.setText(it); navigate(it) }
+    }
+
+    private fun startVoice() {
+        try {
+            voice.launch(Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
+                .putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL, android.speech.RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                .putExtra(android.speech.RecognizerIntent.EXTRA_PROMPT, "Search or say a web address"))
+        } catch (e: Exception) { Toast.makeText(this, "No voice search app found on this phone", Toast.LENGTH_LONG).show() }
+    }
+
+    private fun startQr() {
+        qrScan.launch(com.journeyapps.barcodescanner.ScanOptions().setBeepEnabled(false).setOrientationLocked(false)
+            .setPrompt("Scan a QR code").setDesiredBarcodeFormats(com.journeyapps.barcodescanner.ScanOptions.QR_CODE))
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
@@ -171,7 +192,14 @@ class MainActivity : BaseActivity() {
             override fun onTextChanged(a: CharSequence?, b: Int, c: Int, d: Int) {}
             override fun afterTextChanged(e: Editable?) { if (urlBar.hasFocus()) showSuggestions(e?.toString() ?: "") }
         })
+        findViewById<View>(R.id.btnMic).setOnClickListener { startVoice() }
+        findViewById<View>(R.id.btnQr).setOnClickListener { startQr() }
         urlBar.setOnFocusChangeListener { _, focused ->
+            // while typing the right-hand side offers voice and QR search instead of bookmark and reload
+            findViewById<View>(R.id.btnMic).visibility = if (focused) View.VISIBLE else View.GONE
+            findViewById<View>(R.id.btnQr).visibility = if (focused) View.VISIBLE else View.GONE
+            btnStar.visibility = if (focused) View.GONE else View.VISIBLE
+            btnReload.visibility = if (focused) View.GONE else View.VISIBLE
             if (focused) showEngines() else { engineOverride = null; findViewById<View>(R.id.engineStrip).visibility = View.GONE; findViewById<View>(R.id.suggestScroll).visibility = View.GONE }
         }
         btnReload.setOnClickListener {
@@ -1108,7 +1136,13 @@ class MainActivity : BaseActivity() {
             siteIcon.imageTintList = android.content.res.ColorStateList.valueOf(hint)
             btnReload.imageTintList = android.content.res.ColorStateList.valueOf(fg)
             btnStar.imageTintList = android.content.res.ColorStateList.valueOf(fg)
-        } else btnReload.imageTintList = tcl(R.attr.mbText)
+            findViewById<ImageButton>(R.id.btnMic).imageTintList = android.content.res.ColorStateList.valueOf(fg)
+            findViewById<ImageButton>(R.id.btnQr).imageTintList = android.content.res.ColorStateList.valueOf(fg)
+        } else {
+            btnReload.imageTintList = tcl(R.attr.mbText)
+            findViewById<ImageButton>(R.id.btnMic).imageTintList = tcl(R.attr.mbText)
+            findViewById<ImageButton>(R.id.btnQr).imageTintList = tcl(R.attr.mbText)
+        }
         onWallpaper = on
         startPage.setOnWallpaper(on)
         IconStyle.apply(this, on)
@@ -1188,42 +1222,106 @@ class MainActivity : BaseActivity() {
         if (t != null && !t.home) t.web.evaluateJavascript("(function(){return String(window.getSelection())})()") {
             lastSelection = try { org.json.JSONArray("[" + (it ?: "\"\"") + "]").getString(0).trim() } catch (e: Exception) { "" }
         }
-        val m = PopupMenu(this, anchor)
-        val items = listOf(
-            0 to "New tab", 9 to "New private tab", 1 to "Bookmarks", 2 to "History", 3 to "Tabs from other devices", 4 to "Sync now",
-            5 to ((if (t?.desktop == true) "✓ " else "") + "Desktop site"), 10 to "Find on this page", 13 to "Translate page", 14 to "Translate selected text", 11 to "Passwords", 12 to "Fill saved login", 6 to "Share page", 7 to "Add to speed dial", 8 to "Settings",
-        )
-        items.forEachIndexed { i, (id, label) -> m.menu.add(0, id, i, label) }
-        m.setOnMenuItemClickListener {
-            when (it.itemId) {
-                0 -> newTab(null)
-                9 -> newTab(null, true)
-                1 -> picker.launch(Intent(this, ItemsActivity::class.java).putExtra("mode", "bookmarks"))
-                2 -> picker.launch(Intent(this, ItemsActivity::class.java).putExtra("mode", "history"))
-                3 -> picker.launch(Intent(this, ItemsActivity::class.java).putExtra("mode", "devices"))
-                4 -> syncNow(true)
-                5 -> if (t != null) { t.desktop = !t.desktop; applyUa(t); if (!t.home) t.web.reload() }
-                6 -> if (t != null && !t.home) startActivity(Intent.createChooser(
-                    Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, t.url), "Share"))
-                7 -> if (t != null && !t.home) {
-                    Settings.addToGroup(prefs.currentDial, t.title.ifBlank { Thumbs.hostOf(t.url) }, t.url)
-                    tab_thumbFor(t)
-                    Toast.makeText(this, "Added to speed dial", Toast.LENGTH_SHORT).show()
-                }
-                8 -> startActivity(Intent(this, SettingsActivity::class.java))
-                11 -> picker.launch(Intent(this, PasswordsActivity::class.java))
-                12 -> fillLogin()
-                13 -> if (t != null && !t.home) newTab(Translate.pageUrl(t.url, prefs.translateLang))
-                      else Toast.makeText(this, "Open a web page first", Toast.LENGTH_SHORT).show()
-                14 -> if (lastSelection.isNotEmpty()) newTab(Translate.textUrl(lastSelection, prefs.translateLang))
-                      else promptFields(this, "Translate text", listOf("Type or paste text (or select some on a page first)"), listOf(""), "Translate") { v ->
-                          if (v[0].isNotBlank()) newTab(Translate.textUrl(v[0], prefs.translateLang))
-                      }
-                10 -> if (t != null && !t.home) openFind() else Toast.makeText(this, "Open a web page first", Toast.LENGTH_SHORT).show()
-            }
-            true
+        val pop = android.widget.PopupWindow(this)
+        fun go(action: () -> Unit): () -> Unit = { pop.dismiss(); action() }
+        fun need(action: (Tab) -> Unit): () -> Unit = go {
+            if (t != null && !t.home) action(t) else Toast.makeText(this, "Open a web page first", Toast.LENGTH_SHORT).show()
         }
-        m.show()
+
+        val card = LinearLayout(this)
+        card.orientation = LinearLayout.VERTICAL
+        val bg = android.graphics.drawable.GradientDrawable()
+        bg.cornerRadius = dp(22).toFloat(); bg.setColor(tc(R.attr.mbCard)); bg.setStroke(dp(1), tc(R.attr.mbLine))
+        card.background = bg
+        card.setPadding(dp(8), dp(10), dp(8), dp(10))
+
+        // quick row: back, home, forward, bookmark, reload
+        val quick = LinearLayout(this)
+        quick.orientation = LinearLayout.HORIZONTAL
+        quick.gravity = Gravity.CENTER
+        fun circle(icon: Int, desc: String, on: Boolean, action: () -> Unit) {
+            val b = ImageButton(this)
+            val g = android.graphics.drawable.GradientDrawable(); g.shape = android.graphics.drawable.GradientDrawable.OVAL; g.setColor(tc(R.attr.mbPill))
+            b.background = g; b.setImageResource(icon); b.imageTintList = tcl(R.attr.mbText); b.contentDescription = desc
+            b.alpha = if (on) 1f else 0.4f
+            b.setOnClickListener { if (on) go(action)() }
+            val lp = LinearLayout.LayoutParams(dp(44), dp(44)); lp.setMargins(dp(4), 0, dp(4), 0)
+            quick.addView(b, lp)
+        }
+        val onPage = t != null && !t.home
+        circle(R.drawable.ic_back, "Back", t != null && !t.home) { goBack() }
+        circle(R.drawable.ic_home, "Home", true) { goHome() }
+        circle(R.drawable.ic_forward, "Forward", onPage && t!!.web.canGoForward()) { t?.let { if (it.web.canGoForward()) it.web.goForward() } }
+        circle(R.drawable.ic_star, "Bookmark this page", onPage) { toggleBookmark() }
+        circle(R.drawable.ic_reload, "Reload", onPage) { t?.web?.reload() }
+        card.addView(quick, LinearLayout.LayoutParams(-1, -2).also { it.bottomMargin = dp(6) })
+
+        val list = LinearLayout(this)
+        list.orientation = LinearLayout.VERTICAL
+        fun row(icon: Int, label: String, action: () -> Unit) {
+            val r = LinearLayout(this)
+            r.orientation = LinearLayout.HORIZONTAL; r.gravity = Gravity.CENTER_VERTICAL
+            r.setPadding(dp(12), 0, dp(12), 0)
+            val tv = TypedValueHolder.selectable(this); r.foreground = tv
+            val ic = ImageView(this); ic.setImageResource(icon); ic.imageTintList = tcl(R.attr.mbMuted)
+            r.addView(ic, LinearLayout.LayoutParams(dp(24), dp(24)))
+            val l = TextView(this); l.text = label; l.textSize = 16f; l.setTextColor(tc(R.attr.mbText)); l.setPadding(dp(16), 0, 0, 0)
+            r.addView(l)
+            r.setOnClickListener { action() }
+            list.addView(r, LinearLayout.LayoutParams(-1, dp(48)))
+        }
+        fun divider() {
+            val d = View(this); d.setBackgroundColor(tc(R.attr.mbLine))
+            list.addView(d, LinearLayout.LayoutParams(-1, dp(1)).also { it.setMargins(dp(12), dp(6), dp(12), dp(6)) })
+        }
+        row(R.drawable.ic_add, "New tab", go { newTab(null) })
+        row(R.drawable.ic_ghost, "New private tab", go { newTab(null, true) })
+        divider()
+        row(R.drawable.ic_bookmarks, "Bookmarks", go { picker.launch(Intent(this, ItemsActivity::class.java).putExtra("mode", "bookmarks")) })
+        row(R.drawable.ic_history, "History", go { picker.launch(Intent(this, ItemsActivity::class.java).putExtra("mode", "history")) })
+        row(R.drawable.ic_download, "Downloads", go { startActivity(Intent(this, ItemsActivity::class.java).putExtra("mode", "downloads")) })
+        row(R.drawable.ic_devices, "Tabs from other devices", go { picker.launch(Intent(this, ItemsActivity::class.java).putExtra("mode", "devices")) })
+        row(R.drawable.ic_key, "Passwords", go { picker.launch(Intent(this, PasswordsActivity::class.java)) })
+        divider()
+        row(R.drawable.ic_desktop, (if (t?.desktop == true) "✓ " else "") + "Desktop site", need { tab -> tab.desktop = !tab.desktop; applyUa(tab); tab.web.reload() })
+        row(R.drawable.ic_search, "Find on this page", need { openFind() })
+        row(R.drawable.ic_translate, "Translate page", need { tab -> newTab(Translate.pageUrl(tab.url, prefs.translateLang)) })
+        row(R.drawable.ic_translate, "Translate selected text", go {
+            if (lastSelection.isNotEmpty()) newTab(Translate.textUrl(lastSelection, prefs.translateLang))
+            else promptFields(this, "Translate text", listOf("Type or paste text (or select some on a page first)"), listOf(""), "Translate") { v ->
+                if (v[0].isNotBlank()) newTab(Translate.textUrl(v[0], prefs.translateLang))
+            }
+        })
+        row(R.drawable.ic_key, "Fill saved login", go { fillLogin() })
+        row(R.drawable.ic_share, "Share page", need { tab -> startActivity(Intent.createChooser(
+            Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, tab.url), "Share")) })
+        row(R.drawable.ic_add, "Add to speed dial", need { tab ->
+            Settings.addToGroup(prefs.currentDial, tab.title.ifBlank { Thumbs.hostOf(tab.url) }, tab.url)
+            tab_thumbFor(tab)
+            Toast.makeText(this, "Added to speed dial", Toast.LENGTH_SHORT).show()
+        })
+        divider()
+        row(R.drawable.ic_sync, "Sync now", go { syncNow(true) })
+        row(R.drawable.ic_settings, "Settings", go { startActivity(Intent(this, SettingsActivity::class.java)) })
+
+        val top = findViewById<View>(R.id.topBar)
+        val loc = IntArray(2); top.getLocationOnScreen(loc)
+        val y = loc[1] + top.height
+        val maxH = resources.displayMetrics.heightPixels - y - dp(80)
+        val scroll = object : android.widget.ScrollView(this) {
+            override fun onMeasure(w: Int, h: Int) = super.onMeasure(w, android.view.View.MeasureSpec.makeMeasureSpec(maxH, android.view.View.MeasureSpec.AT_MOST))
+        }
+        scroll.isVerticalScrollBarEnabled = false
+        scroll.addView(list)
+        card.addView(scroll, LinearLayout.LayoutParams(-1, -2))
+
+        pop.contentView = card
+        pop.width = minOf(dp(300), resources.displayMetrics.widthPixels - dp(16))
+        pop.height = ViewGroup.LayoutParams.WRAP_CONTENT
+        pop.isFocusable = true; pop.isOutsideTouchable = true
+        pop.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT))
+        pop.elevation = dp(10).toFloat()
+        pop.showAtLocation(window.decorView, Gravity.TOP or Gravity.END, dp(8), y)
     }
 
     private fun syncNow(verbose: Boolean) {
@@ -1267,4 +1365,13 @@ object WebSettingsDefault {
     private var ua: String? = null
     fun mobile(ctx: android.content.Context): String =
         ua ?: android.webkit.WebSettings.getDefaultUserAgent(ctx).also { ua = it }
+}
+
+/** The system's ripple for a tappable row. */
+object TypedValueHolder {
+    fun selectable(ctx: android.content.Context): android.graphics.drawable.Drawable? {
+        val tv = android.util.TypedValue()
+        ctx.theme.resolveAttribute(android.R.attr.selectableItemBackground, tv, true)
+        return androidx.core.content.ContextCompat.getDrawable(ctx, tv.resourceId)
+    }
 }

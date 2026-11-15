@@ -63,6 +63,27 @@
                 android:textSize="16sp" />
 
             <ImageButton
+                android:id="@+id/btnMic"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="Voice search"
+                android:src="@drawable/ic_mic"
+                android:tint="?attr/mbText"
+                android:visibility="gone" />
+
+            <ImageButton
+                android:id="@+id/btnQr"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:layout_marginEnd="4dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="Scan QR code"
+                android:src="@drawable/ic_qr"
+                android:tint="?attr/mbText"
+                android:visibility="gone" />
+
+            <ImageButton
                 android:id="@+id/btnStar"
                 android:layout_width="44dp"
                 android:layout_height="44dp"
