@@ -65,6 +65,23 @@ function applyIcon(kind) {
 
 app.setName('mbrowser');
 if (process.platform === 'linux') app.setDesktopName('mbrowser.desktop');
+
+// Factory reset — must run HERE, before Chromium opens any files in userData.
+// By the time whenReady() fires, LevelDB files are locked and rmSync fails silently.
+if (process.argv.includes('--reset-on-start')) {
+  // Delete the whole userData dir (new layout: everything lives here).
+  try { fs.rmSync(app.getPath('userData'), { recursive: true, force: true }); } catch { /* ignore */ }
+  // Also sweep the parent appData dir for old-layout scattered files/dirs.
+  try {
+    const ad = app.getPath('appData');
+    for (const entry of fs.readdirSync(ad)) {
+      if (entry.startsWith('mbrowser-profile-') || entry === 'mbrowser-profiles.json') {
+        try { fs.rmSync(path.join(ad, entry), { recursive: true, force: true }); } catch { /* skip */ }
+      }
+    }
+  } catch { /* ignore */ }
+}
+
 // The app used to be called "mybrowser": copy that profile to the new folder once so nothing is lost.
 try {
   const base = app.getPath('appData');
@@ -3336,19 +3353,8 @@ app.whenReady().then(async () => {
   }
   // If a reset was requested in the previous session, wipe the userData directory NOW —
   // before Chromium loads anything from it — then continue with a fresh data directory.
+  // Clear Electron's session storage after a factory reset (cookies, cache, IndexedDB).
   if (process.argv.includes('--reset-on-start')) {
-    // Wipe everything. Use profiles.dirFor('default') — the root mbrowser dir — not
-    // app.getPath('userData'), which has already been redirected to a profile subdir.
-    try { fs.rmSync(profiles.dirFor('default'), { recursive: true, force: true }); } catch { /* ignore */ }
-    const appDataDir = app.getPath('appData');
-    try {
-      for (const entry of fs.readdirSync(appDataDir)) {
-        if (entry.startsWith('mbrowser-profile-') || entry === 'mbrowser-profiles.json') {
-          try { fs.rmSync(path.join(appDataDir, entry), { recursive: true, force: true }); } catch { /* skip */ }
-        }
-      }
-    } catch { /* ignore */ }
-    profiles.reload();
     try { await session.defaultSession.clearStorageData(); } catch { /* ignore */ }
     try { await session.defaultSession.clearCache(); } catch { /* ignore */ }
   }
