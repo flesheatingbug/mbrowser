@@ -1515,8 +1515,10 @@ function onWillDownload(_e, item) {
 
 function downloadAction(id, action) {
   if (action === 'removeAll') {
-    for (const d of [...downloads]) { const it = dlItems.get(d.id); if (it) it.cancel(); dlItems.delete(d.id); }
-    downloads.length = 0;
+    const active = new Set(['progressing', 'paused']);
+    const keep = downloads.filter((d) => active.has(d.state));
+    for (const d of downloads) { if (!active.has(d.state)) dlItems.delete(d.id); }
+    downloads.splice(0, downloads.length, ...keep);
     pushSoon();
     return true;
   }
@@ -1570,7 +1572,7 @@ ipcMain.on('downloads:ctxmenu', (_e, id) => {
   }
   tpl.push({ type: 'separator' });
   tpl.push({ label: 'Remove from list', click: () => downloadAction(id, 'remove') });
-  if (downloads.length > 1) tpl.push({ label: 'Remove all downloads', click: () => downloadAction(null, 'removeAll') });
+  if (downloads.some((d) => d.state !== 'progressing' && d.state !== 'paused')) tpl.push({ label: 'Remove all finished', click: () => downloadAction(null, 'removeAll') });
   Menu.buildFromTemplate(tpl).popup();
 });
 
@@ -2959,9 +2961,13 @@ const CHROME_VER = process.versions.chrome || '130.0.0.0';
 const CHROME_MAJOR = CHROME_VER.split('.')[0];
 
 // Returns the sec-ch-ua-platform-version Chrome sends for this OS.
-// Linux: always "" (Chrome never reveals the kernel version).
+// Linux: kernel version (e.g. "6.6.0") — Chrome reveals this via the low-entropy hint.
 // Windows: "10.0.0" for Win10, "15.0.0" for Win11 (build >= 22000).
 function chromePlatformVersion() {
+  if (process.platform === 'linux') {
+    const p = os.release().split('.');
+    return `${p[0] || '0'}.${p[1] || '0'}.${(p[2] || '0').split('-')[0]}`;
+  }
   if (process.platform !== 'win32') return '';
   const build = parseInt((os.release().split('.')[2] || '0'), 10);
   return build >= 22000 ? '15.0.0' : '10.0.0';

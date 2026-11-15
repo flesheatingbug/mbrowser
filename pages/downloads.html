@@ -27,7 +27,7 @@
 <div class="wrap">
   <div id="top">
     <h1>Downloads</h1>
-    <button id="clear-all" class="danger" style="display:none">Clear all</button>
+    <button id="clear-all" class="danger" style="display:none">Clear finished</button>
   </div>
   <ul class="plain" id="list"></ul>
 </div>
@@ -85,7 +85,8 @@
   async function tick() {
     const list = document.getElementById('list');
     const ds = await browser.getDownloads();
-    document.getElementById('clear-all').style.display = ds.length ? '' : 'none';
+    const hasFinished = ds.some((d) => d.state !== 'progressing' && d.state !== 'paused');
+    document.getElementById('clear-all').style.display = hasFinished ? '' : 'none';
     list.textContent = '';
     if (!ds.length) { list.innerHTML = '<li class="muted">No downloads yet.</li>'; return; }
     for (const d of ds) {
