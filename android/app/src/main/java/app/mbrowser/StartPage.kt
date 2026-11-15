@@ -92,6 +92,7 @@ class StartPage(
     }
 
     init {
+        DialIcons.onChanged { scheduleRefresh() }
         val swipes = android.view.GestureDetector(act, object : android.view.GestureDetector.SimpleOnGestureListener() {
             override fun onFling(a: android.view.MotionEvent?, b: android.view.MotionEvent, vx: Float, vy: Float): Boolean {
                 if (a == null) return false

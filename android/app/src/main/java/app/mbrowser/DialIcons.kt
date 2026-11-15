@@ -21,7 +21,7 @@ import java.util.concurrent.Executors
 object DialIcons {
     private val mem = LruCache<String, Bitmap>(120)
     private val busy = HashSet<String>()
-    private val failed = HashSet<String>()
+    private val failed = HashMap<String, Long>()  // host -> when it last failed
     private val pool = Executors.newFixedThreadPool(3)
     private val ui = Handler(Looper.getMainLooper())
     private const val UA = "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36"
@@ -42,11 +42,14 @@ object DialIcons {
     fun ensure(ctx: Context, url: String, done: () -> Unit) {
         val host = Thumbs.hostOf(url)
         if (host.isEmpty() || get(ctx, host) != null) return
-        synchronized(busy) { if (host in failed || !busy.add(host)) return }
+        synchronized(busy) {
+            val t = failed[host]
+            if ((t != null && System.currentTimeMillis() - t < 10 * 60_000) || !busy.add(host)) return
+        }
         val app = ctx.applicationContext
         pool.execute {
             val b = try { fetch(url) } catch (e: Exception) { null }
-            synchronized(busy) { busy.remove(host); if (b == null) failed.add(host) }
+            synchronized(busy) { busy.remove(host); if (b == null) failed[host] = System.currentTimeMillis() else failed.remove(host) }
             if (b != null) {
                 try { File(dir(app), "$host.png").outputStream().use { b.compress(Bitmap.CompressFormat.PNG, 100, it) } } catch (_: Exception) { }
                 mem.put(host, b)
@@ -55,12 +58,42 @@ object DialIcons {
         }
     }
 
+    /** The page just loaded in a tab handed us its icon: keep it if the site has none yet (a small one beats a letter). */
+    fun fromBrowser(ctx: Context, host: String, icon: Bitmap) {
+        if (host.isEmpty() || icon.width < 16) return
+        val have = get(ctx, host)
+        if (have != null && have.width >= icon.width) return
+        store(ctx, host, tile(icon))
+    }
+
+    /** The WebView found the page's touch icon (a big one). It loaded the site with real cookies, so sites that refuse our own fetch still work. */
+    fun fromTouchIcon(ctx: Context, host: String, iconUrl: String) {
+        if (host.isEmpty()) return
+        val app = ctx.applicationContext
+        pool.execute {
+            val raw = bytes(iconUrl, 800_000) ?: return@execute
+            val b = BitmapFactory.decodeByteArray(raw, 0, raw.size) ?: return@execute
+            val have = get(app, host)
+            if (have == null || b.width >= 100) { store(app, host, tile(b)); ui.post { synchronized(refreshHooks) { refreshHooks.toList() }.forEach { it() } } }
+        }
+    }
+
+    private val refreshHooks = ArrayList<() -> Unit>()
+    fun onChanged(h: () -> Unit) { synchronized(refreshHooks) { refreshHooks.add(h) } }
+
+    private fun store(ctx: Context, host: String, b: Bitmap) {
+        try { File(dir(ctx), "$host.png").outputStream().use { b.compress(Bitmap.CompressFormat.PNG, 100, it) } } catch (_: Exception) { }
+        mem.put(host, b)
+    }
+
     fun clear(ctx: Context) { dir(ctx).listFiles()?.forEach { it.delete() }; mem.evictAll(); synchronized(busy) { failed.clear() } }
 
     private fun open(u: String): HttpURLConnection {
         val c = URL(u).openConnection() as HttpURLConnection
         c.connectTimeout = 6000; c.readTimeout = 8000; c.instanceFollowRedirects = true
         c.setRequestProperty("User-Agent", UA)
+        c.setRequestProperty("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/png,image/*;q=0.8,*/*;q=0.5")
+        c.setRequestProperty("Accept-Language", "en-US,en;q=0.9")
         return c
     }
 
@@ -73,9 +106,27 @@ object DialIcons {
         val u = URL(pageUrl)
         val origin = u.protocol + "://" + u.host
         val cands = ArrayList<Pair<String, Int>>() // url, preference (bigger = better)
-        val html = bytes(origin + "/", 300_000)?.toString(Charsets.UTF_8)
+        val pages = ArrayList<String>()
+        pages.add(origin + "/")
+        if (pageUrl != origin + "/" && pageUrl.startsWith("http")) pages.add(pageUrl)
+        val alt = if (u.host.startsWith("www.")) u.host.removePrefix("www.") else "www." + u.host
+        pages.add(u.protocol + "://" + alt + "/")
+        var html: String? = null; var base = URL(origin + "/")
+        for (pg in pages) { val h = bytes(pg, 300_000)?.toString(Charsets.UTF_8); if (h != null) { html = h; base = URL(pg); break } }
         if (html != null) {
-            val base = URL(origin + "/")
+            // a web app manifest often lists big icons (sites that only ship SVG favicons still have these)
+            Regex("<link\\s[^>]*rel\\s*=\\s*[\"']manifest[\"'][^>]*>", RegexOption.IGNORE_CASE).find(html)?.let { m ->
+                val href = Regex("href\\s*=\\s*[\"']([^\"']+)[\"']", RegexOption.IGNORE_CASE).find(m.value)?.groupValues?.get(1)
+                try {
+                    val man = if (href != null) bytes(URL(base, href).toString(), 200_000)?.toString(Charsets.UTF_8) else null
+                    val arr = if (man != null) org.json.JSONObject(man).optJSONArray("icons") else null
+                    if (arr != null) for (i in 0 until arr.length()) {
+                        val o = arr.getJSONObject(i); val src = o.optString("src"); if (src.isEmpty() || src.endsWith(".svg", true)) continue
+                        val sz = o.optString("sizes").substringBefore('x').trim().toIntOrNull() ?: 0
+                        cands.add(URL(URL(base, href), src).toString() to (500 + minOf(sz, 400)))
+                    }
+                } catch (_: Exception) { }
+            }
             for (m in Regex("<link\\s[^>]*>", RegexOption.IGNORE_CASE).findAll(html)) {
                 val tag = m.value
                 val rel = Regex("rel\\s*=\\s*[\"']([^\"']+)[\"']", RegexOption.IGNORE_CASE).find(tag)?.groupValues?.get(1)?.lowercase() ?: continue

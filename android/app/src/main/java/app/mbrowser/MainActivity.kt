@@ -641,10 +641,13 @@ class MainActivity : BaseActivity() {
                 if (tab === cur()) progress.progress = newProgress
             }
             override fun onReceivedTitle(view: WebView, title: String?) { tab.title = title ?: "" }
+            override fun onReceivedTouchIconUrl(view: WebView, url: String, precomposed: Boolean) {
+                if (!tab.priv) DialIcons.fromTouchIcon(applicationContext, Thumbs.hostOf(tab.url), url)
+            }
             override fun onReceivedIcon(view: WebView, icon: Bitmap?) {
                 if (icon == null) return
                 tab.icon = icon
-                if (!tab.priv) Thumbs.saveIcon(applicationContext, Thumbs.hostOf(tab.url), icon)
+                if (!tab.priv) { Thumbs.saveIcon(applicationContext, Thumbs.hostOf(tab.url), icon); DialIcons.fromBrowser(applicationContext, Thumbs.hostOf(tab.url), icon) }
                 if (tab === cur()) updateChrome()
             }
         }
