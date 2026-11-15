@@ -385,6 +385,12 @@
       : [h('div', { class: 'card empty' }, 'No device has shared its open tabs yet.')]));
   }
 
+  function download(name, text, type) {
+    const url = URL.createObjectURL(new Blob([text], { type: type || 'text/plain' }));
+    const l = h('a', { href: url, download: name }); document.body.append(l); l.click(); l.remove(); setTimeout(() => URL.revokeObjectURL(url), 5000);
+  }
+  function csvCell(v) { v = String(v == null ? '' : v); return /[",\n\r]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; }
+
   async function tPasswords(body, p) {
     const info = await api('GET', '/profiles/' + p.id + '/vault');
     if (!info.exists) { body.append(h('div', { class: 'card empty' }, 'No vault has been synced to this profile yet. Turn on password sync in a browser and it will appear here.')); return; }
@@ -406,7 +412,7 @@
     secret.addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
     body.append(h('div', { class: 'card' }, h('h2', null, 'Password vault'),
       h('p', { class: 'muted' }, 'The vault is decrypted here in your browser. Your ' + (dev ? 'device key' : 'master password') + ' is never sent to the server, and nothing is stored on this page: reload and it locks again.'),
-      h('div', { class: 'row' }, secret, btn), status), out);
+      h('div', { class: 'row' }, secret, btn, h('button', { class: 'btn', title: 'Still encrypted: only your master password (or device key) opens it', onclick: () => download('mbrowser-vault-backup-' + new Date().toISOString().slice(0, 10) + '.json', JSON.stringify(blob), 'application/json') }, 'Download encrypted backup')), status), out);
 
     function show_(v) {
       const pws = v.entries.filter((e) => !e.type || e.type === 'password');
@@ -437,6 +443,12 @@
       out.replaceChildren(h('div', { class: 'card' },
         h('div', { class: 'row', style: 'justify-content:space-between;margin-bottom:12px' }, q,
           h('div', { class: 'row' }, cards || addrs ? h('span', { class: 'muted small' }, cards + ' cards and ' + addrs + ' addresses are in the vault too; open them in the browser.') : null,
+            h('button', { class: 'btn', onclick: () => {
+              if (!confirm('This file contains every password in plain text. Keep it somewhere safe and delete it when you are done. Continue?')) return;
+              const head = ['name', 'url', 'username', 'password', 'note', 'folder'];
+              const lines = [head.join(',')].concat(pws.map((e) => [e.name, e.origin, e.username, e.password, e.note, e.folder].map(csvCell).join(',')));
+              download('mbrowser-passwords-' + new Date().toISOString().slice(0, 10) + '.csv', lines.join('\r\n'), 'text/csv');
+            } }, 'Export CSV'),
             h('button', { class: 'btn', onclick: lock }, 'Lock'))), list,
         h('p', { class: 'muted small' }, 'This view is read-only. Add and change passwords in the browser; they sync here. It locks by itself after 5 minutes.')));
       clearTimeout(timer); timer = setTimeout(lock, 5 * 60 * 1000);
