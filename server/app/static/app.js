@@ -58,6 +58,41 @@
   }
   const fail = (e) => toast(e.message || String(e), 'bad');
 
+  // ---------------------------------------------------------------- themes (same palettes as the browser)
+  // id, name, dark, bg, panel, panel2, fg, muted, line, accent
+  const THEMES = [
+    ['mbrowser', 'mbrowser', 1, '#0a0e1f', '#111830', '#18214a', '#eaf0ff', '#8f9bc2', '#243056', '#5b8cff'],
+    ['midnight', 'Midnight', 1, '#1e1f22', '#2b2d31', '#3a3d44', '#e6e6e6', '#9aa0a6', '#34363b', '#7aa2f7'],
+    ['daylight', 'Daylight', 0, '#e4e7ec', '#ffffff', '#d3d7de', '#1f2328', '#656d76', '#c4c9d1', '#3b82f6'],
+    ['nord', 'Nord', 1, '#2e3440', '#3b4252', '#434c5e', '#eceff4', '#a3adc0', '#4c566a', '#88c0d0'],
+    ['dracula', 'Dracula', 1, '#282a36', '#343746', '#44475a', '#f8f8f2', '#a0a4c0', '#44475a', '#bd93f9'],
+    ['gruvbox', 'Gruvbox', 1, '#282828', '#3c3836', '#504945', '#ebdbb2', '#a89984', '#504945', '#fabd2f'],
+    ['solarized-dark', 'Solarized Dark', 1, '#002b36', '#073642', '#0d4452', '#eee8d5', '#93a1a1', '#0f4c5c', '#2aa1e8'],
+    ['solarized-light', 'Solarized Light', 0, '#eee8d5', '#fdf6e3', '#e3dcc5', '#073642', '#657b83', '#d3cbb2', '#268bd2'],
+    ['forest', 'Forest', 1, '#1a2421', '#24332e', '#2f4139', '#e3efe8', '#92ab9f', '#2c3d36', '#6fcf97'],
+    ['ocean', 'Ocean', 1, '#0d1b2a', '#14263a', '#1c3550', '#e0ecf7', '#8aa3bd', '#1f3a56', '#38bdf8'],
+    ['rose', 'Rose', 1, '#1f1a1d', '#2c2328', '#3a2d34', '#f3e6ec', '#b496a3', '#3a2d34', '#f472b6'],
+    ['sand', 'Sand', 0, '#ece5d8', '#faf6ee', '#ddd4c3', '#2b2620', '#7a6f5f', '#cfc5b1', '#c2410c'],
+    ['contrast', 'High contrast', 1, '#000000', '#111111', '#222222', '#ffffff', '#cccccc', '#777777', '#ffe600'],
+  ];
+  const VARS = ['--bg', '--panel', '--panel2', '--fg', '--muted', '--line', '--accent', '--accent-fg'];
+  function onColor(hex) {
+    const n = parseInt(hex.slice(1), 16), lin = (c) => { c /= 255; return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; };
+    return 0.2126 * lin((n >> 16) & 255) + 0.7152 * lin((n >> 8) & 255) + 0.0722 * lin(n & 255) > 0.35 ? '#000000' : '#ffffff';
+  }
+  function getTheme() { try { return localStorage.getItem('mb-theme') || 'system'; } catch { return 'system'; } }
+  function applyTheme(id) {
+    const root = document.documentElement, t = THEMES.find((x) => x[0] === id);
+    VARS.forEach((v) => root.style.removeProperty(v));
+    if (!t) { root.removeAttribute('data-theme'); root.style.removeProperty('color-scheme'); return; }
+    root.setAttribute('data-theme', t[0]);
+    ['--bg', '--panel', '--panel2', '--fg', '--muted', '--line', '--accent'].forEach((v, i) => root.style.setProperty(v, t[3 + i]));
+    root.style.setProperty('--accent-fg', onColor(t[9]));
+    root.style.setProperty('color-scheme', t[2] ? 'dark' : 'light');
+  }
+  function setTheme(id) { try { localStorage.setItem('mb-theme', id); } catch { /* private mode */ } applyTheme(id); }
+  applyTheme(getTheme());
+
   function ago(ms) {
     if (!ms) return 'never';
     const s = Math.max(0, (Date.now() - ms) / 1000);
@@ -132,6 +167,9 @@
           state.user.isAdmin ? link('users', 'Users', 'users', 'users') : null,
           link('about', 'Connect a browser', 'about', 'about')),
         h('div', { class: 'spacer' }),
+        h('label', { class: 'muted small', style: 'display:block;margin:0 4px 4px' }, 'Theme'),
+        h('select', { style: 'width:100%;margin-bottom:10px', value: getTheme(), onchange: (e) => setTheme(e.target.value) },
+          h('option', { value: 'system' }, 'Follow system'), THEMES.map((t) => h('option', { value: t[0], selected: getTheme() === t[0] }, t[1]))),
         h('div', { class: 'me' }, h('b', null, state.user.username), ' ', state.user.isAdmin ? h('span', { class: 'badge accent' }, 'admin') : null,
           h('div', { class: 'muted small' }, state.user.totpEnabled ? '2FA is on' : '2FA is off'),
           h('button', { class: 'btn sm', style: 'margin-top:8px', onclick: signOut }, h('span', { html: ICONS.out }), 'Sign out'))),
@@ -235,7 +273,7 @@
         : h('div', { class: 'card empty' }, 'No profile yet. Create one, then connect your browser to it.'))));
   }
 
-  const PTABS = [['overview', 'Overview'], ['keys', 'API keys'], ['bookmarks', 'Bookmarks'], ['history', 'History'], ['devices', 'Devices & tabs'], ['data', 'Settings & vault'], ['manage', 'Manage']];
+  const PTABS = [['overview', 'Overview'], ['keys', 'API keys'], ['bookmarks', 'Bookmarks'], ['history', 'History'], ['devices', 'Devices & tabs'], ['passwords', 'Passwords'], ['data', 'Settings & vault'], ['manage', 'Manage']];
 
   async function viewProfile(id, tab) {
     const p = await api('GET', '/profiles/' + id + '/overview');
@@ -245,7 +283,7 @@
       h('div', { class: 'head' }, h('div', null, h('a', { href: '#/profiles', class: 'muted small' }, '← All profiles'), h('h1', null, p.name),
         h('div', { class: 'muted' }, 'Last activity ' + ago(p.stats.lastSync)))),
       tabs, body)));
-    const fn = { overview: tOverview, keys: tKeys, bookmarks: tBookmarks, history: tHistory, devices: tDevices, data: tData, manage: tManage }[tab] || tOverview;
+    const fn = { overview: tOverview, keys: tKeys, bookmarks: tBookmarks, history: tHistory, devices: tDevices, passwords: tPasswords, data: tData, manage: tManage }[tab] || tOverview;
     await fn(body, p);
   }
 
@@ -339,12 +377,70 @@
 
   async function tDevices(body, p) {
     const { devices } = await api('GET', '/profiles/' + p.id + '/devices');
-    body.append(devices.length ? devices.map((d) => h('div', { class: 'card' },
+    body.append(...(devices.length ? devices.map((d) => h('div', { class: 'card' },
       h('div', { class: 'row', style: 'justify-content:space-between' }, h('h2', { style: 'margin:0' }, d.device), h('div', { class: 'row' },
         h('span', { class: 'muted small' }, 'updated ' + ago(d.updated)),
         h('button', { class: 'btn sm danger', onclick: async () => { try { await api('DELETE', '/profiles/' + p.id + '/devices/' + encodeURIComponent(d.device)); route(); } catch (e) { fail(e); } } }, 'Forget'))),
-      d.tabs.length ? h('ul', { style: 'padding-left:18px;line-height:1.7' }, d.tabs.map((t) => h('li', null, h('a', { href: t.url, target: '_blank', rel: 'noopener noreferrer' }, t.title || t.url)))) : h('div', { class: 'muted' }, 'No open tabs shared.')))
-      : h('div', { class: 'card empty' }, 'No device has shared its open tabs yet.'));
+      (d.tabs || []).length ? h('ul', { style: 'padding-left:18px;line-height:1.7' }, d.tabs.map((t) => h('li', null, h('a', { href: /^https?:/i.test(t.url) ? t.url : '#', target: '_blank', rel: 'noopener noreferrer' }, t.title || t.url)))) : h('div', { class: 'muted' }, 'No open tabs shared.')))
+      : [h('div', { class: 'card empty' }, 'No device has shared its open tabs yet.')]));
+  }
+
+  async function tPasswords(body, p) {
+    const info = await api('GET', '/profiles/' + p.id + '/vault');
+    if (!info.exists) { body.append(h('div', { class: 'card empty' }, 'No vault has been synced to this profile yet. Turn on password sync in a browser and it will appear here.')); return; }
+    const blob = info.blob, dev = !!blob.device;
+    const secret = h('input', { type: 'password', autocomplete: 'off', placeholder: dev ? 'Device key (base64)' : 'Master password', style: 'min-width:260px' });
+    const status = h('div', { class: 'muted small', style: 'margin-top:8px' });
+    const out = h('div');
+    const go = async () => {
+      if (!secret.value) return;
+      if (!window.crypto || !crypto.subtle) { status.textContent = 'Your browser only allows this over HTTPS (or on localhost). Open the server through its https:// address.'; status.className = 'bad small'; return; }
+      status.className = 'muted small'; status.textContent = 'Unlocking…'; btn.disabled = true;
+      try {
+        const v = await MBVault.open(blob, secret.value, (f) => { status.textContent = 'Unlocking… ' + Math.round(f * 100) + '%'; });
+        secret.value = ''; status.textContent = '';
+        show_(v);
+      } catch (e) { status.className = 'bad small'; status.textContent = e.message || String(e); btn.disabled = false; }
+    };
+    const btn = h('button', { class: 'btn primary', onclick: go }, 'Unlock');
+    secret.addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
+    body.append(h('div', { class: 'card' }, h('h2', null, 'Password vault'),
+      h('p', { class: 'muted' }, 'The vault is decrypted here in your browser. Your ' + (dev ? 'device key' : 'master password') + ' is never sent to the server, and nothing is stored on this page: reload and it locks again.'),
+      h('div', { class: 'row' }, secret, btn), status), out);
+
+    function show_(v) {
+      const pws = v.entries.filter((e) => !e.type || e.type === 'password');
+      const cards = v.entries.filter((e) => e.type === 'card').length, addrs = v.entries.filter((e) => e.type === 'address').length;
+      const q = h('input', { type: 'search', placeholder: 'Search ' + pws.length + ' passwords', style: 'min-width:260px' });
+      const list = h('div', { class: 'tablewrap' });
+      let timer = null;
+      const lock = () => { out.replaceChildren(); secret.disabled = false; btn.disabled = false; status.textContent = 'Locked.'; };
+      const render = () => {
+        const s = q.value.trim().toLowerCase();
+        const rows = pws.filter((e) => !s || [e.name, e.origin, e.username, e.folder].some((x) => String(x || '').toLowerCase().includes(s)))
+          .sort((x, y) => String(x.name || x.origin).localeCompare(String(y.name || y.origin)));
+        list.replaceChildren(rows.length ? h('table', null, h('thead', null, h('tr', null, ['Site', 'User name', 'Password', 'Folder'].map((t) => h('th', null, t)))),
+          h('tbody', null, rows.map((e) => {
+            const pass = h('span', { class: 'mono' }, '••••••••');
+            let shown = false;
+            return h('tr', null,
+              h('td', null, h('b', null, e.name || e.origin || ''), e.origin ? h('div', { class: 'muted small' }, e.origin) : null),
+              h('td', null, e.username || '', ' ', e.username ? h('button', { class: 'btn sm', onclick: () => copyText(e.username) }, 'Copy') : null),
+              h('td', null, pass, ' ',
+                h('button', { class: 'btn sm', onclick: (ev) => { shown = !shown; pass.textContent = shown ? e.password : '••••••••'; ev.target.textContent = shown ? 'Hide' : 'Show'; } }, 'Show'), ' ',
+                h('button', { class: 'btn sm', onclick: () => copyText(e.password) }, 'Copy')),
+              h('td', { class: 'muted' }, e.folder || ''));
+          }))) : h('div', { class: 'empty' }, 'Nothing matches.'));
+      };
+      q.addEventListener('input', render);
+      render();
+      out.replaceChildren(h('div', { class: 'card' },
+        h('div', { class: 'row', style: 'justify-content:space-between;margin-bottom:12px' }, q,
+          h('div', { class: 'row' }, cards || addrs ? h('span', { class: 'muted small' }, cards + ' cards and ' + addrs + ' addresses are in the vault too; open them in the browser.') : null,
+            h('button', { class: 'btn', onclick: lock }, 'Lock'))), list,
+        h('p', { class: 'muted small' }, 'This view is read-only. Add and change passwords in the browser; they sync here. It locks by itself after 5 minutes.')));
+      clearTimeout(timer); timer = setTimeout(lock, 5 * 60 * 1000);
+    }
   }
 
   async function tData(body, p) {
@@ -359,7 +455,7 @@
           : h('p', { class: 'muted' }, 'No settings have been synced yet.')),
       h('div', { class: 'card' }, h('h2', null, 'Password vault'),
         s.vault ? h('div', null,
-          h('p', { class: 'muted' }, 'An encrypted vault is stored (' + bytes(s.vault.bytes) + ', version ' + s.vault.version + ', changed ' + ago(s.vault.updated) + '). It is encrypted by your browser with your master password; the server cannot read it, so there is nothing to view here.'),
+          h('p', { class: 'muted' }, 'An encrypted vault is stored (' + bytes(s.vault.bytes) + ', version ' + s.vault.version + ', changed ' + ago(s.vault.updated) + '). It is encrypted by your browser; the server cannot read it. Open the Passwords tab to unlock and view it here.'),
           h('button', { class: 'btn danger', onclick: async () => { if (!confirm('Delete the stored vault? Browsers that still have a copy will upload it again at the next sync.')) return; try { await api('DELETE', '/profiles/' + p.id + '/vault'); route(); } catch (e) { fail(e); } } }, 'Delete stored vault'))
           : h('p', { class: 'muted' }, 'No vault has been synced yet.')));
   }

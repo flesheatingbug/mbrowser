@@ -16,7 +16,7 @@ from .store import ApiError, Store
 
 VERSION = '1.0.0'
 STATIC_DIR = os.path.join(os.path.dirname(__file__), 'static')
-STATIC_FILES = {'/': 'index.html', '/index.html': 'index.html', '/app.js': 'app.js', '/style.css': 'style.css',
+STATIC_FILES = {'/': 'index.html', '/index.html': 'index.html', '/app.js': 'app.js', '/vault.js': 'vault.js', '/style.css': 'style.css',
                 '/logo.png': 'logo.png', '/favicon.png': 'logo.png'}
 TYPES = {'.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.png': 'image/png'}
 CSP = ("default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; "
@@ -95,6 +95,7 @@ route('GET', P + '/devices')(guiapi.devices_list)
 route('DELETE', P + r'/devices/([^/]+)')(guiapi.device_delete)
 route('GET', P + '/settings')(guiapi.settings_view)
 route('DELETE', P + '/settings')(guiapi.settings_delete)
+route('GET', P + '/vault')(guiapi.vault_blob)
 route('DELETE', P + '/vault')(guiapi.vault_delete)
 route('GET', P + '/export/bookmarks.html')(guiapi.export_bookmarks)
 route('GET', P + '/export/history.json')(guiapi.export_history)

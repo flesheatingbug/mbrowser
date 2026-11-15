@@ -340,6 +340,13 @@ def device_delete(ctx, req, pid, device):
     return 200, {'ok': True}
 
 
+def vault_blob(ctx, req, pid):
+    """The encrypted vault, for the web page to open in the browser. The server cannot read it."""
+    _own(ctx, req, pid)
+    with ctx.store.pdb(int(pid)) as c:
+        return 200, syncapi.vault_get(c)
+
+
 def settings_view(ctx, req, pid):
     _own(ctx, req, pid)
     with ctx.store.pdb(int(pid)) as c:
