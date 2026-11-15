@@ -177,6 +177,7 @@ let profileName = '';
 let localProfileName = 'Default (local)';
 let standaloneMode = false;
 let profileRenamed = false;
+let addingProfile = false;
 let allThemes = [];
 let allEngines = [];
 
@@ -188,8 +189,9 @@ document.getElementById('close-btn').onclick = () => browser.wizardCancel();
 
 async function init() {
   status = await browser.wizardStatus() || {};
+  addingProfile = !!status.addingProfile;
   profileName = status.profileName || 'Default';
-  localProfileName = 'Default (local)';
+  localProfileName = addingProfile ? 'New profile' : 'Default (local)';
   openLast = status.openLastProfile || false;
   vRemember = status.remember !== false;
   serverConnected = status.serverConfigured;
@@ -548,16 +550,16 @@ function renderStep3() {
 function renderStep4() {
   const c = $('content');
   c.innerHTML = '';
-  const h = el('h2', null, standaloneMode ? 'New local profile' : 'Your profile');
-  const sub = el('p', 'subtitle', standaloneMode
-    ? 'A new local profile will be created. Your existing profile is kept and can be opened separately.'
+  const h = el('h2', null, (standaloneMode || addingProfile) ? 'New profile' : 'Your profile');
+  const sub = el('p', 'subtitle', (standaloneMode || addingProfile)
+    ? 'A new profile will be created. Your existing profiles are kept and each opens in its own window.'
     : 'Customise how mbrowser handles profiles and passwords.');
   c.append(h, sub);
 
   const fName = el('div', 'field');
-  const lName = el('label', null, standaloneMode ? 'Local profile name' : 'Profile name');
-  const iName = el('input'); iName.type = 'text'; iName.value = standaloneMode ? localProfileName : profileName;
-  iName.oninput = () => { if (standaloneMode) localProfileName = iName.value; else profileName = iName.value; };
+  const lName = el('label', null, (standaloneMode || addingProfile) ? 'New profile name' : 'Profile name');
+  const iName = el('input'); iName.type = 'text'; iName.value = (standaloneMode || addingProfile) ? localProfileName : profileName;
+  iName.oninput = () => { if (standaloneMode || addingProfile) localProfileName = iName.value; else profileName = iName.value; };
   fName.append(lName, iName);
   c.append(fName);
 
@@ -648,8 +650,8 @@ function renderStep4() {
   next.onclick = async () => {
     next.disabled = true; next.textContent = 'Saving…'; errEl.textContent = '';
     await browser.setSetting('privacy.blockTrackers', blockTrackers);
-    if (standaloneMode) {
-      const name = localProfileName.trim() || 'Default (local)';
+    if (standaloneMode || addingProfile) {
+      const name = localProfileName.trim() || (addingProfile ? 'New profile' : 'Default (local)');
       const r = await browser.wizardCreateProfile(name);
       if (r && r.error) { errEl.textContent = r.error; next.disabled = false; next.textContent = 'Finish →'; return; }
       profileRenamed = true;
@@ -689,8 +691,8 @@ function renderStep5() {
   const engObj = allEngines.find((e) => e.id === chosenEngine);
   if (engObj) items.push('Search: ' + engObj.name);
   if (serverConnected) items.push('Connected to sync server');
-  const shownName = standaloneMode ? localProfileName : profileName;
-  if (standaloneMode) items.push(`New local profile: ${shownName || 'Default (local)'}`);
+  const shownName = (standaloneMode || addingProfile) ? localProfileName : profileName;
+  if (standaloneMode || addingProfile) items.push(`New profile: ${shownName || 'New profile'}`);
   else if (profileRenamed || (shownName && shownName !== status.profileName)) items.push(`Profile: ${shownName}`);
   if (openLast) items.push('Opens last-used profile on launch');
   if (!blockTrackers) items.push('Ad/tracker blocking off');

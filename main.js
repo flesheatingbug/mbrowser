@@ -2734,6 +2734,7 @@ function setupIpc() {
     profiles.clearSetupDone();
     await showWizard();
     wizardNewProfile = false;
+    pendingNewProfileSync = null;
     const defId = profiles.getDefaultProfile();
     if (defId !== profileId && profiles.get(defId)) launchProfile(defId, false);
     return { ok: true };
@@ -3299,6 +3300,7 @@ let wizardWcId = null;
 let wizardResolve = null;
 let wizardActive = false;
 let wizardNewProfile = false; // true when wizard is launched to create an additional profile
+let pendingNewProfileSync = null; // { server, token, account } held until the new profile is created
 
 function showGate(mode) {
   return new Promise((resolve) => {
@@ -3373,8 +3375,10 @@ const isWizard = (e) => e.sender.id === wizardWcId;
 
 ipcMain.handle('wizard:status', async (e) => {
   if (!isWizard(e)) return null;
+  // When adding a new profile, the new profile starts with no server configured.
+  const isNewProfile = !!wizardNewProfile;
   let serverVault = null;
-  if (syncReady()) { try { const r = await call('GET', '/api/vault'); serverVault = { exists: !!r.exists, device: !!(r.blob && r.blob.device) }; } catch { /* unknown */ } }
+  if (!isNewProfile && syncReady()) { try { const r = await call('GET', '/api/vault'); serverVault = { exists: !!r.exists, device: !!(r.blob && r.blob.device) }; } catch { /* unknown */ } }
   return {
     serverVault,
     profileId,
@@ -3382,9 +3386,10 @@ ipcMain.handle('wizard:status', async (e) => {
     profiles: profiles.list(),
     defaultProfile: profiles.getDefaultProfile(),
     openLastProfile: profiles.getOpenLastProfile(),
-    serverConfigured: syncReady(),
-    syncAccount: S().sync.account || {},
-    vaultExists: vault.exists(),
+    serverConfigured: isNewProfile ? false : syncReady(),
+    syncAccount: isNewProfile ? {} : (S().sync.account || {}),
+    addingProfile: isNewProfile,
+    vaultExists: isNewProfile ? false : vault.exists(),
     vaultDeviceMode: vault.isDevice(),
     remember: !!S().passwords.remember,
     safeStorageAvailable: safeStorage.isEncryptionAvailable(),
@@ -3409,8 +3414,9 @@ ipcMain.handle('wizard:connect', async (e, o) => {
   o = o || {};
   const base = String(o.server || '').replace(/\/+$/, '');
   if (!base) return { error: 'Enter the server address.' };
+  const forNewProfile = !!wizardNewProfile;
   try {
-    applySetting('sync.server', base);
+    if (!forNewProfile) applySetting('sync.server', base);
     const res = await fetch(base + '/api/auth/device-login', {
       method: 'POST', headers: { 'content-type': 'application/json' }, signal: AbortSignal.timeout(15000),
       body: JSON.stringify({ username: String(o.username || ''), password: String(o.password || ''), totp: String(o.totp || ''), profile: o.profile || '', create: !!o.create, list: !!o.list, device: S().sync.device || os.hostname() }),
@@ -3420,11 +3426,19 @@ ipcMain.handle('wizard:connect', async (e, o) => {
     if (res.status === 404) return { error: 'Server is an older version. Update it, or use an API key in Settings.' };
     if (!res.ok) return { error: data.error || ('Sign-in failed (HTTP ' + res.status + ')'), needTotp: !!data.needTotp };
     if (data.needProfile) return { needProfile: true, profiles: data.profiles };
-    applySetting('sync.token', data.token);
-    applySetting('sync.account', { user: String(o.username), profile: data.profile?.name || '' });
-    syncSoon();
+    if (forNewProfile) {
+      // Store credentials to be written to the new profile's settings when it is created.
+      pendingNewProfileSync = { server: base, token: data.token, account: { user: String(o.username), profile: data.profile?.name || '' } };
+    } else {
+      applySetting('sync.token', data.token);
+      applySetting('sync.account', { user: String(o.username), profile: data.profile?.name || '' });
+      syncSoon();
+    }
     return { ok: true, profile: data.profile };
-  } catch (err) { applySetting('sync.server', ''); return { error: 'Cannot reach server: ' + err.message }; }
+  } catch (err) {
+    if (!forNewProfile) applySetting('sync.server', '');
+    return { error: 'Cannot reach server: ' + err.message };
+  }
 });
 
 ipcMain.handle('wizard:rename-profile', (e, name) => {
@@ -3447,6 +3461,24 @@ ipcMain.handle('wizard:create-profile', (e, name) => {
   if (result.ok) {
     profiles.clearFirstRun(result.id); // wizard IS the first run; no repeat needed
     profiles.setDefaultProfile(result.id);
+    if (pendingNewProfileSync) {
+      try {
+        const dir = profiles.dirFor(result.id);
+        fs.mkdirSync(dir, { recursive: true });
+        const sf = path.join(dir, 'settings.json');
+        let existing = {};
+        try { existing = JSON.parse(fs.readFileSync(sf, 'utf8')); } catch { /* fresh profile */ }
+        existing.sync = Object.assign({}, existing.sync || {}, {
+          server: pendingNewProfileSync.server,
+          token: pendingNewProfileSync.token,
+          account: pendingNewProfileSync.account,
+        });
+        const tmp = sf + '.tmp';
+        fs.writeFileSync(tmp, JSON.stringify(existing, null, 2), { mode: 0o600 });
+        fs.renameSync(tmp, sf);
+      } catch { /* non-fatal: new profile starts without sync */ }
+      pendingNewProfileSync = null;
+    }
   }
   return result;
 });
