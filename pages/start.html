@@ -235,6 +235,7 @@ function showCtx(e, type, data) {
     const { d, idx } = data;
     ci('Open', () => browser.go(d.url));
     ci('Open in new tab', () => browser.openUrl(d.url, 'tab'));
+    ci('Open in background tab', () => browser.openUrl(d.url, 'background'));
     cs();
     ci('Edit', () => showModal('dial', data));
     ci('Refresh thumbnail', () => refreshThumbs());
@@ -243,8 +244,10 @@ function showCtx(e, type, data) {
   } else if (type === 'folder') {
     const { d, idx } = data;
     ci('Open folder', () => openFolder(d));
-    if ((d.items || []).some((x) => isWeb(x.url)))
+    if ((d.items || []).some((x) => isWeb(x.url))) {
       ci('Open all in new tabs', () => (d.items || []).filter((x) => isWeb(x.url)).forEach((x) => browser.openUrl(x.url, 'tab')));
+      ci('Open all in background', () => (d.items || []).filter((x) => isWeb(x.url)).forEach((x) => browser.openUrl(x.url, 'background')));
+    }
     cs();
     ci('Rename folder', () => showModal('folder', data));
     cs();

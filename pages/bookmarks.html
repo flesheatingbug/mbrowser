@@ -370,7 +370,8 @@
         row.ondragstart = (e) => { drag = picked.has(b.url) ? [...picked] : [b.url]; e.dataTransfer.setData('text/plain', b.url); e.dataTransfer.effectAllowed = 'move'; };
         row.ondragend = () => { drag = null; };
         row.oncontextmenu = (e) => { e.preventDefault(); showCtx(e.clientX, e.clientY, [
-          { label: 'Open in new tab', fn: () => browser.go(b.url) },
+          { label: 'Open in new tab', fn: () => browser.openUrl(b.url, 'tab') },
+          { label: 'Open in background tab', fn: () => browser.openUrl(b.url, 'background') },
           { label: 'Copy URL', fn: () => { try { navigator.clipboard.writeText(b.url); } catch { /* silent */ } } },
           '-',
           { label: 'Add to Speed Dial', fn: () => addToSpeedDial([b]) },

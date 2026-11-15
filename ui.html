@@ -19,8 +19,9 @@
     color:var(--muted); -webkit-app-region:no-drag; }
   #tabs-menu-btn:hover { color:var(--fg); }
   #tabs-menu-btn img { width:18px; height:18px; border-radius:3px; object-fit:contain; display:block; }
-  #tabs-wrap { flex:1; min-width:0; display:flex; gap:2px; align-items:flex-end; overflow:hidden;
-    padding:6px 0 0; }
+  #tabs-wrap { flex:1; min-width:0; display:flex; gap:2px; align-items:flex-end; overflow-x:auto; overflow-y:hidden;
+    padding:6px 0 0; scrollbar-width:none; }
+  #tabs-wrap::-webkit-scrollbar { display:none; }
   .tab { position:relative; display:flex; align-items:center; gap:6px; flex:0 1 200px; min-width:42px; max-width:200px;
     height:32px; padding:0 8px; background:var(--tab); border-radius:8px 8px 0 0; cursor:default; transition:min-width .15s, max-width .15s; }
   .tab.active { background:var(--active); }
@@ -37,13 +38,8 @@
   #newtab { background:none; border:0; color:var(--muted); font-size:18px; cursor:pointer; padding:0 8px; height:32px; flex:none; }
   #newtab:hover { color:var(--fg); }
 
-  /* compact tab strip: when many tabs, shrink and hide x */
-  #tabs-wrap.compact .tab { max-width:120px; }
+  /* compact tab strip: when many tabs and horizontal, shrink close button */
   #tabs-wrap.compact .tab .x { display:none; }
-  #tabs-wrap.compact-sm .tab { max-width:52px; min-width:34px; }
-  #tabs-wrap.compact-sm .tab .t { display:none; }
-  #tabs-wrap.compact-sm .tab .x { display:none; }
-  #tabs-wrap.compact-sm .tab .snd { display:none; }
 
   /* ---- vertical mode ---- */
   body.vertical #tabs { flex-direction:column; height:100%; padding:6px; gap:2px; align-items:stretch; overflow-y:auto; overflow-x:hidden; }
@@ -256,7 +252,7 @@
   $('dlbtn-ic').innerHTML = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v10.5M8 11.2l4 4 4-4M5 19.5h14"/></svg>';
   const part = new URLSearchParams(location.search).get('part');
   document.body.classList.add('part-' + part);
-  let lastState = null, dlDoneShownId = 0, dlDoneVisible = false, dlDoneTimer = null;
+  let lastState = null, dlDoneShownId = 0, dlDoneVisible = false, dlDoneTimer = null, lastActiveId = null;
   const urlInput = $('url');
   const TAB_MIME = 'application/x-mybrowser-tab';
 
@@ -606,6 +602,8 @@
 
     if (part === 'tabs') {
       const strip = $('tabs-wrap');
+      const prevActive = lastActiveId;
+      lastActiveId = s.activeId;
       strip.textContent = '';
       for (const t of s.tabs) strip.appendChild(tabEl(t, s.activeId));
       const plus = document.createElement('button');
@@ -614,10 +612,18 @@
       plus.onclick = () => api.newTab();
       plus.oncontextmenu = (e) => { e.preventDefault(); api.newtabMenu(); };
       strip.appendChild(plus);
-      // compact mode: shrink tabs when many open
-      const n = s.tabs.length;
-      strip.classList.toggle('compact', n >= 10 && n < 18);
-      strip.classList.toggle('compact-sm', n >= 18);
+      strip.classList.toggle('compact', s.tabs.length >= 12);
+      // scroll active tab into view when it changes
+      if (s.activeId !== prevActive) {
+        requestAnimationFrame(() => {
+          const active = strip.querySelector('.tab.active');
+          if (!active) return;
+          const PAD = 80;
+          const r = active.getBoundingClientRect(), sr = strip.getBoundingClientRect();
+          if (r.right > sr.right - PAD) strip.scrollBy({ left: r.right - sr.right + PAD, behavior: 'smooth' });
+          else if (r.left < sr.left + PAD) strip.scrollBy({ left: r.left - sr.left - PAD, behavior: 'smooth' });
+        });
+      }
     }
   });
 </script>

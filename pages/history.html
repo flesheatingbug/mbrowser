@@ -14,7 +14,7 @@
   .h:hover { background:var(--tab); }
   .h .tm { width:56px; color:var(--muted); font-size:12px; flex:none; }
   .h .t { flex:1; min-width:0; }
-  .h .t a { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .h .t a { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; cursor:pointer; }
   .h .t small { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .h button { padding:2px 9px; visibility:hidden; }
   .h:hover button { visibility:visible; }
@@ -54,6 +54,32 @@
   let limit = 300;
   const startOfDay = (t) => { const d = new Date(t); d.setHours(0, 0, 0, 0); return d.getTime(); };
 
+  // minimal context menu
+  let _ctx = null;
+  function showHistCtx(cx, cy, url, reload) {
+    if (_ctx) _ctx.remove();
+    const m = document.createElement('div');
+    m.style.cssText = 'position:fixed;z-index:200;background:var(--active);border:1px solid var(--line);border-radius:10px;padding:4px;min-width:170px;font-size:13px;';
+    const item = (lbl, fn) => {
+      const d = document.createElement('div');
+      d.style.cssText = 'padding:7px 14px;border-radius:7px;cursor:pointer;';
+      d.textContent = lbl;
+      d.onmouseenter = () => { d.style.background = 'var(--tab)'; };
+      d.onmouseleave = () => { d.style.background = ''; };
+      d.onclick = () => { m.remove(); _ctx = null; fn(); };
+      m.append(d);
+    };
+    item('Open', () => browser.go(url));
+    item('Open in new tab', () => browser.openUrl(url, 'tab'));
+    item('Open in background tab', () => browser.openUrl(url, 'background'));
+    const sep = document.createElement('div'); sep.style.cssText = 'height:1px;background:var(--line);margin:4px 0;'; m.append(sep);
+    item('Copy URL', () => { try { navigator.clipboard.writeText(url); } catch { /* silent */ } });
+    m.style.left = Math.min(cx, window.innerWidth - 180) + 'px';
+    m.style.top = cy + 'px';
+    document.body.append(m); _ctx = m;
+    setTimeout(() => { document.addEventListener('click', () => { m.remove(); _ctx = null; }, { once: true }); }, 0);
+  }
+
   function range() {
     const v = $('range').value, now = Date.now(), today = startOfDay(now);
     if (v === 'today') return { from: today };
@@ -86,11 +112,14 @@
       const tm = document.createElement('span'); tm.className = 'tm'; tm.textContent = new Date(h.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
       const t = document.createElement('div'); t.className = 't';
       const a = document.createElement('a'); a.href = h.url; a.textContent = h.title || h.url;
+      a.onclick = (e) => { e.preventDefault(); browser.go(h.url); };
+      a.onauxclick = (e) => { if (e.button === 1) { e.preventDefault(); browser.openUrl(h.url, 'background'); } };
       const sm = document.createElement('small'); sm.className = 'muted'; sm.textContent = h.url;
       t.append(a, sm);
       const x = document.createElement('button'); x.className = 'danger'; x.textContent = 'Remove'; x.title = 'Remove this page from history';
       x.onclick = async () => { await browser.historyDelete({ urls: [h.url] }); load(); };
       row.append(tm, t, x);
+      row.oncontextmenu = (e) => { e.preventDefault(); showHistCtx(e.clientX, e.clientY, h.url, () => load()); };
       group.append(row);
     }
     if (!r.items.length) list.innerHTML = '<p class="muted">Nothing found.</p>';
