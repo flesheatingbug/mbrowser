@@ -109,6 +109,7 @@ if (location.protocol === 'my:') {
     wizardSetOpenLast: invoke('wizard:set-open-last'),
     wizardVaultSetup: invoke('wizard:vault-setup'),
     wizardDone: invoke('wizard:done'),
+    wizardCancel: invoke('wizard:cancel'),
     appBuildNumber: invoke('app:build-number'),
     appUpdateInfo: invoke('app:update-info'),
     appAutoInstall: (info) => ipcRenderer.invoke('app:auto-install', info),

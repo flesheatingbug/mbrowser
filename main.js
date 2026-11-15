@@ -2693,8 +2693,10 @@ function setupIpc() {
       resetInProgress = true;
       for (const w of [...windows]) { try { w.win.close(); } catch {} }
       // Show wizard, then open a fresh browser window (or launch the new default profile)
-      try { await showWizard(); } catch {}
+      let wizResult;
+      try { wizResult = await showWizard(); } catch {}
       resetInProgress = false;
+      if (wizResult === 'cancelled') { app.quit(); return; }
       const defId = profiles.getDefaultProfile();
       if (defId !== profileId && profiles.get(defId)) {
         launchProfile(defId, false);
@@ -3327,7 +3329,7 @@ ipcMain.on('gate:cancel', (e) => { if (e.sender.id === gateWcId && gateResolve) 
 function showWizard() {
   wizardActive = true;
   return new Promise((resolve) => {
-    const win = new BaseWindow({ width: 660, height: 740, title: 'mbrowser setup', icon: appIconImage(), resizable: true, minWidth: 520, minHeight: 580, backgroundColor: '#0f0524' });
+    const win = new BaseWindow({ width: 740, height: 840, title: 'mbrowser setup', icon: appIconImage(), resizable: true, minWidth: 560, minHeight: 640, backgroundColor: '#0f0524', frame: false });
     try { if (typeof win.removeMenu === 'function') win.removeMenu(); } catch { /* ignore */ }
     const view = new WebContentsView({
       webPreferences: { preload: path.join(__dirname, 'page-preload.js'), contextIsolation: true, sandbox: true },
@@ -3350,7 +3352,7 @@ function showWizard() {
       finish(r);
       setTimeout(() => { try { win.close(); } catch { /* closed */ } }, 0);
     };
-    win.on('closed', () => finish('done'));
+    win.on('closed', () => finish('cancelled'));
   });
 }
 
@@ -3486,6 +3488,12 @@ ipcMain.handle('wizard:done', (e) => {
   return { ok: true };
 });
 
+ipcMain.handle('wizard:cancel', (e) => {
+  if (!isWizard(e)) return null;
+  if (wizardResolve) wizardResolve('cancelled');
+  return { ok: true };
+});
+
 app.whenReady().then(async () => {
   if (!gotLock) return; // another instance of this profile is already running
   const me = profiles.get(profileId);
@@ -3544,7 +3552,10 @@ app.whenReady().then(async () => {
   Menu.setApplicationMenu(null); // no File / Edit / View menu bar
   nativeTheme.on('updated', () => pushAll());
 
-  if (process.argv.includes('--first-run') || !profiles.setupDone()) await showWizard();
+  if (process.argv.includes('--first-run') || !profiles.setupDone()) {
+    const wizardResult = await showWizard();
+    if (wizardResult === 'cancelled') { app.quit(); return; }
+  }
 
   profiles.setLastProfile(profileId);
   createWindow({ first: true });
