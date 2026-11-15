@@ -10,9 +10,9 @@ A Chromium-based browser built on Electron that syncs your bookmarks, history, t
 
 | Platform | Download |
 |----------|----------|
-| 🐧 **Linux** (AppImage) | [mbrowser-linux.AppImage](https://github.com/flesheatingbug/mbrowser/releases/latest/download/mbrowser-linux.AppImage) |
-| 🪟 **Windows** (Installer) | [mbrowser-windows-setup.exe](https://github.com/flesheatingbug/mbrowser/releases/latest/download/mbrowser-windows-setup.exe) |
-| 🤖 **Android** (APK) | [mbrowser.apk](https://github.com/flesheatingbug/mbrowser/releases/latest/download/mbrowser.apk) |
+| 🐧 **Linux** (AppImage) | [mbrowser-linux.AppImage](https://github.com/flesheatingbug/mbrowser/releases/download/latest-desktop/mbrowser-linux.AppImage) |
+| 🪟 **Windows** (Installer) | [mbrowser-windows-setup.exe](https://github.com/flesheatingbug/mbrowser/releases/download/latest-desktop/mbrowser-windows-setup.exe) |
+| 🤖 **Android** (APK) | [mbrowser.apk](https://github.com/flesheatingbug/mbrowser/releases/download/latest-apk/mbrowser.apk) |
 
 > **Android**: Enable *Install from unknown sources* in your device settings, then open the APK to install.
 
