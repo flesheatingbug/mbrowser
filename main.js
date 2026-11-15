@@ -141,7 +141,7 @@ protocol.registerSchemesAsPrivileged([
 ]);
 
 const START = 'my://start';
-const TAB_H = 38, TOOL_H = 50, TRANSLATE_H = 34, SIDE_W = 220, STATUS_H = 26, PANEL_HEAD = 46;
+const TAB_H = 38, TOOL_H = 50, TRANSLATE_H = 34, SIDE_W = 220, STATUS_H = 32, PANEL_HEAD = 46;
 const MOBILE_UA = 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36';
 
 let store, blocker, vault;
