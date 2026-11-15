@@ -670,7 +670,10 @@ function wire(tab) {
     // Sign-in flows (Google, etc.) open a real popup that talks back to the page that opened it.
     // That only works as an actual window with an opener, so allow those; links become tabs.
     if (disposition === 'new-window' && features) {
-      return { action: 'allow', overrideBrowserWindowOptions: { autoHideMenuBar: true, title: 'Sign in' } };
+      return { action: 'allow', overrideBrowserWindowOptions: {
+        autoHideMenuBar: true, title: 'Sign in',
+        webPreferences: { sandbox: true, contextIsolation: true, preload: path.join(__dirname, 'page-preload.js') },
+      } };
     }
     newTab(url, { after: tab.id, private: tab.private, background: disposition === 'background-tab' });
     return { action: 'deny' };
@@ -2920,6 +2923,26 @@ function setupSession(ses) {
 
   ses.protocol.handle('my', handleMy);
   ses.on('will-download', onWillDownload);
+  // Without a permission handler Electron auto-denies everything, making
+  // navigator.permissions.query return 'denied' for all permissions — a strong
+  // embedded-browser signal that Google's _tp module flags. Use Chromium's normal
+  // "ask the user" behaviour instead.
+  ses.setPermissionRequestHandler((wc, permission, callback) => {
+    const sensitive = ['notifications', 'geolocation', 'camera', 'microphone', 'fullscreen',
+      'media', 'mediaKeySystem', 'midi', 'midiSysex', 'pointerLock', 'openExternal'];
+    if (sensitive.includes(permission)) {
+      // Show OS/browser prompt via Electron dialog in a future version; for now grant harmless
+      // ones and prompt-block sensitive ones (user can allow in site settings later).
+      callback(permission === 'fullscreen' || permission === 'openExternal');
+    } else {
+      callback(true);
+    }
+  });
+  ses.setPermissionCheckHandler((wc, permission) => {
+    // Return null so Chromium uses its built-in check (same as a standard browser).
+    // Returning false for everything makes navigator.permissions.query report 'denied'.
+    return null;
+  });
   // remember certificate details per host for the address-bar security popup (verification itself is unchanged)
   ses.setCertificateVerifyProc((request, callback) => {
     try {
