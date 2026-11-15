@@ -309,6 +309,7 @@
             android:contentDescription="Tabs">
 
             <ImageView
+                android:id="@+id/tabsIcon"
                 android:layout_width="26dp"
                 android:layout_height="26dp"
                 android:layout_gravity="center"

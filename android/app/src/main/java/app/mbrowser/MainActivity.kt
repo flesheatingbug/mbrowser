@@ -1154,6 +1154,7 @@ class MainActivity : BaseActivity() {
     override fun onResume() {
         super.onResume()
         applyLogo()
+        IconStyle.apply(this)
         if (appliedUa != prefs.uaMode) {
             val first = appliedUa.isEmpty()
             appliedUa = prefs.uaMode

@@ -14,6 +14,9 @@ class Prefs(ctx: Context) {
     private fun putB(k: String, v: Boolean) = p.edit().putBoolean(k, v).apply()
 
     // app updates
+    var iconStyle: String
+        get() = str("iconStyle", "minimal")
+        set(v) = put("iconStyle", v)
     var uaMode: String
         get() = str("uaMode", "chrome")
         set(v) = put("uaMode", v)

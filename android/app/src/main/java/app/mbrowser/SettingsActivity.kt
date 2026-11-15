@@ -99,6 +99,8 @@ class SettingsActivity : BaseActivity() {
             { prefs.themeId = Themes.LIST[it].first; recreate() })
         if (prefs.themeId == "system")
             choiceRow("Light or dark", listOf("Follow system", "Light", "Dark"), { prefs.themeMode }, { prefs.themeMode = it; App.applyTheme(it) })
+        choiceRow("Button style", IconStyle.LIST.map { it.second }, { IconStyle.LIST.indexOfFirst { it.first == prefs.iconStyle }.coerceAtLeast(0) },
+            { prefs.iconStyle = IconStyle.LIST[it].first })
         choiceRow("Logo", AppIcon.LIST.map { it.label }, { AppIcon.LIST.indexOfFirst { it.id == prefs.appIcon }.coerceAtLeast(0) },
             { prefs.appIcon = AppIcon.LIST[it].id; AppIcon.applyLauncher(this); toast("Address bar logo changed. The home screen icon may take a moment to follow.") })
 
