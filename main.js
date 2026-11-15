@@ -691,7 +691,18 @@ function wire(tab) {
   // Mask UA data on any popup window created from this tab (e.g. Google sign-in flow).
   // The popup's webContents is fresh and has not been through maskUserAgentData yet.
   wc.on('did-create-window', (newWin) => { maskUserAgentData(newWin.webContents); });
-  wc.on('context-menu', h((_e, params) => showContextMenu(tab, params)));
+  wc.on('context-menu', h((_e, params) => {
+    // Store the params so the ctxmenu IPC handler can use them without
+    // having to re-synthesise the event via sendInputEvent (unreliable on Wayland).
+    tab.ctxParams = params;
+    if (!S().mouse.gestures) {
+      // Gestures disabled: show immediately (no IPC will arrive to trigger it).
+      showContextMenu(tab, params);
+      tab.ctxParams = null;
+    }
+    // Gestures enabled: wait for ctxmenu IPC which arrives on mouseup after
+    // the renderer confirms no gesture was performed.
+  }));
   wc.on('found-in-page', h((_e, result) => {
     if (cur.overlayMode === 'find' && tab.id === cur.activeId) cur.overlay.webContents.send('find:result', result);
   }));
@@ -2356,6 +2367,7 @@ function setupIpc() {
   ipcMain.on('gesture', (e, g) => {
     const t = tabByWc.get(e.sender.id);
     if (!t) return;
+    t.ctxParams = null; // gesture consumed the right-drag; discard any saved context-menu params
     use(t.owner);
     if (!S().mouse.gestures || t.id !== cur.activeId) return;
     const id = GESTURES[g];
@@ -2365,7 +2377,17 @@ function setupIpc() {
     const t = tabByWc.get(e.sender.id);
     if (!t) return;
     use(t.owner);
-    if (t.id === cur.activeId) e.sender.sendInputEvent({ type: 'contextMenu', x: Math.round(x), y: Math.round(y) });
+    if (t.id !== cur.activeId) return;
+    if (t.ctxParams) {
+      // Use the params captured from wc.on('context-menu') — avoids sendInputEvent
+      // which requires the webContents to already be focused (unreliable on Wayland).
+      showContextMenu(t, t.ctxParams);
+      t.ctxParams = null;
+    } else {
+      // Fallback: params weren't captured yet (Wayland timing where contextmenu
+      // fires after mouseup, so this IPC arrives first).
+      e.sender.sendInputEvent({ type: 'contextMenu', x: Math.round(x), y: Math.round(y) });
+    }
   });
 
   // internal my:// pages (and chrome)

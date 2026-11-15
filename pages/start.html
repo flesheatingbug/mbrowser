@@ -401,15 +401,25 @@ function dialIcon(url) {
     try {
       const r = await fetch('my://dialicon?u=' + encodeURIComponent(url));
       if (!r.ok) return null;
-      const bmp = await createImageBitmap(await r.blob());
+      const blob = await r.blob();
+      // createImageBitmap fails silently on some .ico variants; fall back to <img>.
+      const bmp = await createImageBitmap(blob).catch(() => null) ??
+        await new Promise((res) => {
+          const img = new Image(), ou = URL.createObjectURL(blob);
+          img.onload = () => { URL.revokeObjectURL(ou); res(img); };
+          img.onerror = () => { URL.revokeObjectURL(ou); res(null); };
+          img.src = ou;
+        });
+      if (!bmp) return null;
+      const bw = bmp.width ?? bmp.naturalWidth, bh = bmp.height ?? bmp.naturalHeight;
       const n = 192, c = document.createElement('canvas'); c.width = c.height = n;
       const g = c.getContext('2d'); g.imageSmoothingQuality = 'high';
-      const t = document.createElement('canvas'); t.width = bmp.width; t.height = bmp.height;
+      const t = document.createElement('canvas'); t.width = bw; t.height = bh;
       const tg = t.getContext('2d'); tg.drawImage(bmp, 0, 0);
-      const alpha = [[0, 0], [bmp.width - 1, 0], [0, bmp.height - 1], [bmp.width - 1, bmp.height - 1]].map(([x, y]) => tg.getImageData(x, y, 1, 1).data[3]);
-      if (bmp.width < 64) {                 // a tiny favicon: centred on a white tile
+      const alpha = [[0, 0], [bw - 1, 0], [0, bh - 1], [bw - 1, bh - 1]].map(([x, y]) => tg.getImageData(x, y, 1, 1).data[3]);
+      if (bw < 64) {                 // a tiny favicon: centred on a white tile
         g.fillStyle = '#fff'; g.fillRect(0, 0, n, n);
-        const s = Math.min(n * 0.5, bmp.width * 3); g.drawImage(bmp, (n - s) / 2, (n - s) / 2, s, s);
+        const s = Math.min(n * 0.5, bw * 3); g.drawImage(bmp, (n - s) / 2, (n - s) / 2, s, s);
       } else if (alpha.some((a) => a < 200)) {  // transparent corners: set the icon on white
         g.fillStyle = '#fff'; g.fillRect(0, 0, n, n);
         const m = n * 0.14; g.drawImage(bmp, m, m, n - 2 * m, n - 2 * m);
