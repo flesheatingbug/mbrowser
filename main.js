@@ -2921,14 +2921,16 @@ function setupSession(ses) {
   // Registered after blocker.attach so this wins the single-listener slot; it replicas
   // the blocker's DNT logic so that functionality is not lost.
   const uaPlatHint = process.platform === 'win32' ? '"Windows"' : '"Linux"';
-  const googlePattern = /^https?:\/\/([^/]*\.)?(google\.[a-z]{2,}|gmail\.com|googleapis\.com)\//i;
+  const googlePattern = /^https?:\/\/([^/]*\.)?(google\.[a-z]{2,}|gmail\.com|googleapis\.com|gstatic\.com|googleusercontent\.com)\//i;
   const uaPlatVerHint = JSON.stringify(chromePlatformVersion());
   ses.webRequest.onBeforeSendHeaders({ urls: ['<all_urls>'] }, (details, callback) => {
     const h = details.requestHeaders;
     // DNT for all requests (mirrors blocker's removed handler)
     if (S().privacy?.doNotTrack) { h['DNT'] = '1'; h['Sec-GPC'] = '1'; }
-    // Google sign-in: replace UA client-hint headers so sign-in accepts the browser.
-    if (S().general.browserId === 'chrome' && googlePattern.test(details.url)) {
+    // Google/Gmail: always masquerade as Chrome on Google domains so Gmail and
+    // sign-in work regardless of the user's browserId setting. The JS-side
+    // Emulation.setUserAgentOverride already reports Chrome; HTTP headers must match.
+    if (googlePattern.test(details.url)) {
       // Delete both common capitalisations so the Electron brand doesn't leak alongside ours.
       ['Sec-CH-UA', 'sec-ch-ua', 'Sec-CH-UA-Mobile', 'sec-ch-ua-mobile',
        'Sec-CH-UA-Platform', 'sec-ch-ua-platform', 'Sec-CH-UA-Platform-Version',
