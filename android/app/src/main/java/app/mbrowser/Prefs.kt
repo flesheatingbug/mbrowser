@@ -14,6 +14,9 @@ class Prefs(ctx: Context) {
     private fun putB(k: String, v: Boolean) = p.edit().putBoolean(k, v).apply()
 
     // app updates
+    var translateLang: String
+        get() = str("translateLang", java.util.Locale.getDefault().language.ifEmpty { "en" })
+        set(v) = put("translateLang", v)
     var updateRepo: String
         get() = str("updateRepo", "flesheatingbug/mbrowser")
         set(v) = put("updateRepo", v.trim())

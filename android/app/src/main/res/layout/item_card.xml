@@ -3,28 +3,28 @@
     android:id="@+id/card"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:layout_margin="6dp"
+    android:layout_margin="9dp"
     android:background="@drawable/bg_card"
     android:orientation="vertical">
 
     <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:padding="6dp">
+        android:padding="5dp">
 
         <ImageView
             android:id="@+id/thumb"
             android:layout_width="match_parent"
-            android:layout_height="100dp"
+            android:layout_height="80dp"
             android:scaleType="centerCrop" />
 
         <TextView
             android:id="@+id/letter"
             android:layout_width="match_parent"
-            android:layout_height="100dp"
+            android:layout_height="80dp"
             android:gravity="center"
             android:textColor="#FFFFFF"
-            android:textSize="34sp"
+            android:textSize="28sp"
             android:textStyle="bold" />
     </FrameLayout>
 
@@ -34,13 +34,13 @@
         android:layout_height="wrap_content"
         android:gravity="center_vertical"
         android:orientation="horizontal"
-        android:paddingHorizontal="10dp"
-        android:paddingBottom="10dp">
+        android:paddingHorizontal="8dp"
+        android:paddingBottom="8dp">
 
         <ImageView
             android:id="@+id/icon"
-            android:layout_width="20dp"
-            android:layout_height="20dp"
+            android:layout_width="16dp"
+            android:layout_height="16dp"
             android:src="@drawable/ic_globe"
             android:tint="?attr/mbMuted" />
 
@@ -53,6 +53,6 @@
             android:ellipsize="end"
             android:maxLines="1"
             android:textColor="?attr/mbText"
-            android:textSize="14sp" />
+            android:textSize="12sp" />
     </LinearLayout>
 </LinearLayout>

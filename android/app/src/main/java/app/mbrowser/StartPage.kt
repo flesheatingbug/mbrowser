@@ -378,8 +378,8 @@ class StartPage(
             val host = Thumbs.hostOf(d.url)
             val label = d.title.ifBlank { host.ifEmpty { d.url } }
 
-            val widthPx = act.resources.displayMetrics.widthPixels - act.dp(20 + 12 * cols)
-            val th = ((widthPx / cols) * 0.62f).toInt()
+            val widthPx = act.resources.displayMetrics.widthPixels - act.dp(20 + 18 * cols)
+            val th = ((widthPx / cols) * 0.56f).toInt()
             h.thumb.layoutParams.height = th
             h.letter.layoutParams.height = th
 

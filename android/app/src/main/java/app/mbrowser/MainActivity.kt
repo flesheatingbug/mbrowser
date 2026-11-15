@@ -1081,12 +1081,19 @@ class MainActivity : BaseActivity() {
         }
     }
 
+    private var lastSelection = ""
+
     private fun showMenu(anchor: View) {
         val t = cur()
+        // remember what is selected on the page now: opening the menu can clear the selection
+        lastSelection = ""
+        if (t != null && !t.home) t.web.evaluateJavascript("(function(){return String(window.getSelection())})()") {
+            lastSelection = try { org.json.JSONArray("[" + (it ?: "\"\"") + "]").getString(0).trim() } catch (e: Exception) { "" }
+        }
         val m = PopupMenu(this, anchor)
         val items = listOf(
             0 to "New tab", 9 to "New private tab", 1 to "Bookmarks", 2 to "History", 3 to "Tabs from other devices", 4 to "Sync now",
-            5 to ((if (t?.desktop == true) "✓ " else "") + "Desktop site"), 10 to "Find on this page", 11 to "Passwords", 12 to "Fill saved login", 6 to "Share page", 7 to "Add to speed dial", 8 to "Settings",
+            5 to ((if (t?.desktop == true) "✓ " else "") + "Desktop site"), 10 to "Find on this page", 13 to "Translate page", 14 to "Translate selected text", 11 to "Passwords", 12 to "Fill saved login", 6 to "Share page", 7 to "Add to speed dial", 8 to "Settings",
         )
         items.forEachIndexed { i, (id, label) -> m.menu.add(0, id, i, label) }
         m.setOnMenuItemClickListener {
@@ -1108,6 +1115,12 @@ class MainActivity : BaseActivity() {
                 8 -> startActivity(Intent(this, SettingsActivity::class.java))
                 11 -> picker.launch(Intent(this, PasswordsActivity::class.java))
                 12 -> fillLogin()
+                13 -> if (t != null && !t.home) newTab(Translate.pageUrl(t.url, prefs.translateLang))
+                      else Toast.makeText(this, "Open a web page first", Toast.LENGTH_SHORT).show()
+                14 -> if (lastSelection.isNotEmpty()) newTab(Translate.textUrl(lastSelection, prefs.translateLang))
+                      else promptFields(this, "Translate text", listOf("Type or paste text (or select some on a page first)"), listOf(""), "Translate") { v ->
+                          if (v[0].isNotBlank()) newTab(Translate.textUrl(v[0], prefs.translateLang))
+                      }
                 10 -> if (t != null && !t.home) openFind() else Toast.makeText(this, "Open a web page first", Toast.LENGTH_SHORT).show()
             }
             true

@@ -22,6 +22,7 @@ class SettingsActivity : BaseActivity() {
     private lateinit var prefs: Prefs
     private lateinit var box: LinearLayout
     private val ui = Handler(Looper.getMainLooper())
+    private var query = ""
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -48,6 +49,23 @@ class SettingsActivity : BaseActivity() {
         top.setBackgroundColor(tc(R.attr.mbBar))
         top.setPadding(dp(16), dp(18), dp(16), dp(18))
         box.addView(top)
+        val search = android.widget.EditText(this)
+        search.hint = "Search settings"
+        search.setSingleLine()
+        search.setText(query)
+        search.setTextColor(tc(R.attr.mbText)); search.setHintTextColor(tc(R.attr.mbMuted))
+        search.setPadding(dp(16), dp(12), dp(16), dp(12))
+        search.setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_search, 0, 0, 0)
+        search.compoundDrawablePadding = dp(10)
+        search.compoundDrawableTintList = tcl(R.attr.mbMuted)
+        val sl = LinearLayout.LayoutParams(-1, -2); sl.setMargins(dp(12), dp(10), dp(12), dp(2))
+        search.setBackgroundResource(R.drawable.bg_chip)
+        box.addView(search, sl)
+        search.addTextChangedListener(object : android.text.TextWatcher {
+            override fun afterTextChanged(s: android.text.Editable?) { query = s?.toString() ?: ""; applyFilter() }
+            override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
+            override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
+        })
 
         header("Sync")
         accountRows()
@@ -113,14 +131,22 @@ class SettingsActivity : BaseActivity() {
             Thumbs.clear(this); toast("Thumbnails cleared")
         }
 
+        choiceRow("Translate to", Translate.LANGS.map { it.second }, { Translate.LANGS.indexOfFirst { it.first == prefs.translateLang }.coerceAtLeast(0) },
+            { prefs.translateLang = Translate.LANGS[it].first })
+
         header("About")
         actionRow("mbrowser for Android", "Build ${Updater.current(this)}. Syncs with your own mbrowser server.") { }
+        actionRow("Source code on GitHub", "github.com/${prefs.updateRepo}") {
+            try { startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://github.com/" + prefs.updateRepo))) }
+            catch (e: Exception) { toast("No app can open the link") }
+        }
         actionRow("Check for updates", "Looks for a newer build now") { Updater.checkAndPrompt(this, true) }
         switchRow("Check for updates automatically", "Notifies you when a new build is ready", { prefs.updateAuto }, { prefs.updateAuto = it })
         actionRow("Update source", prefs.updateRepo + (if (prefs.updateToken.isEmpty()) "" else "  ·  access token set")) {
             promptFields(this, "Update source", listOf("GitHub repository (owner/name)", "Access token (only for a private repository)"),
                 listOf(prefs.updateRepo, prefs.updateToken)) { v -> prefs.updateRepo = v[0]; prefs.updateToken = v[1]; build() }
         }
+        applyFilter()
     }
 
     private val loginLauncher = registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()) {
@@ -169,9 +195,27 @@ class SettingsActivity : BaseActivity() {
         }
     }
 
+    // ---------- search ----------
+    private val HEADER = "#header"
+    private fun applyFilter() {
+        val q = query.trim().lowercase()
+        var header: View? = null
+        var shown = 0
+        fun close() { header?.visibility = if (q.isEmpty() || shown > 0) View.VISIBLE else View.GONE }
+        for (i in 2 until box.childCount) { // 0 = title, 1 = search box
+            val v = box.getChildAt(i)
+            if (v.tag == HEADER) { close(); header = v; shown = 0; continue }
+            val ok = q.isEmpty() || ((v.tag as? String) ?: "").contains(q)
+            v.visibility = if (ok) View.VISIBLE else View.GONE
+            if (ok) shown++
+        }
+        close()
+    }
+
     // ---------- row helpers ----------
     private fun header(t: String) {
         val v = TextView(this)
+        v.tag = HEADER
         v.text = t
         v.textSize = 13f
         v.typeface = Typeface.DEFAULT_BOLD
@@ -185,6 +229,7 @@ class SettingsActivity : BaseActivity() {
         r.orientation = LinearLayout.VERTICAL
         r.setPadding(dp(16), dp(12), dp(16), dp(12))
         r.setBackgroundColor(tc(R.attr.mbCard))
+        r.tag = (title + " " + (sub ?: "")).lowercase()
         val t = TextView(this)
         t.text = title; t.textSize = 16f; t.setTextColor(tc(R.attr.mbText))
         r.addView(t)
