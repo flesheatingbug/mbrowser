@@ -9,6 +9,7 @@ class App : Application() {
         Store.init(this)
         Settings.init(this)
         applyTheme(Prefs(this).themeMode)
+        AdBlock.init(this)
         try {
             androidx.work.WorkManager.getInstance(this).enqueueUniquePeriodicWork("updates",
                 androidx.work.ExistingPeriodicWorkPolicy.KEEP,

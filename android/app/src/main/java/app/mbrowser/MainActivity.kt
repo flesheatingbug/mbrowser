@@ -80,6 +80,19 @@ class MainActivity : AppCompatActivity() {
       document.addEventListener('touchstart',function(e){try{mbNative.blockRefresh(bad(e.target));}catch(x){}},{passive:true,capture:true});
       document.addEventListener('touchend',function(){try{mbNative.blockRefresh(false);}catch(x){}},{passive:true,capture:true});
     })();"""
+    // Hides the page's ad elements using the filter lists (asked for in small batches through the bridge).
+    private val HIDE_JS = """(function(){if(window.__mbCos)return;window.__mbCos=1;
+      var st=document.createElement('style');(document.head||document.documentElement).appendChild(st);
+      var sI={},sC={};
+      function run(first){var ids=[],cls=[];var els=document.querySelectorAll('[id],[class]');
+        for(var i=0;i<els.length&&i<6000;i++){var e=els[i];if(e.id&&!sI[e.id]){sI[e.id]=1;ids.push(e.id);}
+          var c=e.classList;for(var j=0;c&&j<c.length;j++){if(!sC[c[j]]){sC[c[j]]=1;cls.push(c[j]);}}}
+        if(!first&&!ids.length&&!cls.length)return;
+        try{var css=mbNative.cosmetic(location.hostname,JSON.stringify(ids),JSON.stringify(cls),first?1:0);
+          if(css)st.appendChild(document.createTextNode(css));}catch(x){}}
+      run(true);var t=null;
+      try{new MutationObserver(function(){clearTimeout(t);t=setTimeout(function(){run(false)},400);}).observe(document.documentElement,{childList:true,subtree:true});}catch(x){}
+    })();"""
     private val PRIVATE_PROFILE = "private"
     private val ACTION_CLOSE_PRIVATE = "app.mbrowser.CLOSE_PRIVATE"
     private val NOTICE_ID = 42
@@ -477,6 +490,28 @@ class MainActivity : AppCompatActivity() {
     // ---------- tabs ----------
     private fun cur(): Tab? = tabs.getOrNull(current)
 
+    /** Guesses what kind of resource a request is (the filter rules often depend on it); 0 when unknown. */
+    private fun requestType(r: WebResourceRequest): Int {
+        val ext = (r.url.path ?: "").lowercase().substringAfterLast('.', "")
+        return when {
+            ext == "js" || ext == "mjs" -> AdBlock.T_SCRIPT
+            ext in setOf("png", "jpg", "jpeg", "gif", "webp", "svg", "ico", "avif", "bmp") -> AdBlock.T_IMAGE
+            ext == "css" -> AdBlock.T_STYLE
+            ext in setOf("woff", "woff2", "ttf", "otf") -> AdBlock.T_FONT
+            ext in setOf("mp4", "webm", "mp3", "m4a", "ogg", "m3u8", "ts") -> AdBlock.T_MEDIA
+            else -> {
+                val acc = r.requestHeaders["Accept"] ?: ""
+                when {
+                    acc.contains("text/html") -> AdBlock.T_SUBDOC
+                    acc.startsWith("image/") -> AdBlock.T_IMAGE
+                    acc.contains("text/css") -> AdBlock.T_STYLE
+                    r.requestHeaders["X-Requested-With"] == "XMLHttpRequest" -> AdBlock.T_XHR
+                    else -> 0
+                }
+            }
+        }
+    }
+
     private fun applyWebSettings() {
         swipe.isEnabled = prefs.pullRefresh
         for (t in tabs) {
@@ -534,7 +569,7 @@ class MainActivity : AppCompatActivity() {
 
             override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
                 if (prefs.blockTrackers && !request.isForMainFrame &&
-                    Blocker.shouldBlock(request.url.host, Thumbs.hostOf(tab.url))) {
+                    AdBlock.shouldBlock(request.url.toString(), Thumbs.hostOf(tab.url), requestType(request))) {
                     return WebResourceResponse("text/plain", "utf-8", ByteArrayInputStream(ByteArray(0)))
                 }
                 return null
@@ -546,10 +581,15 @@ class MainActivity : AppCompatActivity() {
                 if (tab === cur()) { urlBar.setText(url); progress.visibility = View.VISIBLE; updateChrome() }
             }
 
+            override fun onPageCommitVisible(view: WebView, url: String) {
+                if (prefs.blockTrackers && !url.startsWith("about:")) view.evaluateJavascript(HIDE_JS, null)
+            }
+
             override fun onPageFinished(view: WebView, url: String) {
                 if (url.startsWith("about:")) return
                 if (tab.fresh) { tab.fresh = false; view.clearHistory() }
                 view.evaluateJavascript(DRAG_GUARD_JS, null)
+                if (prefs.blockTrackers) view.evaluateJavascript(HIDE_JS, null)
                 tab.url = url
                 tab.title = view.title ?: ""
                 if (!tab.priv) Store.addVisit(url, tab.title)
@@ -557,7 +597,16 @@ class MainActivity : AppCompatActivity() {
                 ui.postDelayed({ afterLoad(tab, url) }, 1500)
             }
         }
-        w.addJavascriptInterface(object { @JavascriptInterface fun blockRefresh(b: Boolean) { refreshBlocked = b } }, "mbNative")
+        w.addJavascriptInterface(object {
+            @JavascriptInterface fun blockRefresh(b: Boolean) { refreshBlocked = b }
+            @JavascriptInterface fun cosmetic(host: String, ids: String, classes: String, first: Int): String {
+                if (!prefs.blockTrackers) return ""
+                return try {
+                    fun list(j: String): List<String> { val a = org.json.JSONArray(j); return (0 until a.length()).map { a.getString(it) } }
+                    AdBlock.cosmeticCss(host, list(ids), list(classes), first == 1)
+                } catch (_: Exception) { "" }
+            }
+        }, "mbNative")
         w.setOnTouchListener { _, ev -> if (ev.actionMasked == MotionEvent.ACTION_DOWN) refreshBlocked = false; false }
         w.webChromeClient = object : WebChromeClient() {
             override fun onProgressChanged(view: WebView, newProgress: Int) {

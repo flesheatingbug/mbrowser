@@ -12,6 +12,7 @@ import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.GridLayoutManager
+import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.RecyclerView
 import org.json.JSONArray
 import org.json.JSONObject
@@ -32,6 +33,7 @@ class StartPage(
     private val grid: RecyclerView = root.findViewById(R.id.grid)
     private val crumb: TextView = root.findViewById(R.id.crumb)
     private val ADD = Any()
+    private var reorder = false             // rearranging: touch and hold a tile, then drag it
     private val path = ArrayList<Int>()     // indexes of the folders we are inside, within the current dial
 
     private class Dial(val index: Int, val title: String, val url: String, val folder: Boolean, val count: Int)
@@ -39,6 +41,44 @@ class StartPage(
     init {
         root.findViewById<ImageButton>(R.id.btnTune).setOnClickListener { tuneMenu() }
         crumb.setOnClickListener { up() }
+        val helper = ItemTouchHelper(object : ItemTouchHelper.Callback() {
+            override fun isLongPressDragEnabled() = reorder
+            override fun isItemViewSwipeEnabled() = false
+            override fun getMovementFlags(rv: RecyclerView, vh: RecyclerView.ViewHolder): Int =
+                if (reorder && vh is Adapter.CardVH) makeMovementFlags(
+                    ItemTouchHelper.UP or ItemTouchHelper.DOWN or ItemTouchHelper.LEFT or ItemTouchHelper.RIGHT, 0) else 0
+            override fun canDropOver(rv: RecyclerView, cur: RecyclerView.ViewHolder, target: RecyclerView.ViewHolder) = target is Adapter.CardVH
+            override fun onMove(rv: RecyclerView, vh: RecyclerView.ViewHolder, target: RecyclerView.ViewHolder): Boolean {
+                if (target !is Adapter.CardVH) return false
+                (rv.adapter as? Adapter)?.move(vh.bindingAdapterPosition, target.bindingAdapterPosition); return true
+            }
+            override fun onSwiped(vh: RecyclerView.ViewHolder, direction: Int) {}
+            override fun onSelectedChanged(vh: RecyclerView.ViewHolder?, state: Int) {
+                super.onSelectedChanged(vh, state)
+                if (state == ItemTouchHelper.ACTION_STATE_DRAG) vh?.itemView?.alpha = 0.7f
+            }
+            override fun clearView(rv: RecyclerView, vh: RecyclerView.ViewHolder) {
+                super.clearView(rv, vh)
+                vh.itemView.alpha = 1f
+                (rv.adapter as? Adapter)?.let { saveOrder(it) }
+            }
+        })
+        helper.attachToRecyclerView(grid)
+    }
+
+    /** Writes the tiles' new order back to the dial list (the indexes change, so the grid is rebuilt afterwards). */
+    private fun saveOrder(a: Adapter) {
+        val order = a.items.filterIsInstance<Dial>().map { it.index }
+        if (order == order.sorted()) return
+        val p = ArrayList(path)
+        edit { sp ->
+            val arr = listAt(sp, a.groupId, p) ?: return@edit
+            val objs = (0 until arr.length()).map { arr.get(it) }
+            val ordered = order.mapNotNull { objs.getOrNull(it) } + objs.filterIndexed { i, _ -> i !in order }
+            while (arr.length() > 0) arr.remove(0)
+            for (o in ordered) arr.put(o)
+        }
+        grid.post { refresh() }
     }
 
     fun resetPath() { path.clear() }
@@ -139,7 +179,7 @@ class StartPage(
         }
 
         val items = ArrayList<Any>(itemsOf(sp, cur, path))
-        if (prefs.showAdd) items.add(ADD)
+        if (prefs.showAdd || reorder) items.add(ADD)
         val cols = prefs.dialCols.coerceIn(2, 5)
         grid.layoutManager = GridLayoutManager(act, cols)
         grid.adapter = Adapter(items, cols, cur, sp.optBoolean("thumbnails", true))
@@ -172,10 +212,15 @@ class StartPage(
         }
     }
 
+    private fun startReorder() {
+        reorder = true; refresh()
+        android.widget.Toast.makeText(act, "Touch and hold a tile, then drag it. Tap Done when finished.", android.widget.Toast.LENGTH_LONG).show()
+    }
+
     private fun itemMenu(d: Dial, groupId: String) {
         val p = ArrayList(path)
-        val opts = if (d.folder) arrayOf("Open", "Rename", "Move to…", "Delete folder")
-        else arrayOf("Open in new tab", "Edit", "Move to…", "Remove")
+        val opts = if (d.folder) arrayOf("Open", "Rename", "Move to…", "Delete folder", "Rearrange")
+        else arrayOf("Open in new tab", "Edit", "Move to…", "Remove", "Rearrange")
         AlertDialog.Builder(act).setTitle(d.title.ifBlank { d.url }).setItems(opts) { _, i ->
             when (i) {
                 0 -> if (d.folder) { path.add(d.index); refresh() } else open(d.url, true)
@@ -188,6 +233,7 @@ class StartPage(
                     }
                 }
                 2 -> moveItem(d, groupId, p)
+                4 -> startReorder()
                 3 -> {
                     val doIt = { edit { sp -> listAt(sp, groupId, p)?.remove(d.index) }; refresh() }
                     if (d.folder && d.count > 0) AlertDialog.Builder(act).setMessage("Delete “${d.title}” and the ${d.count} items in it?")
@@ -247,6 +293,7 @@ class StartPage(
             (if (thumbs) "✓ " else "") + "Show thumbnails",
             (if (prefs.showAdd) "✓ " else "") + "Show Add button",
             "More settings…",
+            "Rearrange speed dial",
         )
         AlertDialog.Builder(act).setTitle("Speed dial").setItems(opts) { _, i ->
             when (i) {
@@ -278,12 +325,13 @@ class StartPage(
                 6 -> { Settings.setThumbnails(!thumbs); refresh() }
                 7 -> { prefs.showAdd = !prefs.showAdd; refresh() }
                 8 -> openSettings()
+                9 -> startReorder()
             }
         }.show()
     }
 
     // ---------- grid ----------
-    private inner class Adapter(val items: List<Any>, val cols: Int, val groupId: String, val thumbsOn: Boolean) :
+    private inner class Adapter(val items: MutableList<Any>, val cols: Int, val groupId: String, val thumbsOn: Boolean) :
         RecyclerView.Adapter<RecyclerView.ViewHolder>() {
         private val inflater = LayoutInflater.from(act)
 
@@ -297,6 +345,11 @@ class StartPage(
         }
         inner class AddVH(v: View) : RecyclerView.ViewHolder(v)
 
+        fun move(from: Int, to: Int) {
+            if (from < 0 || to < 0 || from >= items.size || to >= items.size) return
+            items.add(to, items.removeAt(from)); notifyItemMoved(from, to)
+        }
+
         override fun getItemViewType(position: Int) = if (items[position] === ADD) 1 else 0
         override fun getItemCount() = items.size
 
@@ -306,8 +359,18 @@ class StartPage(
         }
 
         override fun onBindViewHolder(h: RecyclerView.ViewHolder, pos: Int) {
+            bind(h, pos)
+            if (reorder && h is CardVH) {
+                h.itemView.setOnClickListener(null); h.itemView.setOnLongClickListener(null)
+                h.itemView.isClickable = false; h.itemView.isLongClickable = false
+            }
+        }
+
+        private fun bind(h: RecyclerView.ViewHolder, pos: Int) {
             if (h is AddVH) {
-                h.itemView.findViewById<View>(R.id.addPill).setOnClickListener { addMenu(groupId) }
+                val pill = h.itemView.findViewById<TextView>(R.id.addPill)
+                if (reorder) { pill.text = "Done"; pill.setOnClickListener { reorder = false; refresh() } }
+                else { pill.text = "Add"; pill.setOnClickListener { addMenu(groupId) } }
                 return
             }
             h as CardVH

@@ -90,7 +90,11 @@ class SettingsActivity : AppCompatActivity() {
             { listOf(80, 100, 120, 150).indexOf(prefs.textZoom).coerceAtLeast(1) },
             { prefs.textZoom = listOf(80, 100, 120, 150)[it] })
         switchRow("Pull down to refresh", "Off if it gets in the way of pages with their own drag gestures", { prefs.pullRefresh }, { prefs.pullRefresh = it })
-        switchRow("Block trackers and ads", "Drops requests to a built-in list of tracker domains", { prefs.blockTrackers }, { prefs.blockTrackers = it })
+        switchRow("Block ads and trackers", "Uses the EasyList, EasyPrivacy and uBlock filter lists", { prefs.blockTrackers }, { prefs.blockTrackers = it })
+        actionRow("Filter lists", AdBlock.status + "\nTap to update now") {
+            toast("Updating the filter lists…")
+            Thread { val m = AdBlock.download(this); runOnUiThread { toast(m); build() } }.start()
+        }
 
         header("Privacy and data")
         actionRow("Clear history", null) { confirm("Clear all browsing history on this device?") { Store.clearHistory(); toast("History cleared") } }
