@@ -226,7 +226,7 @@ async function promptInstallUpdate(info) {
       type: 'info', title: 'Update available', message: msg,
       buttons: ['See release changes', 'Later'], defaultId: 0,
     });
-    if (response === 0) shell.openExternal(releaseUrl);
+    if (response === 0) newTab(releaseUrl);
     return;
   }
   const { response } = await dialog.showMessageBox({
@@ -235,7 +235,7 @@ async function promptInstallUpdate(info) {
     buttons: ['Update now', 'See release changes', 'Later'], defaultId: 0,
   });
   if (response === 2) return;
-  if (response === 1) { shell.openExternal(releaseUrl); return; }
+  if (response === 1) { newTab(releaseUrl); return; }
   // Update now — download and apply immediately
   if (isAppImage) {
     await silentAppImageUpdate(info, true);
@@ -2614,7 +2614,7 @@ function setupIpc() {
       const assetName = isWin ? 'mbrowser-windows-setup.exe' : 'mbrowser-linux.AppImage';
       const asset = (j.assets || []).find((a) => a.name === assetName);
       const downloadUrl = asset?.browser_download_url || j.html_url;
-      return { build: remote, currentBuild: BUILD_NUMBER, url: downloadUrl, canInstall: !!(asset && (isWin || isAppImage)) };
+      return { build: remote, currentBuild: BUILD_NUMBER, url: downloadUrl, releaseUrl: j.html_url, canInstall: !!(asset && (isWin || isAppImage)) };
     } catch (e) {
       return { error: e.message };
     }
@@ -2622,7 +2622,7 @@ function setupIpc() {
   handle('app:auto-install', async (e, info) => {
     const isWin = process.platform === 'win32';
     const isAppImage = !!process.env.APPIMAGE;
-    if (!info.canInstall) { newTab(info.url); return { ok: true }; }
+    if (!info.canInstall) { newTab(info.releaseUrl || info.url); return { ok: true }; }
     if (isAppImage && _pendingUpdatePath) {
       try { moveFile(_pendingUpdatePath, process.env.APPIMAGE); } catch { /* ignore if already moved */ }
       app.relaunch({ execPath: process.env.APPIMAGE });

@@ -580,7 +580,7 @@
         if (info.upToDate) { updateMsg.textContent = `You’re up to date (build ${info.build}).`; return; }
         updateMsg.textContent = `Build ${info.build} is available.`;
         pendingInfo = info;
-        const ib = el('button', 'install-btn', info.canInstall ? 'Install now' : 'Open download page');
+        const ib = el('button', 'install-btn', info.canInstall ? 'Update now' : 'See release changes');
         ib.onclick = async () => {
           ib.disabled = true;
           if (info.canInstall) {
@@ -590,9 +590,9 @@
             browser.offDlProgress();
             ib.textContent = 'Installing…';
           } else {
-            ib.textContent = 'Opening…';
-            await browser.appAutoInstall(pendingInfo);
-            ib.disabled = false; ib.textContent = 'Open download page';
+            const releaseUrl = info.releaseUrl || 'https://github.com/flesheatingbug/mbrowser/releases/tag/latest-desktop';
+            browser.openUrl(releaseUrl, 'tab');
+            ib.disabled = false; ib.textContent = 'See release changes';
           }
         };
         updateRow.append(ib);

@@ -55,8 +55,8 @@
   body.vertical #newtab { text-align:left; height:32px; }
 
   /* ---- toolbar ---- */
-  #bar { display:flex; gap:6px; padding:6px 6px 0; background:var(--active); height:50px; align-items:center; flex-wrap:wrap; }
-  #dl-bar { height:3px; background:var(--accent); width:0%; transition:width .4s ease; opacity:0; flex:0 0 100%; margin:0 -6px; }
+  #bar { display:flex; gap:6px; padding:6px 6px 0; background:var(--active); height:50px; align-items:center; position:relative; }
+  #dl-bar { position:absolute; bottom:0; left:0; height:3px; background:var(--accent); width:0%; transition:width .3s ease; opacity:0; pointer-events:none; }
   #dl-bar.active { opacity:1; }
   #bar button { background:none; border:0; color:var(--fg); font-size:16px; min-width:34px; height:34px;
     border-radius:6px; cursor:pointer; position:relative; }
