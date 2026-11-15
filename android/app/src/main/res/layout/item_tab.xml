@@ -29,7 +29,7 @@
             android:ellipsize="end"
             android:maxLines="1"
             android:textColor="?attr/mbText"
-            android:textSize="13sp" />
+            android:textSize="12sp" />
 
         <ImageButton
             android:id="@+id/close"

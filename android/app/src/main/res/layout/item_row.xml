@@ -28,7 +28,7 @@
             android:ellipsize="end"
             android:maxLines="1"
             android:textColor="?attr/mbText"
-            android:textSize="16sp" />
+            android:textSize="14sp" />
 
         <TextView
             android:id="@+id/sub"
@@ -37,6 +37,6 @@
             android:ellipsize="end"
             android:maxLines="1"
             android:textColor="?attr/mbMuted"
-            android:textSize="12sp" />
+            android:textSize="11sp" />
     </LinearLayout>
 </LinearLayout>

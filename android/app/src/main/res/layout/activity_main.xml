@@ -239,7 +239,7 @@
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
                         android:textColor="?attr/mbText"
-                        android:textSize="26sp" />
+                        android:textSize="20sp" />
 
                     <ImageButton android:id="@+id/switcherSearch" android:layout_width="48dp" android:layout_height="48dp"
                         android:background="?attr/selectableItemBackgroundBorderless" android:contentDescription="Search tabs"
