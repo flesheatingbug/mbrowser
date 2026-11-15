@@ -478,7 +478,7 @@ class StartPage(
                     val wpx = act.resources.displayMetrics.widthPixels - act.dp(20 + 18 * cols)
                     val sz = minOf(act.dp(78), ((wpx / cols) * 0.8f).toInt())
                     pill.minWidth = 0; pill.minHeight = 0
-                    pill.layoutParams = FrameLayout.LayoutParams(sz, sz, Gravity.TOP or Gravity.CENTER_HORIZONTAL)
+                    pill.layoutParams = FrameLayout.LayoutParams(sz, sz, Gravity.TOP or Gravity.CENTER_HORIZONTAL).also { it.topMargin = act.dp(14) }   // the cards start 9dp margin + 5dp padding down
                     pill.setPadding(0, 0, 0, act.dp(4))
                     pill.contentDescription = "Add speed dial"
                 } else {
