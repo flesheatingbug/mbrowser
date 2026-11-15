@@ -121,6 +121,8 @@ class ServerLoginActivity : BaseActivity() {
     }
 
     // ---------- account sign-in ----------
+    private var loginBody: JSONObject? = null   // kept for servers that list profiles without a ticket, so the pick can sign in again
+
     private fun signIn() {
         val base = server.text.toString().trim().trimEnd('/')
         val name = user.text.toString().trim()
@@ -132,6 +134,7 @@ class ServerLoginActivity : BaseActivity() {
             val c = code.text.toString().trim()
             if (useRecovery) body.put("recovery", c) else body.put("totp", c)
         }
+        loginBody = JSONObject(body.toString())
         Executors.newSingleThreadExecutor().execute {
             var result: Login.Result? = null
             var err = ""
@@ -153,6 +156,8 @@ class ServerLoginActivity : BaseActivity() {
                 rebuildKeeping(base, name)
             }
             r.code !in 200..299 -> status.text = j.optString("error", "Sign-in failed (HTTP ${r.code})")
+            j.optBoolean("needProfile") && !j.has("ticket") ->
+                showProfiles(base, name, "", j.optJSONArray("profiles"))
             j.has("ticket") -> showProfiles(base, j.optJSONObject("user")?.optString("username") ?: name, j.optString("ticket"), j.optJSONArray("profiles"))
             j.has("token") -> {
                 // an older server that signs straight in without listing profiles
@@ -210,7 +215,14 @@ class ServerLoginActivity : BaseActivity() {
 
     private fun postPick(base: String, username: String, ticket: String, what: JSONObject, msg: TextView) {
         msg.text = "Working…"
-        val body = what.put("ticket", ticket).put("device", prefs.device)
+        val body = if (ticket.isNotEmpty()) what.put("ticket", ticket).put("device", prefs.device)
+        else {
+            // this server has no ticket step: sign in again with the same details, now naming the profile
+            val b = JSONObject(loginBody?.toString() ?: "{}")
+            b.remove("list")
+            if (what.has("create")) b.put("profile", what.optString("create")).put("create", true) else b.put("profile", what.optString("profile"))
+            b
+        }
         Executors.newSingleThreadExecutor().execute {
             var result: Login.Result? = null
             var err = ""
