@@ -116,14 +116,23 @@ if (app.userAgentFallback) {
 // and affects every request that bypasses the per-session setUserAgent() call (service workers,
 // background fetches, auth popups before our CDP mask runs, etc.). ses.setUserAgent() still
 // overrides this for user-settable browserId modes (firefox, safari, none).
+// The identity chosen in Settings, read now because Chromium switches must be set before it starts.
+const EARLY_ID = (() => {
+  try { return JSON.parse(fs.readFileSync(path.join(app.getPath('userData'), 'settings.json'), 'utf8')).general?.browserId || 'chrome'; } catch { return 'chrome'; }
+})();
 {
-  const _uaPlat = process.platform === 'win32' ? '(Windows NT 10.0; Win64; x64)' : '(X11; Linux x86_64)';
+  const _win = process.platform === 'win32';
+  const _uaPlat = _win ? '(Windows NT 10.0; Win64; x64)' : '(X11; Linux x86_64)';
   const _uaChr = process.versions.chrome || '130.0.0.0';
-  app.commandLine.appendSwitch('user-agent',
-    `Mozilla/5.0 ${_uaPlat} AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${_uaChr} Safari/537.36`);
+  let _ua = `Mozilla/5.0 ${_uaPlat} AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${_uaChr} Safari/537.36`;
+  if (EARLY_ID === 'firefox') _ua = `Mozilla/5.0 (${_win ? 'Windows NT 10.0; Win64; x64' : 'X11; Linux x86_64'}; rv:140.0) Gecko/20100101 Firefox/140.0`;
+  else if (EARLY_ID === 'safari') _ua = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.6 Safari/605.1.15';
+  if (EARLY_ID !== 'none') app.commandLine.appendSwitch('user-agent', _ua);
 }
-// silences the harmless "--ozone-platform=wayland is not compatible with Vulkan" message
-app.commandLine.appendSwitch('disable-features', 'Vulkan');
+// silences the harmless "--ozone-platform=wayland is not compatible with Vulkan" message.
+// Firefox and Safari have no "client hints" (navigator.userAgentData, Sec-CH-UA headers), so for those identities the feature is switched off
+// instead of faked: a faked one is easy to detect, a missing one is exactly what a real Firefox looks like.
+app.commandLine.appendSwitch('disable-features', EARLY_ID === 'firefox' || EARLY_ID === 'safari' ? 'Vulkan,UserAgentClientHint' : 'Vulkan');
 // prevent navigator.webdriver from being set (some Chromium builds set it when DevTools attaches)
 app.commandLine.appendSwitch('disable-blink-features', 'AutomationControlled');
 
@@ -500,7 +509,7 @@ function isAuthHost(url) {
 function maskUserAgentData(wc) {
   // Override navigator.userAgentData via CDP so Google sign-in doesn't see "Electron" in the brand list.
   // ses.setUserAgent() patches navigator.userAgent but not the Client Hints API.
-  if (S().general.browserId === 'none') return;
+  if (S().general.browserId !== 'chrome') return;   // only the Chrome identity is faked; the others are left exactly as they are
   // Don't bail on attach failure (e.g. debugger already attached by DevTools) — just send the command anyway.
   try { wc.debugger.attach('1.3'); } catch { /* already attached is fine */ }
   const plat = process.platform === 'win32' ? 'Windows' : 'Linux';
@@ -3018,7 +3027,7 @@ function chromePlatformVersion() {
 }
 function uaForMode(mode) {
   const win = process.platform === 'win32';
-  if (mode === 'firefox') return win ? 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:132.0) Gecko/20100101 Firefox/132.0' : 'Mozilla/5.0 (X11; Linux x86_64; rv:132.0) Gecko/20100101 Firefox/132.0';
+  if (mode === 'firefox') return win ? 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0' : 'Mozilla/5.0 (X11; Linux x86_64; rv:140.0) Gecko/20100101 Firefox/140.0';
   if (mode === 'safari') return 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.6 Safari/605.1.15';
   if (mode === 'none') return app.userAgentFallback;
   return `Mozilla/5.0 ${win ? '(Windows NT 10.0; Win64; x64)' : '(X11; Linux x86_64)'} AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${CHROME_VER} Safari/537.36`;
@@ -3079,7 +3088,7 @@ function setupSession(ses) {
     // Google/Gmail: always masquerade as Chrome on Google domains so Gmail and
     // sign-in work regardless of the user's browserId setting. The JS-side
     // Emulation.setUserAgentOverride already reports Chrome; HTTP headers must match.
-    if (googlePattern.test(details.url)) {
+    if (S().general.browserId === 'chrome' && googlePattern.test(details.url)) {
       // Delete both common capitalisations so the Electron brand doesn't leak alongside ours.
       ['Sec-CH-UA', 'sec-ch-ua', 'Sec-CH-UA-Mobile', 'sec-ch-ua-mobile',
        'Sec-CH-UA-Platform', 'sec-ch-ua-platform', 'Sec-CH-UA-Platform-Version',

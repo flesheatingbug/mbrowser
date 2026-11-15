@@ -142,6 +142,8 @@ if (/^https?:$/.test(location.protocol)) {
   const chromeVer = process.versions.chrome || '130.0.6723.117';
   const chromeMajor = chromeVer.split('.')[0];
   webFrame.executeJavaScript(`(function(){
+    // only for the Chrome identity: with Firefox or Safari nothing is faked
+    if (!/ Chrome\\//.test(navigator.userAgent)) return;
     var brands = [
       {brand:'Not?A_Brand',version:'8'},
       {brand:'Chromium',version:'${chromeMajor}'},
