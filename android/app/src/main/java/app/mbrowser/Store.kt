@@ -65,11 +65,11 @@ object Store {
         File(dir, "bookmarks.json").writeText(a.toString())
     }
 
-    @Synchronized
     // history is written in the background, a moment after the last change, so a long history never slows down page loads
     private val saver = java.util.concurrent.Executors.newSingleThreadScheduledExecutor()
     private var pendingSave: java.util.concurrent.ScheduledFuture<*>? = null
 
+    @Synchronized
     private fun saveHistory() {
         pendingSave?.cancel(false)
         pendingSave = saver.schedule({
