@@ -1,12 +1,26 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/rootFrame"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="?attr/mbBar">
+
+    <ImageView
+        android:id="@+id/wallpaper"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:scaleType="centerCrop"
+        android:visibility="gone" />
+
+<LinearLayout
+    android:id="@+id/content"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="?attr/mbBg"
-    android:fitsSystemWindows="true"
     android:orientation="vertical">
 
     <LinearLayout
+        android:id="@+id/topBar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:background="?attr/mbBar"
@@ -285,47 +299,11 @@
     </FrameLayout>
 
     <LinearLayout
+        android:id="@+id/bottomBar"
         android:layout_width="match_parent"
         android:layout_height="56dp"
         android:background="?attr/mbBar"
         android:gravity="center"
-        android:orientation="horizontal">
-
-        <ImageButton android:id="@+id/btnDownloads" style="@style/BarButton"
-            android:contentDescription="Downloads" android:src="@drawable/ic_download" />
-        <ImageButton android:id="@+id/btnBack" style="@style/BarButton"
-            android:contentDescription="Back" android:src="@drawable/ic_back" />
-        <ImageButton android:id="@+id/btnHome" style="@style/BarButton"
-            android:contentDescription="Home" android:src="@drawable/ic_home" />
-        <ImageButton android:id="@+id/btnForward" style="@style/BarButton"
-            android:contentDescription="Forward" android:src="@drawable/ic_forward" />
-
-        <FrameLayout
-            android:id="@+id/btnTabs"
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_weight="1"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="Tabs">
-
-            <ImageView
-                android:id="@+id/tabsIcon"
-                android:layout_width="26dp"
-                android:layout_height="26dp"
-                android:layout_gravity="center"
-                android:src="@drawable/ic_tabs"
-                android:tint="?attr/mbText" />
-
-            <TextView
-                android:id="@+id/tabCount"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_gravity="center"
-                android:text="1"
-                android:textColor="?attr/mbText"
-                android:textSize="12sp"
-                android:textStyle="bold" />
-        </FrameLayout>
-
-    </LinearLayout>
+        android:orientation="horizontal" />
 </LinearLayout>
+</FrameLayout>

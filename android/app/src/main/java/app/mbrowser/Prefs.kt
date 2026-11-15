@@ -14,6 +14,18 @@ class Prefs(ctx: Context) {
     private fun putB(k: String, v: Boolean) = p.edit().putBoolean(k, v).apply()
 
     // app updates
+    var wallpaper: String
+        get() = str("wallpaper", "none")
+        set(v) = put("wallpaper", v)
+    var dialStyle: String
+        get() = str("dialStyle", "cards")
+        set(v) = put("dialStyle", v)
+    var toolbarPreset: String
+        get() = str("toolbarPreset", "classic")
+        set(v) = put("toolbarPreset", v)
+    var toolbarCustom: String
+        get() = str("toolbarCustom", "back,forward,home,tabs")
+        set(v) = put("toolbarCustom", v)
     var iconStyle: String
         get() = str("iconStyle", "minimal")
         set(v) = put("iconStyle", v)

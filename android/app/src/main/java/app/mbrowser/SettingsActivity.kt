@@ -10,6 +10,7 @@ import androidx.activity.OnBackPressedCallback
 import android.widget.EditText
 import android.widget.ImageView
 import android.widget.ImageButton
+import android.widget.FrameLayout
 import android.widget.HorizontalScrollView
 import android.graphics.drawable.GradientDrawable
 import android.view.ViewGroup
@@ -184,6 +185,140 @@ class SettingsActivity : BaseActivity() {
         box.addView(r, LinearLayout.LayoutParams(-1, -2))
     }
 
+    // ---------- previews ----------
+    private fun ring(selected: Boolean, radius: Int): GradientDrawable {
+        val g = GradientDrawable(); g.cornerRadius = dp(radius).toFloat(); g.setColor(android.graphics.Color.TRANSPARENT)
+        g.setStroke(dp(if (selected) 3 else 1), tc(if (selected) R.attr.mbAccent else R.attr.mbLine))
+        return g
+    }
+
+    private fun filled(radius: Int, color: Int): GradientDrawable { val g = GradientDrawable(); g.cornerRadius = dp(radius).toFloat(); g.setColor(color); return g }
+
+    private fun hscroll(tag: String, build: (LinearLayout) -> Unit): HorizontalScrollView {
+        val hs = HorizontalScrollView(this)
+        hs.isHorizontalScrollBarEnabled = false
+        hs.tag = tag
+        val row = LinearLayout(this)
+        row.orientation = LinearLayout.HORIZONTAL
+        row.setPadding(dp(12), dp(8), dp(12), dp(8))
+        build(row)
+        hs.addView(row)
+        box.addView(hs)
+        return hs
+    }
+
+    private fun roundClip(v: View, radius: Int) {
+        v.outlineProvider = object : android.view.ViewOutlineProvider() {
+            override fun getOutline(view: View, o: android.graphics.Outline) { o.setRoundRect(0, 0, view.width, view.height, dp(radius).toFloat()) }
+        }
+        v.clipToOutline = true
+    }
+
+    private fun wallpaperSection() {
+        header("Wallpaper")
+        val note = TextView(this)
+        note.text = "Fills the screen behind your speed dial, from the status bar to the navigation bar."
+        note.textSize = 13f; note.setTextColor(tc(R.attr.mbMuted)); note.setPadding(dp(20), 0, dp(20), dp(2)); note.tag = "wallpaper background picture"
+        box.addView(note)
+        hscroll("wallpaper background picture photo") { row ->
+            fun tile(id: String, label: String, bmp: android.graphics.Bitmap?, onClick: () -> Unit) {
+                val on = prefs.wallpaper == id
+                val col = LinearLayout(this); col.orientation = LinearLayout.VERTICAL; col.gravity = android.view.Gravity.CENTER_HORIZONTAL
+                val fl = FrameLayout(this)
+                if (bmp != null) {
+                    val iv = ImageView(this); iv.setImageBitmap(bmp); iv.scaleType = ImageView.ScaleType.CENTER_CROP
+                    fl.addView(iv, FrameLayout.LayoutParams(-1, -1)); roundClip(fl, 14)
+                } else {
+                    fl.background = filled(14, tc(R.attr.mbCard))
+                    val t = TextView(this); t.text = if (id == "none") "✕" else "＋"; t.textSize = 26f; t.gravity = android.view.Gravity.CENTER; t.setTextColor(tc(R.attr.mbMuted))
+                    fl.addView(t, FrameLayout.LayoutParams(-1, -1))
+                }
+                fl.foreground = ring(on, 14)
+                col.addView(fl, LinearLayout.LayoutParams(dp(78), dp(138)))
+                val l = TextView(this); l.text = label; l.textSize = 12f; l.maxLines = 1; l.gravity = android.view.Gravity.CENTER
+                l.setTextColor(tc(if (on) R.attr.mbText else R.attr.mbMuted))
+                col.addView(l, LinearLayout.LayoutParams(dp(78), -2))
+                col.setOnClickListener { onClick() }
+                val lp = LinearLayout.LayoutParams(-2, -2); lp.setMargins(dp(5), 0, dp(5), 0)
+                row.addView(col, lp)
+            }
+            tile("none", "None", null) { prefs.wallpaper = "none"; build() }
+            tile("custom", "Your photo", if (Wallpapers.hasCustom(this)) Wallpapers.thumb(this, "custom") else null) { wpPicker.launch("image/*") }
+            for ((id, name) in Wallpapers.LIST) tile(id, name, Wallpapers.thumb(this, id)) { prefs.wallpaper = id; build() }
+        }
+    }
+
+    private fun buttonStyleSection() {
+        hscroll("button style icons outline solid soft expressive") { row ->
+            for ((id, name) in IconStyle.LIST) {
+                val on = prefs.iconStyle == id
+                val card = LinearLayout(this); card.orientation = LinearLayout.VERTICAL
+                card.background = ring(on, 16)
+                card.setPadding(dp(8), dp(8), dp(8), dp(8))
+                val strip = FrameLayout(this); strip.background = filled(12, tc(R.attr.mbBar))
+                strip.addView(IconStyle.sample(this, id, listOf("back", "home", "tabs", "menu"), 38), FrameLayout.LayoutParams(-2, -2, android.view.Gravity.CENTER))
+                strip.setPadding(dp(4), dp(6), dp(4), dp(6))
+                card.addView(strip, LinearLayout.LayoutParams(dp(200), -2))
+                val l = TextView(this); l.text = (if (on) "✓  " else "") + name; l.textSize = 13f; l.gravity = android.view.Gravity.CENTER
+                l.setTextColor(tc(R.attr.mbText)); l.setPadding(0, dp(8), 0, 0)
+                card.addView(l, LinearLayout.LayoutParams(dp(200), -2))
+                card.setOnClickListener { prefs.iconStyle = id; build() }
+                val lp = LinearLayout.LayoutParams(-2, -2); lp.setMargins(dp(5), 0, dp(5), 0)
+                row.addView(card, lp)
+            }
+        }
+    }
+
+    private fun toolbarSection() {
+        val style = prefs.iconStyle
+        fun card(id: String, label: String, keys: List<String>, onClick: () -> Unit) {
+            val on = prefs.toolbarPreset == id
+            val c = LinearLayout(this); c.orientation = LinearLayout.VERTICAL
+            c.background = ring(on, 16)
+            c.setPadding(dp(12), dp(10), dp(12), dp(10))
+            c.tag = "toolbar bottom bar buttons $label"
+            val t = TextView(this); t.text = (if (on) "✓  " else "") + label; t.textSize = 15f; t.typeface = Typeface.DEFAULT_BOLD; t.setTextColor(tc(R.attr.mbText))
+            c.addView(t)
+            val strip = FrameLayout(this); strip.background = filled(12, tc(R.attr.mbBar)); strip.setPadding(dp(4), dp(4), dp(4), dp(4))
+            strip.addView(IconStyle.sample(this, style, keys, 40, true), FrameLayout.LayoutParams(-1, -2))
+            val sl = LinearLayout.LayoutParams(-1, -2); sl.topMargin = dp(8)
+            c.addView(strip, sl)
+            c.setOnClickListener { onClick() }
+            val lp = LinearLayout.LayoutParams(-1, -2); lp.setMargins(dp(16), dp(4), dp(16), dp(4))
+            box.addView(c, lp)
+        }
+        for (p in Toolbars.PRESETS) card(p.id, p.label, p.keys) { prefs.toolbarPreset = p.id; build() }
+        card("custom", "Custom", Toolbars.custom(prefs)) {
+            val keys = Toolbars.NAMES.keys.toList()
+            val chosen = BooleanArray(keys.size) { keys[it] in Toolbars.custom(prefs) }
+            AlertDialog.Builder(this).setTitle("Choose the buttons (up to 6)")
+                .setMultiChoiceItems(keys.map { Toolbars.NAMES[it] }.toTypedArray(), chosen) { _, i, v -> chosen[i] = v }
+                .setPositiveButton("Use these") { _, _ ->
+                    val picked = keys.filterIndexed { i, _ -> chosen[i] }
+                    if (picked.size !in 1..6) toast("Pick between 1 and 6 buttons")
+                    else { prefs.toolbarCustom = picked.joinToString(","); prefs.toolbarPreset = "custom"; build() }
+                }.setNegativeButton("Cancel", null).show()
+        }
+    }
+
+    private fun dialStyleSection() {
+        hscroll("speed dial style cards icons only tiles") {  row ->
+            for ((id, name) in listOf("cards" to "Cards with page previews", "icons" to "Icons only")) {
+                val on = prefs.dialStyle == id
+                val card = LinearLayout(this); card.orientation = LinearLayout.VERTICAL
+                card.background = ring(on, 16)
+                card.setPadding(dp(8), dp(8), dp(8), dp(8))
+                card.addView(DialStylePreview(this, id == "icons", tc(R.attr.mbBg), tc(R.attr.mbCard), tc(R.attr.mbText), tc(R.attr.mbAccent)), LinearLayout.LayoutParams(dp(160), dp(120)))
+                val l = TextView(this); l.text = (if (on) "✓  " else "") + name; l.textSize = 13f; l.gravity = android.view.Gravity.CENTER
+                l.setTextColor(tc(R.attr.mbText)); l.setPadding(0, dp(8), 0, 0)
+                card.addView(l, LinearLayout.LayoutParams(dp(160), -2))
+                card.setOnClickListener { prefs.dialStyle = id; build() }
+                val lp = LinearLayout.LayoutParams(-2, -2); lp.setMargins(dp(5), 0, dp(5), 0)
+                row.addView(card, lp)
+            }
+        }
+    }
+
     // ---------- pages ----------
     private fun browserPage() {
         switchRow("Request desktop sites", "For new tabs", { prefs.desktopSite }, { prefs.desktopSite = it })
@@ -253,14 +388,23 @@ class SettingsActivity : BaseActivity() {
         hs.addView(rowv)
         box.addView(hs)
 
-        header("Buttons and icons")
-        choiceRow("Button style", IconStyle.LIST.map { it.second }, { IconStyle.LIST.indexOfFirst { it.first == prefs.iconStyle }.coerceAtLeast(0) },
-            { prefs.iconStyle = IconStyle.LIST[it].first })
+        wallpaperSection()
+
+        header("Button style")
+        buttonStyleSection()
+
+        header("Bottom toolbar")
+        toolbarSection()
+
+        header("App icon")
         choiceRow("App icon", AppIcon.LIST.map { it.label }, { AppIcon.LIST.indexOfFirst { it.id == prefs.appIcon }.coerceAtLeast(0) },
             { prefs.appIcon = AppIcon.LIST[it].id; AppIcon.applyLauncher(this); toast("Address bar logo changed. The home screen icon may take a moment to follow.") })
     }
 
     private fun startPageSettings() {
+        header("Speed dial style")
+        dialStyleSection()
+        header("Layout")
         choiceRow("Columns", listOf("2", "3", "4", "5"), { (prefs.dialCols - 2).coerceIn(0, 3) }, { prefs.dialCols = it + 2 })
         switchRow("Show titles", null, { prefs.showTitles }, { prefs.showTitles = it })
         switchRow("Show thumbnails", "Page previews, captured as you browse", { Settings.thumbnails() }, { Settings.setThumbnails(it) })
@@ -324,6 +468,13 @@ class SettingsActivity : BaseActivity() {
         actionRow("Update source", prefs.updateRepo + (if (prefs.updateToken.isEmpty()) "" else "  ·  access token set")) {
             promptFields(this, "Update source", listOf("GitHub repository (owner/name)", "Access token (only for a private repository)"),
                 listOf(prefs.updateRepo, prefs.updateToken)) { v -> prefs.updateRepo = v[0]; prefs.updateToken = v[1]; build() }
+        }
+    }
+
+    private val wpPicker = registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.GetContent()) { uri ->
+        if (uri != null) {
+            if (Wallpapers.saveCustom(this, uri)) { prefs.wallpaper = "custom"; toast("Wallpaper set") } else toast("Could not use that picture")
+            build()
         }
     }
 

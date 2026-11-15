@@ -2,7 +2,11 @@ package app.mbrowser
 
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
+import android.view.Gravity
 import android.view.LayoutInflater
+import android.graphics.Outline
+import android.view.ViewOutlineProvider
+import android.widget.FrameLayout
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageButton
@@ -33,10 +37,28 @@ class StartPage(
     private val grid: RecyclerView = root.findViewById(R.id.grid)
     private val crumb: TextView = root.findViewById(R.id.crumb)
     private val ADD = Any()
+    private var wp = false                  // drawn over a wallpaper: no bar behind the dial tabs, light text
+    private var refreshPending = false
     private var reorder = false             // rearranging: touch and hold a tile, then drag it
     private val path = ArrayList<Int>()     // indexes of the folders we are inside, within the current dial
 
     private class Dial(val index: Int, val title: String, val url: String, val folder: Boolean, val count: Int)
+
+    /** Called by the main screen when the wallpaper is shown or hidden behind this page. */
+    fun setOnWallpaper(on: Boolean) {
+        if (wp == on) return
+        wp = on
+        root.findViewById<View>(R.id.dialBar).setBackgroundColor(if (on) Color.TRANSPARENT else act.tc(R.attr.mbBar))
+        root.findViewById<ImageButton>(R.id.btnTune).imageTintList = android.content.res.ColorStateList.valueOf(if (on) Color.WHITE else act.tc(R.attr.mbText))
+        refresh()
+    }
+
+    /** Icons arrive in the background; redraw once they have, not once for each. */
+    private fun scheduleRefresh() {
+        if (refreshPending) return
+        refreshPending = true
+        root.postDelayed({ refreshPending = false; if (!reorder) grid.adapter?.notifyDataSetChanged() }, 400)
+    }
 
     init {
         root.findViewById<ImageButton>(R.id.btnTune).setOnClickListener { tuneMenu() }
@@ -157,7 +179,11 @@ class StartPage(
             tv.text = o.optString("name", "Speed Dial")
             tv.textSize = 16f
             tv.setPadding(act.dp(14), act.dp(14), act.dp(14), act.dp(12))
-            if (id == cur) {
+            if (wp) {
+                tv.setTextColor(if (id == cur) Color.WHITE else Color.argb(0xB3, 255, 255, 255))
+                tv.setShadowLayer(6f, 0f, 1f, Color.argb(0x99, 0, 0, 0))
+                if (id == cur) tv.typeface = android.graphics.Typeface.DEFAULT_BOLD
+            } else if (id == cur) {
                 tv.setTextColor(act.tc(R.attr.mbAccent)); tv.setBackgroundResource(R.drawable.bg_tab_selected)
             } else tv.setTextColor(act.tc(R.attr.mbMuted))
             tv.setOnClickListener { prefs.currentDial = id; path.clear(); refresh() }
@@ -174,6 +200,7 @@ class StartPage(
                 names.add(o?.optString("title") ?: "")
                 arr = o?.optJSONArray("dials")
             }
+            crumb.setTextColor(if (wp) Color.WHITE else act.tc(R.attr.mbAccent))
             crumb.text = "‹  " + names.joinToString("  ›  ")
             crumb.visibility = View.VISIBLE
         }
@@ -366,6 +393,42 @@ class StartPage(
             }
         }
 
+        /** Cards (a thumbnail in a card) or icons only (a big rounded icon with its name, straight on the page). */
+        private fun look(h: CardVH, icons: Boolean, size: Int, th: Int) {
+            val tlp = h.thumb.layoutParams as FrameLayout.LayoutParams
+            val llp = h.letter.layoutParams as FrameLayout.LayoutParams
+            if (icons) {
+                h.card.background = null; h.card.clipToOutline = false
+                tlp.width = size; tlp.height = size; tlp.gravity = Gravity.CENTER_HORIZONTAL
+                llp.width = size; llp.height = size; llp.gravity = Gravity.CENTER_HORIZONTAL
+                val round = object : ViewOutlineProvider() {
+                    override fun getOutline(v: View, o: Outline) { o.setRoundRect(0, 0, v.width, v.height, v.width * 0.22f) }
+                }
+                h.thumb.outlineProvider = round; h.thumb.clipToOutline = true
+                h.letter.outlineProvider = round; h.letter.clipToOutline = true
+                h.icon.visibility = View.GONE
+                h.title.gravity = Gravity.CENTER; h.title.textSize = 13f
+                h.title.setTextColor(if (wp) Color.WHITE else act.tc(R.attr.mbText))
+                if (wp) h.title.setShadowLayer(6f, 0f, 1f, Color.argb(0x99, 0, 0, 0)) else h.title.setShadowLayer(0f, 0f, 0f, 0)
+                h.row.setPadding(act.dp(2), act.dp(6), act.dp(2), act.dp(4))
+                (h.row as LinearLayout).gravity = Gravity.CENTER
+                (h.title.layoutParams as LinearLayout.LayoutParams).apply { width = -1; weight = 0f; marginStart = 0 }
+            } else {
+                h.card.setBackgroundResource(R.drawable.bg_card); h.card.clipToOutline = true
+                tlp.width = -1; tlp.height = th; tlp.gravity = Gravity.NO_GRAVITY
+                llp.width = -1; llp.height = th; llp.gravity = Gravity.NO_GRAVITY
+                h.thumb.outlineProvider = ViewOutlineProvider.BACKGROUND; h.thumb.clipToOutline = false
+                h.letter.outlineProvider = ViewOutlineProvider.BACKGROUND; h.letter.clipToOutline = false
+                h.icon.visibility = View.VISIBLE
+                h.title.gravity = Gravity.START; h.title.textSize = 12f
+                h.title.setTextColor(act.tc(R.attr.mbText)); h.title.setShadowLayer(0f, 0f, 0f, 0)
+                h.row.setPadding(act.dp(8), 0, act.dp(8), act.dp(8))
+                (h.row as LinearLayout).gravity = Gravity.CENTER_VERTICAL
+                (h.title.layoutParams as LinearLayout.LayoutParams).apply { width = 0; weight = 1f; marginStart = act.dp(8) }
+            }
+            h.thumb.layoutParams = tlp; h.letter.layoutParams = llp
+        }
+
         private fun bind(h: RecyclerView.ViewHolder, pos: Int) {
             if (h is AddVH) {
                 val pill = h.itemView.findViewById<TextView>(R.id.addPill)
@@ -380,9 +443,24 @@ class StartPage(
 
             val widthPx = act.resources.displayMetrics.widthPixels - act.dp(20 + 18 * cols)
             val th = ((widthPx / cols) * 0.56f).toInt()
-            h.thumb.layoutParams.height = th
-            h.letter.layoutParams.height = th
+            val icons = prefs.dialStyle == "icons"
+            val size = minOf(act.dp(78), ((widthPx / cols) * 0.8f).toInt())
+            look(h, icons, size, th)
 
+            if (d.folder && icons) {
+                val kids = itemsOf(Settings.value("startPage"), groupId, path + d.index).filter { !it.folder }.map { it.url }
+                kids.take(4).forEach { DialIcons.ensure(act, it) { scheduleRefresh() } }
+                h.letter.visibility = View.GONE
+                h.thumb.visibility = View.VISIBLE
+                h.thumb.scaleType = ImageView.ScaleType.FIT_XY
+                h.thumb.setPadding(0, 0, 0, 0); h.thumb.background = null; h.thumb.imageTintList = null
+                h.thumb.setImageBitmap(DialIcons.folder(act, kids, size, if (wp) Color.argb(0x73, 0, 0, 0) else act.tc(R.attr.mbPill)))
+                h.title.text = if (d.count > 0) "$label (${d.count})" else label
+                h.row.visibility = View.VISIBLE
+                h.itemView.setOnClickListener { path.add(d.index); refresh() }
+                h.itemView.setOnLongClickListener { itemMenu(d, groupId); true }
+                return
+            }
             if (d.folder) {
                 h.letter.visibility = View.GONE
                 h.thumb.visibility = View.VISIBLE
@@ -407,6 +485,27 @@ class StartPage(
             h.thumb.setPadding(0, 0, 0, 0)
             h.thumb.background = null
             h.thumb.imageTintList = null
+
+            if (icons) {
+                val big = DialIcons.get(act, host)
+                h.thumb.scaleType = ImageView.ScaleType.CENTER_CROP
+                if (big != null) {
+                    h.thumb.setImageBitmap(big); h.thumb.visibility = View.VISIBLE; h.letter.visibility = View.GONE
+                } else {
+                    DialIcons.ensure(act, d.url) { scheduleRefresh() }
+                    h.thumb.visibility = View.GONE; h.letter.visibility = View.VISIBLE
+                    h.letter.text = (label.firstOrNull { it.isLetterOrDigit() }?.uppercaseChar() ?: '•').toString()
+                    val g = GradientDrawable()
+                    g.cornerRadius = size * 0.22f
+                    g.setColor(Color.HSVToColor(floatArrayOf(Math.floorMod(host.hashCode(), 360).toFloat(), 0.45f, 0.5f)))
+                    h.letter.background = g
+                }
+                h.title.text = label
+                h.row.visibility = if (prefs.showTitles) View.VISIBLE else View.GONE
+                h.itemView.setOnClickListener { open(d.url, false) }
+                h.itemView.setOnLongClickListener { itemMenu(d, groupId); true }
+                return
+            }
 
             val bmp = if (thumbsOn) Thumbs.thumb(act, host) else null
             if (bmp != null) {

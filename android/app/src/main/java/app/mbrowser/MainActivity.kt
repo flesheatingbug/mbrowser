@@ -131,6 +131,7 @@ class MainActivity : BaseActivity() {
         setContentView(R.layout.activity_main)
         prefs = Prefs(this)
         Store.init(this)
+        setupEdgeToEdge()
 
         urlBar = findViewById(R.id.urlBar)
         progress = findViewById(R.id.progress)
@@ -151,7 +152,7 @@ class MainActivity : BaseActivity() {
         switcherTitle = findViewById(R.id.switcherTitle)
         siteIcon = findViewById(R.id.siteIcon)
         btnStar = findViewById(R.id.btnStar)
-        tabCount = findViewById(R.id.tabCount)
+        tabCount = TextView(this)
         btnReload = findViewById(R.id.btnReload)
 
         val startRoot = LayoutInflater.from(this).inflate(R.layout.start_page, container, false)
@@ -177,27 +178,8 @@ class MainActivity : BaseActivity() {
             val t = cur()
             if (t != null && !t.home) { if (progress.visibility == View.VISIBLE) t.web.stopLoading() else t.web.reload() }
         }
-        findViewById<View>(R.id.btnBack).setOnClickListener { goBack() }
-        findViewById<View>(R.id.btnHome).setOnClickListener { goHome() }
-        findViewById<View>(R.id.btnDownloads).setOnClickListener {
-            startActivity(Intent(this, ItemsActivity::class.java).putExtra("mode", "downloads"))
-        }
-        findViewById<View>(R.id.btnForward).setOnClickListener { cur()?.let { if (it.web.canGoForward()) it.web.goForward() } }
         btnStar.setOnClickListener { toggleBookmark() }
-        findViewById<View>(R.id.btnTabs).setOnClickListener { if (switcher.visibility == View.VISIBLE) hideSwitcher() else showSwitcher() }
-        findViewById<View>(R.id.btnTabs).setOnLongClickListener { v ->
-            val m = PopupMenu(this, v)
-            m.menu.add(0, 1, 0, "New tab"); m.menu.add(0, 2, 1, "New private tab"); m.menu.add(0, 3, 2, "Close this tab")
-            m.setOnMenuItemClickListener {
-                when (it.itemId) {
-                    1 -> { hideSwitcher(); newTab(null) }
-                    2 -> { hideSwitcher(); newTab(null, true) }
-                    3 -> closeTab(current)
-                }
-                true
-            }
-            m.show(); true
-        }
+        buildBottomBar()
 
         findViewById<View>(R.id.switcherNew).setOnClickListener { hideSwitcher(); newTab(null, switcherMode == 1) }
         findViewById<View>(R.id.switcherClose).setOnClickListener { hideSwitcher() }
@@ -816,6 +798,7 @@ class MainActivity : BaseActivity() {
             if (ic != null) { siteIcon.setImageBitmap(ic); siteIcon.imageTintList = null }
             else { siteIcon.setImageResource(R.drawable.ic_globe); siteIcon.imageTintList = tcl(R.attr.mbMuted) }
         }
+        applyWallpaper()
     }
 
     // ---------- tab switcher ----------
@@ -826,10 +809,11 @@ class MainActivity : BaseActivity() {
         findViewById<EditText>(R.id.switcherFilter).setText("")
         findViewById<View>(R.id.switcherFilter).visibility = View.GONE
         switcher.visibility = View.VISIBLE
+        applyWallpaper()
         refreshSwitcher()
     }
 
-    private fun hideSwitcher() { switcher.visibility = View.GONE }
+    private fun hideSwitcher() { switcher.visibility = View.GONE; applyWallpaper() }
 
     // ---- recently closed tabs ----
     private fun rememberClosed(t: Tab) {
@@ -1083,6 +1067,119 @@ class MainActivity : BaseActivity() {
 
     private var lastSelection = ""
 
+    // ---------- edge to edge, wallpaper and the bottom bar ----------
+    private var onWallpaper = false
+    private var barSignature = ""
+
+    private fun setupEdgeToEdge() {
+        androidx.core.view.WindowCompat.setDecorFitsSystemWindows(window, false)
+        window.statusBarColor = android.graphics.Color.TRANSPARENT
+        window.navigationBarColor = android.graphics.Color.TRANSPARENT
+        if (android.os.Build.VERSION.SDK_INT >= 29) window.isNavigationBarContrastEnforced = false
+        val content = findViewById<View>(R.id.content)
+        androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.rootFrame)) { _, ins ->
+            val bars = ins.getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars() or androidx.core.view.WindowInsetsCompat.Type.displayCutout())
+            val ime = ins.getInsets(androidx.core.view.WindowInsetsCompat.Type.ime())
+            content.setPadding(bars.left, bars.top, bars.right, maxOf(bars.bottom, ime.bottom))
+            ins
+        }
+    }
+
+    /** Shows the wallpaper behind the whole screen (status bar to navigation bar) while the speed dial is open. */
+    private fun applyWallpaper() {
+        val t = cur()
+        val wp = if (t?.home == true && !t.priv && switcher.visibility != View.VISIBLE) Wallpapers.drawable(this) else null
+        val on = wp != null
+        val iv = findViewById<ImageView>(R.id.wallpaper)
+        if (on) { if (iv.drawable !== wp) iv.setImageDrawable(wp); iv.visibility = View.VISIBLE } else iv.visibility = View.GONE
+        findViewById<View>(R.id.content).setBackgroundColor(if (on) android.graphics.Color.TRANSPARENT else tc(R.attr.mbBg))
+        val barBg = if (on) android.graphics.Color.TRANSPARENT else tc(R.attr.mbBar)
+        findViewById<View>(R.id.topBar).setBackgroundColor(barBg)
+        findViewById<View>(R.id.bottomBar).setBackgroundColor(barBg)
+        if (on) {
+            val g = android.graphics.drawable.GradientDrawable(); g.cornerRadius = dp(26).toFloat(); g.setColor(android.graphics.Color.argb(0xCC, 0x1C, 0x1A, 0x1A))
+            findViewById<View>(R.id.addressPill).background = g
+        }
+        val fg = if (on) android.graphics.Color.WHITE else tc(R.attr.mbText)
+        val hint = if (on) android.graphics.Color.argb(0xB3, 255, 255, 255) else tc(R.attr.mbMuted)
+        urlBar.setTextColor(fg); urlBar.setHintTextColor(hint)
+        if (on) {
+            siteIcon.imageTintList = android.content.res.ColorStateList.valueOf(hint)
+            btnReload.imageTintList = android.content.res.ColorStateList.valueOf(fg)
+            btnStar.imageTintList = android.content.res.ColorStateList.valueOf(fg)
+        } else btnReload.imageTintList = tcl(R.attr.mbText)
+        onWallpaper = on
+        startPage.setOnWallpaper(on)
+        IconStyle.apply(this, on)
+        val lightBars = !on && androidx.core.graphics.ColorUtils.calculateLuminance(tc(R.attr.mbBar)) > 0.5
+        androidx.core.view.WindowCompat.getInsetsController(window, window.decorView).let {
+            it.isAppearanceLightStatusBars = lightBars; it.isAppearanceLightNavigationBars = lightBars
+        }
+    }
+
+    private fun barButton(key: String): View {
+        val lp = LinearLayout.LayoutParams(0, -1, 1f)
+        if (key == "tabs") {
+            val f = FrameLayout(this)
+            f.id = R.id.btnTabs; f.tag = key; f.contentDescription = "Tabs"
+            val ic = ImageView(this); ic.id = R.id.tabsIcon; ic.layoutParams = FrameLayout.LayoutParams(dp(26), dp(26), android.view.Gravity.CENTER)
+            val n = TextView(this); n.id = R.id.tabCount; n.text = tabs.size.toString(); n.textSize = 12f; n.typeface = Typeface.DEFAULT_BOLD
+            n.layoutParams = FrameLayout.LayoutParams(-2, -2, android.view.Gravity.CENTER)
+            f.addView(ic); f.addView(n)
+            tabCount = n
+            f.setOnClickListener { if (switcher.visibility == View.VISIBLE) hideSwitcher() else showSwitcher() }
+            f.setOnLongClickListener { v ->
+                val m = PopupMenu(this, v)
+                m.menu.add(0, 1, 0, "New tab"); m.menu.add(0, 2, 1, "New private tab"); m.menu.add(0, 3, 2, "Close this tab")
+                m.setOnMenuItemClickListener {
+                    when (it.itemId) {
+                        1 -> { hideSwitcher(); newTab(null) }
+                        2 -> { hideSwitcher(); newTab(null, true) }
+                        3 -> closeTab(current)
+                    }
+                    true
+                }
+                m.show(); true
+            }
+            f.layoutParams = lp
+            return f
+        }
+        val b = android.widget.ImageButton(this)
+        b.tag = key
+        b.id = when (key) {
+            "downloads" -> R.id.btnDownloads; "back" -> R.id.btnBack; "forward" -> R.id.btnForward; "home" -> R.id.btnHome
+            "search" -> R.id.btnSearchBar; "newtab" -> R.id.btnNewTab; "reload" -> R.id.btnReloadBar; "bookmarks" -> R.id.btnBookmarks
+            else -> R.id.btnMenuBar
+        }
+        b.scaleType = ImageView.ScaleType.CENTER
+        b.contentDescription = Toolbars.NAMES[key]
+        b.layoutParams = lp
+        b.setOnClickListener {
+            when (key) {
+                "downloads" -> startActivity(Intent(this, ItemsActivity::class.java).putExtra("mode", "downloads"))
+                "back" -> goBack()
+                "forward" -> cur()?.let { t -> if (!t.home && t.web.canGoForward()) t.web.goForward() }
+                "home" -> goHome()
+                "search" -> { hideSwitcher(); urlBar.requestFocus(); urlBar.selectAll()
+                    (getSystemService(INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager).showSoftInput(urlBar, 0) }
+                "newtab" -> { hideSwitcher(); newTab(null) }
+                "reload" -> cur()?.let { t -> if (!t.home) { if (progress.visibility == View.VISIBLE) t.web.stopLoading() else t.web.reload() } }
+                "bookmarks" -> picker.launch(Intent(this, ItemsActivity::class.java).putExtra("mode", "bookmarks"))
+                "menu" -> showMenu(it)
+            }
+        }
+        return b
+    }
+
+    private fun buildBottomBar() {
+        val bar = findViewById<LinearLayout>(R.id.bottomBar)
+        val keys = Toolbars.keys(prefs)
+        barSignature = keys.joinToString(",")
+        bar.removeAllViews()
+        for (k in keys) bar.addView(barButton(k))
+        IconStyle.apply(this, onWallpaper)
+    }
+
     private fun showMenu(anchor: View) {
         val t = cur()
         // remember what is selected on the page now: opening the menu can clear the selection
@@ -1154,7 +1251,8 @@ class MainActivity : BaseActivity() {
     override fun onResume() {
         super.onResume()
         applyLogo()
-        IconStyle.apply(this)
+        if (barSignature != Toolbars.keys(prefs).joinToString(",")) buildBottomBar()
+        applyWallpaper()
         if (appliedUa != prefs.uaMode) {
             val first = appliedUa.isEmpty()
             appliedUa = prefs.uaMode

@@ -1,0 +1,14 @@
+<resources>
+    <item name="btnDownloads" type="id" />
+    <item name="btnBack" type="id" />
+    <item name="btnForward" type="id" />
+    <item name="btnHome" type="id" />
+    <item name="btnTabs" type="id" />
+    <item name="tabsIcon" type="id" />
+    <item name="tabCount" type="id" />
+    <item name="btnSearchBar" type="id" />
+    <item name="btnNewTab" type="id" />
+    <item name="btnReloadBar" type="id" />
+    <item name="btnBookmarks" type="id" />
+    <item name="btnMenuBar" type="id" />
+</resources>
