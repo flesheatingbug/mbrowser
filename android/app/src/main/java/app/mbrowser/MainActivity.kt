@@ -393,16 +393,7 @@ class MainActivity : BaseActivity() {
             Store.bookmarkList().filter { !it.deleted }.forEach { consider(it.url, it.title, true, 0) }
             Store.historyList().take(8000).forEachIndexed { i, v -> consider(v.url, v.title, false, if (i < 100) 10 else 0) }
         }
-        if (q.isEmpty()) {
-            // nothing typed yet: the most recent pages, from this phone and from your other devices
-            val seen = HashSet<String>()
-            for (v in Store.historyList().take(400)) {
-                val key = bare(v.url).trimEnd('/')
-                if (seen.add(key)) hits[key] = Hit(v.url, v.title, 1000 - seen.size, false)
-                if (seen.size >= 6) break
-            }
-        }
-        val top = hits.values.sortedByDescending { it.score }.take(6)
+        val top = if (q.isEmpty()) emptyList() else hits.values.sortedByDescending { it.score }.take(6)
         list.removeAllViews()
         if (top.isEmpty()) { scroll.visibility = View.GONE; return }
         val d = resources.displayMetrics.density
