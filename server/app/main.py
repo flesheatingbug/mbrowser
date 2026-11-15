@@ -55,7 +55,7 @@ def route(method, pattern, auth='session', limit=256 * KB):
 
 def _info(ctx, req):
     return 200, {'name': 'mbrowser-sync', 'version': VERSION, 'accounts': True,
-                 'features': ['bookmarks', 'history', 'tabs', 'vault', 'settings', 'wallpaper', 'accounts']}
+                 'features': ['bookmarks', 'history', 'tabs', 'vault', 'settings', 'wallpaper', 'pair', 'accounts']}
 
 
 def _health(ctx, req):
@@ -120,6 +120,15 @@ route('PUT', '/api/tabs', 'token', 2 * MB)(_with_profile(lambda c, r: syncapi.ta
 route('GET', '/api/tabs', 'token')(_with_profile(lambda c, r: syncapi.tabs_get(c, r.q('exclude'))))
 route('GET', '/api/vault', 'token')(_with_profile(lambda c, r: syncapi.vault_get(c)))
 route('PUT', '/api/vault', 'token', 12 * MB)(_with_profile(lambda c, r: syncapi.vault_put(c, r.json())))
+def _pair(ctx, req):
+    """A signed-in device asks for a fresh key for another device of the same profile (shown to it as a QR code)."""
+    b = req.json()
+    device = re.sub(r'\s+', ' ', str(b.get('device') or 'Phone')).strip()[:40] or 'Phone'
+    _, token = ctx.store.replace_device_token(req.profile_id, device)
+    return 200, {'token': token}
+
+
+route('POST', '/api/pair', 'token')(_pair)
 route('GET', '/api/wallpaper', 'token')(_with_profile(lambda c, r: syncapi.wallpaper_get(c)))
 route('PUT', '/api/wallpaper', 'token', 5 * MB)(_with_profile(lambda c, r: syncapi.wallpaper_put(c, r.json())))
 route('GET', '/api/settings', 'token')(_with_profile(lambda c, r: syncapi.settings_get(c)))

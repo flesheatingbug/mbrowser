@@ -37,6 +37,21 @@ class PasswordsActivity : BaseActivity() {
     private var query = ""
     private var tab = 0  // 0=logins 1=cards 2=addresses
 
+    private val scan = registerForActivityResult(com.journeyapps.barcodescanner.ScanContract()) { r ->
+        val code = r.contents ?: return@registerForActivityResult
+        val p = Pairing.parse(code)
+        when {
+            p == null -> Toast.makeText(this, "That is not an mbrowser code", Toast.LENGTH_LONG).show()
+            p.key == null -> Toast.makeText(this, "That code has no password key in it. On your computer unlock the passwords first, then show the code and choose to include the key.", Toast.LENGTH_LONG).show()
+            else -> {
+                if (prefs.server != p.server || !prefs.syncConfigured) Pairing.apply(this, p)
+                else { Vault.pendingKey = p.key; if (prefs.vaultKeep != "app") DeviceKey.save(this, p.key) }
+                Vault.tryAutoUnlock(this); refresh()
+                if (!Vault.unlocked()) sync(true) else Toast.makeText(this, "Passwords unlocked", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_passwords)
@@ -56,13 +71,12 @@ class PasswordsActivity : BaseActivity() {
         tabAddresses.setOnClickListener { selectTab(2) }
         findViewById<View>(R.id.pwAdd).setOnClickListener { when (tab) { 1 -> editCard(null); 2 -> editAddress(null); else -> editLogin(null) } }
         findViewById<View>(R.id.pwSync).setOnClickListener { sync(true) }
-        findViewById<View>(R.id.pwLock).setOnClickListener {
-            if (Vault.isDevice(this)) DeviceKey.clear(this)
-            Vault.lock(); refresh()
-        }
+        findViewById<View>(R.id.pwLock).setOnClickListener { securityMenu() }
         refresh()
         // fetch the server's vault (or changes) in the background when opening
         if (prefs.syncConfigured && prefs.syncVault) sync(false)
+        // opening the passwords while they are locked: offer to unlock them right away
+        if (savedInstanceState == null && !Vault.unlocked() && Vault.exists(this)) ui.post { if (!isFinishing && !Vault.unlocked()) unlockChooser() }
     }
 
     private fun selectTab(t: Int) {
@@ -79,7 +93,7 @@ class PasswordsActivity : BaseActivity() {
         main.visibility = View.GONE; filter.visibility = View.GONE; bar.visibility = View.GONE
         list.adapter = null
         val device = Vault.exists(this) && Vault.isDevice(this)
-        findViewById<TextView>(R.id.pwLock).text = if (device) "Forget key" else "Lock"
+        findViewById<TextView>(R.id.pwLock).text = "Security"
         when {
             Vault.unlocked() -> {
                 status.text = prefs.vaultStatus.ifBlank { "Unlocked" }
@@ -87,15 +101,15 @@ class PasswordsActivity : BaseActivity() {
                 showList()
             }
             device -> {
-                status.text = "Your passwords were downloaded from your server. Give this phone the vault key once: on your desktop browser open Passwords and press “📱 Phone key”, then paste it here." +
+                status.text = "Your passwords were downloaded from your server. They are locked with a key rather than a password, so this phone needs that key once: scan the QR code from your computer (Passwords → 📷 Add phone), or paste the key." +
                     (if (prefs.vaultStatus.isNotBlank()) "\n\n" + prefs.vaultStatus else "")
-                main.text = "Enter vault key"; main.visibility = View.VISIBLE
-                main.setOnClickListener { askKey() }
+                main.text = "Unlock"; main.visibility = View.VISIBLE
+                main.setOnClickListener { unlockChooser() }
             }
             Vault.exists(this) -> {
                 status.text = "Your passwords are locked." + (if (prefs.vaultStatus.isNotBlank()) "\n" + prefs.vaultStatus else "")
                 main.text = "Unlock"; main.visibility = View.VISIBLE
-                main.setOnClickListener { askUnlock() }
+                main.setOnClickListener { unlockChooser() }
             }
             else -> {
                 status.text = if (prefs.syncConfigured) "No passwords found on your server yet. Open Passwords in your desktop browser and let it sync, then tap Download."
@@ -103,6 +117,64 @@ class PasswordsActivity : BaseActivity() {
                 if (prefs.syncConfigured) { main.text = "Download"; main.visibility = View.VISIBLE; main.setOnClickListener { sync(true) } }
             }
         }
+    }
+
+    /** The ways to open the vault: master password, scanning a QR code from another device, or pasting a key. */
+    private fun unlockChooser() {
+        val device = Vault.isDevice(this)
+        val labels = ArrayList<String>(); val acts = ArrayList<() -> Unit>()
+        if (!device) { labels.add("Enter master password"); acts.add { askUnlock() } }
+        labels.add("Scan QR code from your computer"); acts.add { scan.launch(Pairing.options()) }
+        labels.add("Paste a vault key"); acts.add { askKey() }
+        if (device) {
+            labels.add("Use a master password instead…")
+            acts.add {
+                AlertDialog.Builder(this).setTitle("Use a master password")
+                    .setMessage("These passwords are locked with a key, not a password, so a password cannot open them yet.\n\nOn your computer open Passwords → 🔒 Security and switch to a master password, let it sync, then come back and enter that password here. Or unlock here with the QR code now, and use Security → “Use a master password” on this phone.")
+                    .setPositiveButton("OK", null).show()
+            }
+        }
+        AlertDialog.Builder(this).setTitle("Unlock passwords").setItems(labels.toTypedArray()) { _, i -> acts[i]() }.show()
+    }
+
+    /** Lock now, switch between a master password and a device key, and how long they stay unlocked. */
+    private fun securityMenu() {
+        val unlocked = Vault.unlocked()
+        val device = Vault.isDevice(this)
+        val labels = ArrayList<String>(); val acts = ArrayList<() -> Unit>()
+        if (unlocked) { labels.add("Lock now"); acts.add { Vault.lockAndForget(this); refresh() } }
+        labels.add("Keep unlocked: " + VaultPolicy.describe(prefs)); acts.add { VaultPolicy.show(this) { refresh() } }
+        if (unlocked && device) { labels.add("Use a master password…"); acts.add { askNewMaster() } }
+        if (unlocked && !device) { labels.add("Use a device key (no password)…"); acts.add { switchToDevice() } }
+        if (!unlocked && device) { labels.add("Forget the key on this phone"); acts.add { DeviceKey.clear(this); Vault.pendingKey = null; refresh() } }
+        AlertDialog.Builder(this).setTitle("Password security").setItems(labels.toTypedArray()) { _, i -> acts[i]() }.show()
+    }
+
+    private fun askNewMaster() {
+        promptFields(this, "New master password", listOf("Master password", "Repeat it"), listOf("", ""), "Use it", password = true) { v ->
+            if (v[0].length < 6) { Toast.makeText(this, "Use at least 6 characters.", Toast.LENGTH_LONG).show(); return@promptFields }
+            if (v[0] != v[1]) { Toast.makeText(this, "The two passwords are different.", Toast.LENGTH_LONG).show(); return@promptFields }
+            status.text = "Changing… this can take a few seconds."
+            Thread {
+                val ok = try { Vault.setMaster(this, v[0]); true } catch (_: Exception) { false }
+                ui.post {
+                    refresh()
+                    Toast.makeText(this, if (ok) "Done. Other devices need this password the next time they sync." else "That did not work", Toast.LENGTH_LONG).show()
+                    if (ok) sync(false)
+                }
+            }.start()
+        }
+    }
+
+    private fun switchToDevice() {
+        AlertDialog.Builder(this).setTitle("Use a device key")
+            .setMessage("The passwords will no longer need a master password. Each other device will need the key once, from a QR code.")
+            .setPositiveButton("Switch") { _, _ ->
+                Thread {
+                    val ok = try { Vault.setDevice(this); true } catch (_: Exception) { false }
+                    ui.post { refresh(); if (ok) sync(false) }
+                }.start()
+            }.setNegativeButton("Cancel", null).show()
     }
 
     private fun askKey() {

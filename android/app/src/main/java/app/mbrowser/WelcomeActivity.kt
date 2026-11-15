@@ -21,6 +21,12 @@ class WelcomeActivity : BaseActivity() {
     private lateinit var box: LinearLayout
     private val ui = Handler(Looper.getMainLooper())
     private var step = "start"
+    private val scan = registerForActivityResult(com.journeyapps.barcodescanner.ScanContract()) { r ->
+        val code = r.contents ?: return@registerForActivityResult
+        val p = Pairing.parse(code)
+        if (p == null) android.widget.Toast.makeText(this, "That is not an mbrowser code", android.widget.Toast.LENGTH_LONG).show()
+        else { Pairing.apply(this, p); show("done-server") }
+    }
     private val login = registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()) {
         if (it.resultCode == RESULT_OK) show("done-server")
     }
@@ -139,6 +145,9 @@ class WelcomeActivity : BaseActivity() {
             "server" -> {
                 title("Connect to your server")
                 body("Sign in with your account, or use an API key from your server's web page.", 10)
+                choiceCard("Scan a QR code", "On your computer's mbrowser open Passwords and press “Add phone (QR)”. Connects this phone and unlocks your passwords.") {
+                    scan.launch(Pairing.options())
+                }
                 choiceCard("Sign in with an account", "User name and password. You can choose which profile to sync with.") {
                     login.launch(android.content.Intent(this, ServerLoginActivity::class.java))
                 }

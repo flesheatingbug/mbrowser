@@ -464,6 +464,8 @@ class SettingsActivity : BaseActivity() {
     }
 
     private fun privacyPage() {
+        header("Passwords")
+        actionRow("Keep passwords unlocked", VaultPolicy.describe(prefs) + "\nHow long before you need to unlock them again") { VaultPolicy.show(this) { build() } }
         switchRow("Block ads and trackers", "Uses the EasyList, EasyPrivacy and uBlock filter lists", { prefs.blockTrackers }, { prefs.blockTrackers = it })
         actionRow("Filter lists", AdBlock.status + "\nTap to update now") {
             toast("Updating the filter lists…")

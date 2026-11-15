@@ -58,6 +58,13 @@ class Prefs(ctx: Context) {
     var syncVault: Boolean
         get() = bool("syncVault", true)
         set(v) = putB("syncVault", v)
+    // how long the password vault stays unlocked: always | app | reboot | time
+    var vaultKeep: String
+        get() = str("vaultKeep", "always")
+        set(v) = put("vaultKeep", v)
+    var vaultKeepMin: Int
+        get() = int("vaultKeepMin", 60)
+        set(v) = putI("vaultKeepMin", v)
     var vaultVer: Long
         get() = p.getLong("vaultVer", 0L)
         set(v) { p.edit().putLong("vaultVer", v).apply() }

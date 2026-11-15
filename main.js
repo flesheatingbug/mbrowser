@@ -2087,6 +2087,21 @@ function setupIpc() {
   }, PAGE_ONLY);
   handle('vault:lock', () => { if (!vault.isDevice()) { vault.lock(); clearTimeout(vaultTimer); delKey(KEYFILES.remember); } return true; }, PAGE_ONLY);
   // the device key, so that another device of yours (the Android app) can be given the same key once
+  // a QR code that connects another device (the phone): server address, a new key for it, and the vault key
+  handle('pair:qr', async (e, opts) => {
+    if (!syncReady()) return { error: 'Connect this browser to your server first (Settings > Sync).' };
+    let tok;
+    try { tok = (await call('POST', '/api/pair', { device: String((opts && opts.device) || 'Phone') })).token; }
+    catch (err) { return { error: /404|405/.test(err.message) ? 'Update your sync server to use this (it needs the newest version).' : err.message }; }
+    if (!tok) return { error: 'The server did not return a key.' };
+    let key = '';
+    let withKey = false;
+    if (opts && opts.withVault && vault.exists() && vault.unlocked()) {
+      try { key = vault.isDevice() ? (readKey(KEYFILES.device) || '') : vault.exportKey(); withKey = !!key; } catch { key = ''; }
+    }
+    const payload = ['mbp1', S().sync.server.replace(/\/+$/, ''), tok, key].join('|');
+    return { svg: require('./lib/qr').makeSvg(payload, 6, '#000000', '#ffffff'), withKey };
+  }, PAGE_ONLY);
   handle('vault:exportKey', () => {
     if (!vault.isDevice()) return { error: 'This vault uses a master password: just type that password on the other device.' };
     const k = readKey(KEYFILES.device);

@@ -66,6 +66,7 @@ if (location.protocol === 'my:') {
     vaultSetMode: invoke('vault:setMode'),
     vaultSetRemember: invoke('vault:setRemember'),
     vaultExportKey: invoke('vault:exportKey'),
+    pairQr: invoke('pair:qr'),
     vaultListCards: invoke('vault:listCards'),
     vaultSaveCard: invoke('vault:saveCard'),
     vaultRevealCard: invoke('vault:revealCard'),

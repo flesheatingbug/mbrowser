@@ -30,25 +30,68 @@ object Vault {
 
     fun blobText(ctx: Context): String? = try { file(ctx).readText() } catch (_: Exception) { null }
     fun exists(ctx: Context): Boolean = try { JSONObject(blobText(ctx) ?: "").has("data") } catch (_: Exception) { false }
-    fun unlocked() = key != null
+    private var expiryAt = 0L          // with "for a set time": when the vault locks itself again (0 = never)
+    var pendingKey: ByteArray? = null  // a key that arrived by QR code, tried as soon as the vault has been downloaded
+
+    fun unlocked(): Boolean {
+        if (key != null && expiryAt > 0 && System.currentTimeMillis() > expiryAt) lock()
+        return key != null
+    }
+
+    private fun armExpiry(ctx: Context, from: Long) {
+        val p = Prefs(ctx)
+        expiryAt = if (p.vaultKeep == "time") from + p.vaultKeepMin * 60_000L else 0L
+    }
+
+    /** Keeps the key on this phone (or not) according to "keep passwords unlocked". */
+    fun remember(ctx: Context) {
+        val k = key ?: return
+        if (Prefs(ctx).vaultKeep == "app") DeviceKey.clear(ctx) else DeviceKey.save(ctx, k)
+        armExpiry(ctx, System.currentTimeMillis())
+    }
+
+    /** After the setting changed: store or drop the key, and restart the timer. */
+    fun reapplyPolicy(ctx: Context) { if (key != null) remember(ctx) else if (Prefs(ctx).vaultKeep == "app") DeviceKey.clear(ctx) }
+
+    fun lockAndForget(ctx: Context) { DeviceKey.clear(ctx); lock() }
     fun isDevice(ctx: Context): Boolean = try { JSONObject(blobText(ctx) ?: "").optBoolean("device") } catch (_: Exception) { false }
 
-    /** Opens a device-mode vault with the raw 32-byte key (no master password). */
-    fun unlockWithKey(ctx: Context, k: ByteArray): Boolean {
+    /** Opens the vault with the raw 32-byte key: a device key, or the key a master password makes (from a QR code). */
+    fun unlockWithKey(ctx: Context, k: ByteArray, fromStore: Boolean = false): Boolean {
         val blob = try { JSONObject(blobText(ctx) ?: return false) } catch (_: Exception) { return false }
-        if (!blob.optBoolean("device") || k.size != 32) return false
+        if (k.size != 32) return false
         return try {
             val (es, fs) = decrypt(blob, k)
             key = k.copyOf(); entries = es; folders = fs
-            kdf = blob.getJSONObject("kdf"); salt = blob.optString("salt"); device = true
+            kdf = blob.getJSONObject("kdf"); salt = blob.optString("salt"); device = blob.optBoolean("device")
+            if (fromStore) armExpiry(ctx, DeviceKey.savedAt(ctx)) else remember(ctx)
             true
         } catch (_: Exception) { false }
     }
 
-    /** Opens a device-mode vault with the key remembered on this phone, if there is one. */
+    /** Opens the vault with a key that arrived by QR code or was remembered on this phone, if there is one. */
     fun tryAutoUnlock(ctx: Context) {
-        if (key != null || !exists(ctx) || !isDevice(ctx)) return
-        DeviceKey.load(ctx)?.let { unlockWithKey(ctx, it) }
+        if (key != null || !exists(ctx)) return
+        pendingKey?.let { if (unlockWithKey(ctx, it)) { pendingKey = null; return } }
+        DeviceKey.load(ctx)?.let { if (!unlockWithKey(ctx, it, true)) DeviceKey.clear(ctx) }
+    }
+
+    fun isMaster(ctx: Context) = exists(ctx) && !isDevice(ctx)
+
+    /** Protects the open vault with a master password instead of a device key. Slow: call off the main thread. */
+    fun setMaster(ctx: Context, master: String) {
+        if (key == null) throw IllegalStateException("locked")
+        val s = ByteArray(16).also { SecureRandom().nextBytes(it) }
+        kdf = JSONObject(DEFAULT_KDF.toString()); salt = b64(s)
+        key = derive(master, s, kdf); device = false
+        persist(ctx); remember(ctx)
+    }
+
+    /** Protects the open vault with a random key kept on this phone, no password. */
+    fun setDevice(ctx: Context) {
+        if (key == null) throw IllegalStateException("locked")
+        key = ByteArray(32).also { SecureRandom().nextBytes(it) }; device = true
+        persist(ctx); remember(ctx)
     }
     fun sha(s: String): String = MessageDigest.getInstance("SHA-256").digest(s.toByteArray()).joinToString("") { "%02x".format(it) }
 
@@ -102,7 +145,8 @@ object Vault {
             val k = derive(master, unb64(blob.getString("salt")), blob.getJSONObject("kdf"))
             val (es, fs) = decrypt(blob, k)
             key = k; entries = es; folders = fs
-            kdf = blob.getJSONObject("kdf"); salt = blob.getString("salt"); device = false
+            kdf = blob.getJSONObject("kdf"); salt = blob.getString("salt"); device = blob.optBoolean("device")
+            remember(ctx)
             true
         } catch (_: Exception) { false }
     }
@@ -233,15 +277,27 @@ object DeviceKey {
         return g.generateKey()
     }
 
+    private fun bootCount(ctx: Context): Int =
+        try { android.provider.Settings.Global.getInt(ctx.contentResolver, "boot_count", -1) } catch (_: Exception) { -1 }
+
+    fun savedAt(ctx: Context): Long = prefs(ctx).getLong("t", System.currentTimeMillis())
+
     fun save(ctx: Context, k: ByteArray) {
         val c = Cipher.getInstance("AES/GCM/NoPadding")
         c.init(Cipher.ENCRYPT_MODE, wrapKey())
         val ct = c.doFinal(k)
-        prefs(ctx).edit().putString("k", Base64.encodeToString(c.iv, Base64.NO_WRAP) + ":" + Base64.encodeToString(ct, Base64.NO_WRAP)).apply()
+        prefs(ctx).edit().putString("k", Base64.encodeToString(c.iv, Base64.NO_WRAP) + ":" + Base64.encodeToString(ct, Base64.NO_WRAP))
+            .putLong("t", System.currentTimeMillis()).putInt("b", bootCount(ctx)).apply()
     }
 
     fun load(ctx: Context): ByteArray? {
         return try {
+            val p = Prefs(ctx)
+            when (p.vaultKeep) {
+                "app" -> return null                                              // never kept past this run
+                "reboot" -> if (prefs(ctx).getInt("b", -2) != bootCount(ctx)) { clear(ctx); return null }
+                "time" -> if (System.currentTimeMillis() - prefs(ctx).getLong("t", 0L) > p.vaultKeepMin * 60_000L) { clear(ctx); return null }
+            }
             val v = prefs(ctx).getString("k", null)?.split(":") ?: return null
             val c = Cipher.getInstance("AES/GCM/NoPadding")
             c.init(Cipher.DECRYPT_MODE, wrapKey(), GCMParameterSpec(128, Base64.decode(v[0], Base64.DEFAULT)))
@@ -275,7 +331,7 @@ object VaultSync {
                 prefs.vaultVer = r.optLong("version"); prefs.vaultHash = Vault.sha(text); true
             } catch (e: ApiException) { if (e.code == 409) false else throw e }
         }
-        fun take(b: JSONObject, ver: Long) { Vault.adopt(ctx, b); prefs.vaultVer = ver; prefs.vaultHash = Vault.sha(Vault.blobText(ctx) ?: "") }
+        fun take(b: JSONObject, ver: Long) { Vault.adopt(ctx, b); prefs.vaultVer = ver; prefs.vaultHash = Vault.sha(Vault.blobText(ctx) ?: ""); Vault.tryAutoUnlock(ctx) }
 
         val msg: String = when {
             !rExists && local == null -> "No password vault yet"
