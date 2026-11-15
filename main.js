@@ -112,6 +112,16 @@ if (!gotLock) app.quit();
 if (app.userAgentFallback) {
   app.userAgentFallback = app.userAgentFallback.replace(/\s*Electron\/\S+/, '').replace(/\s*(mybrowser|mbrowser)\/\S+/i, '');
 }
+// Set the global Chromium UA before anything else starts. This is the lowest-level override
+// and affects every request that bypasses the per-session setUserAgent() call (service workers,
+// background fetches, auth popups before our CDP mask runs, etc.). ses.setUserAgent() still
+// overrides this for user-settable browserId modes (firefox, safari, none).
+{
+  const _uaPlat = process.platform === 'win32' ? '(Windows NT 10.0; Win64; x64)' : '(X11; Linux x86_64)';
+  const _uaChr = process.versions.chrome || '130.0.0.0';
+  app.commandLine.appendSwitch('user-agent',
+    `Mozilla/5.0 ${_uaPlat} AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${_uaChr} Safari/537.36`);
+}
 // silences the harmless "--ozone-platform=wayland is not compatible with Vulkan" message
 app.commandLine.appendSwitch('disable-features', 'Vulkan');
 // prevent navigator.webdriver from being set (some Chromium builds set it when DevTools attaches)
