@@ -45,7 +45,8 @@
   .grid.auto-cols { grid-template-columns: repeat(auto-fill, var(--tile)); }
   .tile { position: relative; display: flex; flex-direction: column; width: var(--tile);
     color: var(--fg); text-decoration: none; cursor: pointer;
-    transition: transform .18s cubic-bezier(.34,1.56,.64,1), opacity .15s; }
+    transition: transform .18s cubic-bezier(.34,1.56,.64,1), opacity .15s;
+    will-change: translate; }
   a.tile:hover { text-decoration: none; }
   .tile:hover { transform: translateY(-3px); }
   .tile.dragging { opacity: .4; transform: scale(.95); }
@@ -185,6 +186,7 @@ let drag = null;
 let folderPath = [];
 let thumbVer = 0;
 let thumbPoll = null;
+let isRendering = false;
 
 function refreshThumbs() {
   // Collect visible URLs to refresh
@@ -514,6 +516,7 @@ function makeFolderThumb(d) {
 
 // --- grid ---
 function renderGrid() {
+  isRendering = true;
   const grid = $('grid'); grid.textContent = '';
   const ai = activeIdx();
   const cols = +(SP.columns) || 0;
@@ -543,6 +546,7 @@ function renderGrid() {
     const isFolder = d.type === 'folder';
     const tile = isFolder ? document.createElement('div') : document.createElement('a');
     tile.className = 'tile' + (isFolder ? ' folder' : '');
+    tile.dataset.key = isFolder ? 'f:' + (d.title || idx) : (d.url || String(idx));
     if (!isFolder) {
       tile.href = d.url;
       tile.onclick = (e) => { e.preventDefault(); if (e.ctrlKey || e.metaKey) browser.openUrl(d.url, 'tab'); else browser.go(d.url); };
@@ -627,9 +631,52 @@ function renderGrid() {
   }
 
   grid.oncontextmenu = (e) => showCtx(e, 'blank', {});
+  snapTilePositions();
+  isRendering = false;
 }
 
 function render() { applyLook(); renderTabBar(); renderGrid(); }
+
+// --- bouncy resize animation (FLIP technique) ---
+const snapPos = new Map();
+
+function snapTilePositions() {
+  snapPos.clear();
+  document.querySelectorAll('#grid .tile[data-key]').forEach((tile) => {
+    const r = tile.getBoundingClientRect();
+    snapPos.set(tile.dataset.key, { left: r.left, top: r.top });
+  });
+}
+
+const gridRo = new ResizeObserver(() => {
+  if (isRendering) return;
+  const moves = [];
+  document.querySelectorAll('#grid .tile[data-key]').forEach((tile) => {
+    const prev = snapPos.get(tile.dataset.key);
+    if (!prev) return;
+    const curr = tile.getBoundingClientRect();
+    const dx = prev.left - curr.left;
+    const dy = prev.top - curr.top;
+    if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return;
+    moves.push({ tile, dx, dy });
+  });
+  if (!moves.length) { snapTilePositions(); return; }
+  // Apply inverse translate synchronously (before paint) so no flash
+  moves.forEach(({ tile, dx, dy }) => {
+    tile.style.transition = 'none';
+    tile.style.translate = `${dx}px ${dy}px`;
+  });
+  // Animate to final position in next frame
+  requestAnimationFrame(() => {
+    moves.forEach(({ tile }) => {
+      tile.style.transition = 'translate 0.5s cubic-bezier(0.34, 1.56, 0.64, 1)';
+      tile.style.translate = '';
+      tile.addEventListener('transitionend', () => { tile.style.transition = ''; tile.style.translate = ''; }, { once: true });
+    });
+  });
+  snapTilePositions();
+});
+gridRo.observe($('grid'));
 
 // --- customize panel ---
 function renderPanel() {
