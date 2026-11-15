@@ -1359,7 +1359,10 @@ function mainMenu() {
     item('tab-new'), item('tab-new-private'), item('window-new'), item('window-new-private'), { type: 'separator' },
     item('app-start'), item('page-add-speeddial'), { type: 'separator' },
     item('page-find'), item('page-print'), item('page-screenshot'), item('page-fullscreen'), { type: 'separator' },
-    item('app-history'), item('app-bookmarks'), item('app-downloads'), item('app-passwords'), item('app-profiles'), item('app-quick-commands'), item('app-settings'), { type: 'separator' },
+    item('app-history'), item('app-bookmarks'), item('app-downloads'), item('app-passwords'), item('app-profiles'), item('app-quick-commands'),
+    { type: 'separator' },
+    { label: 'Appearance', click: () => openInternal('settings#appearance') },
+    item('app-settings'), { type: 'separator' },
     { label: 'Check for updates', click: () => checkForUpdates(true) },
     { label: 'Quit', click: () => app.quit() },
   ]));
