@@ -542,22 +542,20 @@ function maskUserAgentData(wc) {
   // ses.setUserAgent() patches navigator.userAgent but not the Client Hints API.
   if (S().general.browserId === 'none') return;
   try { wc.debugger.attach('1.3'); } catch { return; }
-  const chromeVer = (process.versions.chrome || '130.0.0.0');
-  const major = chromeVer.split('.')[0];
   const plat = process.platform === 'win32' ? 'Windows' : 'Linux';
-  const ua = `Mozilla/5.0 ${plat === 'Windows' ? '(Windows NT 10.0; Win64; x64)' : '(X11; Linux x86_64)'} AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${major}.0.0.0 Safari/537.36`;
+  const ua = `Mozilla/5.0 ${plat === 'Windows' ? '(Windows NT 10.0; Win64; x64)' : '(X11; Linux x86_64)'} AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${CHROME_VER} Safari/537.36`;
   wc.debugger.sendCommand('Emulation.setUserAgentOverride', {
     userAgent: ua,
     userAgentMetadata: {
       brands: [
-        { brand: 'Not?A_Brand', version: '24' },
-        { brand: 'Chromium', version: major },
-        { brand: 'Google Chrome', version: major },
+        { brand: 'Not?A_Brand', version: '8' },
+        { brand: 'Chromium', version: CHROME_MAJOR },
+        { brand: 'Google Chrome', version: CHROME_MAJOR },
       ],
       fullVersionList: [
-        { brand: 'Not?A_Brand', version: '24.0.0.0' },
-        { brand: 'Chromium', version: chromeVer },
-        { brand: 'Google Chrome', version: chromeVer },
+        { brand: 'Not?A_Brand', version: '8.0.0.0' },
+        { brand: 'Chromium', version: CHROME_VER },
+        { brand: 'Google Chrome', version: CHROME_VER },
       ],
       platform: plat,
       platformVersion: '',
@@ -2797,14 +2795,14 @@ function uaForMode(mode) {
   if (mode === 'firefox') return win ? 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:132.0) Gecko/20100101 Firefox/132.0' : 'Mozilla/5.0 (X11; Linux x86_64; rv:132.0) Gecko/20100101 Firefox/132.0';
   if (mode === 'safari') return 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.6 Safari/605.1.15';
   if (mode === 'none') return app.userAgentFallback;
-  return `Mozilla/5.0 ${win ? '(Windows NT 10.0; Win64; x64)' : '(X11; Linux x86_64)'} AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${CHROME_MAJOR}.0.0.0 Safari/537.36`;
+  return `Mozilla/5.0 ${win ? '(Windows NT 10.0; Win64; x64)' : '(X11; Linux x86_64)'} AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${CHROME_VER} Safari/537.36`;
 }
 
 function setupSession(ses) {
   // Set a plain Chrome UA for this session — strips Electron/mbrowser from navigator.userAgent
   // and from navigator.userAgentData so Google sign-in does not refuse the browser.
   const uaPlat = process.platform === 'win32' ? '(Windows NT 10.0; Win64; x64)' : '(X11; Linux x86_64)';
-  const chromeUA = `Mozilla/5.0 ${uaPlat} AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${CHROME_MAJOR}.0.0.0 Safari/537.36`;
+  const chromeUA = `Mozilla/5.0 ${uaPlat} AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${CHROME_VER} Safari/537.36`;
   uaSessions.add(ses);
   ses.setUserAgent(uaForMode(S().general.browserId));
 
@@ -2822,21 +2820,29 @@ function setupSession(ses) {
     callback(-3); // -3 = use Chromium's normal verification result
   });
   blocker.attach(ses, (wcId) => { blockedCounts.set(wcId, (blockedCounts.get(wcId) || 0) + 1); pushSoon(); });
-  // Override UA + all client-hint headers for Google/Gmail so sign-in accepts the browser.
+  // Combined header handler: DNT (all requests) + UA client-hint fix (Google domains).
+  // Registered after blocker.attach so this wins the single-listener slot; it replicas
+  // the blocker's DNT logic so that functionality is not lost.
   const uaPlatHint = process.platform === 'win32' ? '"Windows"' : '"Linux"';
-  ses.webRequest.onBeforeSendHeaders(
-    { urls: ['*://*.google.com/*', '*://*.googleapis.com/*', '*://*.gmail.com/*', '*://*.accounts.google.com/*'] },
-    (details, callback) => {
-      if (S().general.browserId !== 'chrome') return callback({ requestHeaders: details.requestHeaders });
-      const h = details.requestHeaders;
+  const googlePattern = /^https?:\/\/([^/]*\.)?(google\.[a-z]{2,}|gmail\.com|googleapis\.com)\//i;
+  ses.webRequest.onBeforeSendHeaders(null, (details, callback) => {
+    const h = details.requestHeaders;
+    // DNT for all requests (mirrors blocker's removed handler)
+    if (S().privacy?.doNotTrack) { h['DNT'] = '1'; h['Sec-GPC'] = '1'; }
+    // Google sign-in: replace UA client-hint headers so sign-in accepts the browser.
+    if (S().general.browserId === 'chrome' && googlePattern.test(details.url)) {
+      // Delete both common capitalisations so the Electron brand doesn't leak alongside ours.
+      ['Sec-CH-UA', 'sec-ch-ua', 'Sec-CH-UA-Mobile', 'sec-ch-ua-mobile',
+       'Sec-CH-UA-Platform', 'sec-ch-ua-platform', 'Sec-CH-UA-Full-Version-List',
+       'sec-ch-ua-full-version-list', 'User-Agent', 'user-agent'].forEach((k) => delete h[k]);
       h['user-agent'] = chromeUA;
-      h['sec-ch-ua'] = `"Chromium";v="${CHROME_MAJOR}", "Google Chrome";v="${CHROME_MAJOR}", "Not?A_Brand";v="99"`;
+      h['sec-ch-ua'] = `"Chromium";v="${CHROME_MAJOR}", "Google Chrome";v="${CHROME_MAJOR}", "Not?A_Brand";v="8"`;
       h['sec-ch-ua-mobile'] = '?0';
       h['sec-ch-ua-platform'] = uaPlatHint;
-      h['sec-ch-ua-full-version-list'] = `"Chromium";v="${CHROME_VER}", "Google Chrome";v="${CHROME_VER}", "Not?A_Brand";v="99.0.0.0"`;
-      callback({ requestHeaders: h });
+      h['sec-ch-ua-full-version-list'] = `"Chromium";v="${CHROME_VER}", "Google Chrome";v="${CHROME_VER}", "Not?A_Brand";v="8.0.0.0"`;
     }
-  );
+    callback({ requestHeaders: h });
+  });
 }
 
 // ---------- speed dial thumbnails ----------
