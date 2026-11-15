@@ -2560,10 +2560,12 @@ function setupIpc() {
   }, BOTH);
 
   handle('app:resetAll', async () => {
-    // Mark a pending reset so the new process wipes data before loading anything.
-    // We do NOT delete the directory here — Chromium can recreate it during shutdown.
     profiles.setPendingReset();
-    app.relaunch(); app.quit();
+    // Skip the privacy-clearing before-quit delay so the single-instance lock
+    // is released before the relaunched process starts (critical on Linux).
+    quitCleared = true;
+    app.relaunch({ args: process.argv.slice(1) });
+    app.quit();
     return { ok: true };
   }, BOTH);
   handle('app:rerunWizard', async () => {
@@ -3336,9 +3338,21 @@ app.whenReady().then(async () => {
   // If a reset was requested in the previous session, wipe the userData directory NOW —
   // before Chromium loads anything from it — then continue with a fresh data directory.
   if (profiles.pendingReset()) {
+    // Clear the flag before we delete so the file write doesn't fail on a fresh dir.
     profiles.clearPendingReset();
-    const dataDir = app.getPath('userData');
-    try { if (fs.existsSync(dataDir)) fs.rmSync(dataDir, { recursive: true, force: true }); } catch { /* ignore */ }
+    const appDataDir = app.getPath('appData');
+    // Delete default profile userData dir.
+    try { fs.rmSync(app.getPath('userData'), { recursive: true, force: true }); } catch { /* ignore */ }
+    // Delete all extra profile directories and the profiles registry file.
+    try {
+      for (const entry of fs.readdirSync(appDataDir)) {
+        if (entry.startsWith('mbrowser-profile-') || entry === 'mbrowser-profiles.json') {
+          try { fs.rmSync(path.join(appDataDir, entry), { recursive: true, force: true }); } catch { /* skip */ }
+        }
+      }
+    } catch { /* ignore */ }
+    // Reload profiles so in-memory state is fresh (setupDone gone → wizard will show).
+    profiles.reload();
     try { await session.defaultSession.clearStorageData(); } catch { /* ignore */ }
     try { await session.defaultSession.clearCache(); } catch { /* ignore */ }
   }
@@ -3347,7 +3361,8 @@ app.whenReady().then(async () => {
   if (pendingProfileId) {
     profiles.clearPendingProfileReset();
     const profileDir = profiles.dirFor(pendingProfileId);
-    try { if (fs.existsSync(profileDir)) fs.rmSync(profileDir, { recursive: true, force: true }); } catch { /* ignore */ }
+    try { fs.rmSync(profileDir, { recursive: true, force: true }); } catch { /* ignore */ }
+    profiles.reload();
     try { await session.defaultSession.clearStorageData(); } catch { /* ignore */ }
     try { await session.defaultSession.clearCache(); } catch { /* ignore */ }
   }
