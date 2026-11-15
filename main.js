@@ -138,6 +138,12 @@ const UPDATE_REPO = 'flesheatingbug/mbrowser';
 const UPDATE_TAG  = 'latest-desktop';
 let _pendingUpdatePath = null; // downloaded AppImage ready to relaunch
 
+// Copy then delete — works across filesystems (EXDEV on rename otherwise)
+function moveFile(src, dest) {
+  fs.copyFileSync(src, dest);
+  try { fs.unlinkSync(src); } catch { /* ignore cleanup failure */ }
+}
+
 async function checkForUpdates(manual = false) {
   try {
     const r = await fetch(`https://api.github.com/repos/${UPDATE_REPO}/releases/tags/${UPDATE_TAG}`, {
@@ -173,7 +179,8 @@ async function checkForUpdates(manual = false) {
 }
 
 async function silentAppImageUpdate(info) {
-  const dest = path.join(os.tmpdir(), 'mbrowser-update.AppImage');
+  // Save next to the running AppImage so moveFile stays on the same filesystem
+  const dest = path.join(path.dirname(process.env.APPIMAGE), '.mbrowser-update.AppImage');
   const broadcast = (ch, data) => {
     for (const w of windows) { try { w.statusView.webContents.send(ch, data); } catch { /* ignore */ } }
   };
@@ -251,7 +258,7 @@ async function downloadAndInstall(url, isWin, isAppImage, onProgress) {
     if (isAppImage) {
       fs.chmodSync(dest, 0o755);
       const target = process.env.APPIMAGE;
-      fs.renameSync(dest, target);
+      moveFile(dest, target);
       app.relaunch({ execPath: target });
       app.exit(0);
     } else {
@@ -2506,7 +2513,7 @@ function setupIpc() {
     const isAppImage = !!process.env.APPIMAGE;
     if (isAppImage && _pendingUpdatePath) {
       try {
-        fs.renameSync(_pendingUpdatePath, process.env.APPIMAGE);
+        moveFile(_pendingUpdatePath, process.env.APPIMAGE);
         app.relaunch({ execPath: process.env.APPIMAGE });
         app.exit(0);
       } catch (e) { dialog.showErrorBox('Update failed', e.message); }
@@ -2541,7 +2548,7 @@ function setupIpc() {
     const isAppImage = !!process.env.APPIMAGE;
     if (!info.canInstall) { newTab(info.url); return { ok: true }; }
     if (isAppImage && _pendingUpdatePath) {
-      try { fs.renameSync(_pendingUpdatePath, process.env.APPIMAGE); } catch { /* ignore if already moved */ }
+      try { moveFile(_pendingUpdatePath, process.env.APPIMAGE); } catch { /* ignore if already moved */ }
       app.relaunch({ execPath: process.env.APPIMAGE });
       app.exit(0);
       return { ok: true };
