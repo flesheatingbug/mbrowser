@@ -66,12 +66,21 @@ object Store {
     }
 
     @Synchronized
+    // history is written in the background, a moment after the last change, so a long history never slows down page loads
+    private val saver = java.util.concurrent.Executors.newSingleThreadScheduledExecutor()
+    private var pendingSave: java.util.concurrent.ScheduledFuture<*>? = null
+
     private fun saveHistory() {
-        val a = JSONArray()
-        for (v in history) {
-            a.put(JSONObject().put("url", v.url).put("title", v.title).put("time", v.time).put("dirty", v.dirty))
-        }
-        File(dir, "history.json").writeText(a.toString())
+        pendingSave?.cancel(false)
+        pendingSave = saver.schedule({
+            val snapshot = synchronized(this) { history.toList() }
+            val a = JSONArray()
+            for (v in snapshot) a.put(JSONObject().put("url", v.url).put("title", v.title).put("time", v.time).put("dirty", v.dirty))
+            try {
+                val f = File(dir, "history.json"); val tmp = File(dir, "history.json.tmp")
+                tmp.writeText(a.toString()); tmp.renameTo(f)
+            } catch (_: Exception) { }
+        }, 1500, java.util.concurrent.TimeUnit.MILLISECONDS)
     }
 
     @Synchronized fun bookmarkList(): List<Bookmark> =
