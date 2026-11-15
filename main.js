@@ -529,6 +529,18 @@ function maskUserAgentData(wc) {
         onloadT: performance.timing ? performance.timing.loadEventEnd : 0,
         pageT: performance.now(), tran: 15,
       }; };
+      if (!c.app) c.app = {
+        isInstalled: false,
+        getDetails: function(){ return null; },
+        getIsInstalled: function(){ return false; },
+        installState: function(cb){ if (cb) cb('disabled'); },
+        runningState: function(){ return 'cannot_run'; },
+      };
+      if (!c.webstore) c.webstore = {
+        install: function(url, success, failure){ if (failure) failure('User cancelled install'); },
+        onInstallStageChanged: { addListener: function(){}, removeListener: function(){}, hasListener: function(){ return false; } },
+        onDownloadProgress: { addListener: function(){}, removeListener: function(){}, hasListener: function(){ return false; } },
+      };
     })();`,
   }).catch(() => {});
 }
@@ -663,6 +675,9 @@ function wire(tab) {
     newTab(url, { after: tab.id, private: tab.private, background: disposition === 'background-tab' });
     return { action: 'deny' };
   });
+  // Mask UA data on any popup window created from this tab (e.g. Google sign-in flow).
+  // The popup's webContents is fresh and has not been through maskUserAgentData yet.
+  wc.on('did-create-window', (newWin) => { maskUserAgentData(newWin.webContents); });
   wc.on('context-menu', h((_e, params) => showContextMenu(tab, params)));
   wc.on('found-in-page', h((_e, result) => {
     if (cur.overlayMode === 'find' && tab.id === cur.activeId) cur.overlay.webContents.send('find:result', result);
