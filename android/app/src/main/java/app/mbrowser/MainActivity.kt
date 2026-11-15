@@ -1338,6 +1338,10 @@ class MainActivity : BaseActivity() {
         Sync.runAsync(this, { open }) { msg ->
             ui.post {
                 if (verbose || msg != "Synced") Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
+                if (prefs.themeId != appliedTheme) { recreate(); return@post }   // a theme that came down from the server
+                applyLogo()
+                if (barSignature != Toolbars.keys(prefs).joinToString(",")) buildBottomBar()
+                applyWallpaper()
                 if (cur()?.home == true) startPage.refresh()
                 updateChrome()
             }

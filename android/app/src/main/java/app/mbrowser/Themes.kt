@@ -33,7 +33,7 @@ object Themes {
 
 /** Every screen starts from here so it gets the chosen theme, and redraws when the theme changes. */
 open class BaseActivity : AppCompatActivity() {
-    private var appliedTheme = ""
+    protected var appliedTheme = ""
     override fun onCreate(savedInstanceState: Bundle?) {
         appliedTheme = Prefs(this).themeId
         setTheme(Themes.styleFor(this))

@@ -20,7 +20,7 @@ object Look {
 
     /** Applies a synced look to this phone. */
     fun apply(ctx: Context, p: Prefs, v: JSONObject) {
-        if (v.has("themeMode")) p.themeMode = v.optInt("themeMode")
+        if (v.has("themeMode")) { p.themeMode = v.optInt("themeMode"); try { App.applyTheme(p.themeMode) } catch (_: Exception) { } }
         if (v.has("themeId")) p.themeId = v.optString("themeId")
         if (v.has("iconStyle")) p.iconStyle = v.optString("iconStyle")
         if (v.has("appIcon")) {
