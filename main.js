@@ -97,6 +97,8 @@ if (app.userAgentFallback) {
 }
 // silences the harmless "--ozone-platform=wayland is not compatible with Vulkan" message
 app.commandLine.appendSwitch('disable-features', 'Vulkan');
+// prevent navigator.webdriver from being set (some Chromium builds set it when DevTools attaches)
+app.commandLine.appendSwitch('disable-blink-features', 'AutomationControlled');
 
 protocol.registerSchemesAsPrivileged([
   { scheme: 'my', privileges: { standard: true, secure: true, corsEnabled: true, supportFetchAPI: true } },
@@ -558,7 +560,7 @@ function maskUserAgentData(wc) {
         { brand: 'Google Chrome', version: CHROME_VER },
       ],
       platform: plat,
-      platformVersion: '',
+      platformVersion: os.release(),
       architecture: 'x86',
       model: '',
       mobile: false,
@@ -2825,7 +2827,8 @@ function setupSession(ses) {
   // the blocker's DNT logic so that functionality is not lost.
   const uaPlatHint = process.platform === 'win32' ? '"Windows"' : '"Linux"';
   const googlePattern = /^https?:\/\/([^/]*\.)?(google\.[a-z]{2,}|gmail\.com|googleapis\.com)\//i;
-  ses.webRequest.onBeforeSendHeaders(null, (details, callback) => {
+  const uaPlatVerHint = JSON.stringify(os.release());
+  ses.webRequest.onBeforeSendHeaders({ urls: ['<all_urls>'] }, (details, callback) => {
     const h = details.requestHeaders;
     // DNT for all requests (mirrors blocker's removed handler)
     if (S().privacy?.doNotTrack) { h['DNT'] = '1'; h['Sec-GPC'] = '1'; }
@@ -2833,12 +2836,14 @@ function setupSession(ses) {
     if (S().general.browserId === 'chrome' && googlePattern.test(details.url)) {
       // Delete both common capitalisations so the Electron brand doesn't leak alongside ours.
       ['Sec-CH-UA', 'sec-ch-ua', 'Sec-CH-UA-Mobile', 'sec-ch-ua-mobile',
-       'Sec-CH-UA-Platform', 'sec-ch-ua-platform', 'Sec-CH-UA-Full-Version-List',
+       'Sec-CH-UA-Platform', 'sec-ch-ua-platform', 'Sec-CH-UA-Platform-Version',
+       'sec-ch-ua-platform-version', 'Sec-CH-UA-Full-Version-List',
        'sec-ch-ua-full-version-list', 'User-Agent', 'user-agent'].forEach((k) => delete h[k]);
       h['user-agent'] = chromeUA;
       h['sec-ch-ua'] = `"Chromium";v="${CHROME_MAJOR}", "Google Chrome";v="${CHROME_MAJOR}", "Not?A_Brand";v="8"`;
       h['sec-ch-ua-mobile'] = '?0';
       h['sec-ch-ua-platform'] = uaPlatHint;
+      h['sec-ch-ua-platform-version'] = uaPlatVerHint;
       h['sec-ch-ua-full-version-list'] = `"Chromium";v="${CHROME_VER}", "Google Chrome";v="${CHROME_VER}", "Not?A_Brand";v="8.0.0.0"`;
     }
     callback({ requestHeaders: h });
