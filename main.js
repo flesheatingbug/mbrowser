@@ -1,6 +1,6 @@
 'use strict';
 const {
-  app, BaseWindow, BrowserWindow, WebContentsView, ipcMain, protocol, session, Menu, shell, nativeTheme, clipboard,
+  app, BaseWindow, BrowserWindow, WebContentsView, ipcMain, protocol, session, Menu, MenuItem, shell, nativeTheme, clipboard,
   screen, nativeImage, safeStorage, dialog, net,
 } = require('electron');
 const crypto = require('crypto');
