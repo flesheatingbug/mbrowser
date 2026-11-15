@@ -23,7 +23,7 @@ object Store {
     private val bookmarks = LinkedHashMap<String, Bookmark>()
     private val history = ArrayList<Visit>()
     private var loaded = false
-    private const val MAX_HISTORY = 5000
+    private const val MAX_HISTORY = 20000
 
     @Synchronized
     fun init(ctx: Context) {

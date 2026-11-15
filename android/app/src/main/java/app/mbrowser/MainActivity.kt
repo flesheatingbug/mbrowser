@@ -201,7 +201,7 @@ class MainActivity : BaseActivity() {
             findViewById<View>(R.id.btnQr).visibility = if (focused) View.VISIBLE else View.GONE
             btnStar.visibility = if (focused) View.GONE else View.VISIBLE
             btnReload.visibility = if (focused) View.GONE else View.VISIBLE
-            if (focused) showEngines() else { engineOverride = null; findViewById<View>(R.id.engineStrip).visibility = View.GONE; findViewById<View>(R.id.suggestScroll).visibility = View.GONE }
+            if (focused) { showEngines(); showSuggestions(""); pullHistoryForSuggestions() } else { engineOverride = null; findViewById<View>(R.id.engineStrip).visibility = View.GONE; findViewById<View>(R.id.suggestScroll).visibility = View.GONE }
         }
         btnReload.setOnClickListener {
             val t = cur()
@@ -358,12 +358,22 @@ class MainActivity : BaseActivity() {
         }.start()
     }
 
+    private var lastFocusSync = 0L
+
+    /** Fetch what your other devices visited, so the suggestions include it (at most every two minutes). */
+    private fun pullHistoryForSuggestions() {
+        if (!prefs.syncConfigured || !prefs.syncHistory || System.currentTimeMillis() - lastFocusSync < 120_000) return
+        lastFocusSync = System.currentTimeMillis()
+        val open = tabs.filter { !it.home && !it.priv }.map { it.url to it.title }
+        Sync.runAsync(this, { open }) { _ -> ui.post { if (urlBar.hasFocus()) showSuggestions(urlBar.text.toString()) } }
+    }
+
     // ---------- predictive suggestions from bookmarks and history ----------
     private fun showSuggestions(q0: String) {
         val scroll = findViewById<View>(R.id.suggestScroll)
         val list = findViewById<LinearLayout>(R.id.suggestList)
         val q = q0.trim().lowercase()
-        if (q.isEmpty() || cur()?.priv == true) { scroll.visibility = View.GONE; return }
+        if (cur()?.priv == true) { scroll.visibility = View.GONE; return }
         class Hit(val url: String, val title: String, var score: Int, val star: Boolean)
         val hits = LinkedHashMap<String, Hit>()
         fun bare(u: String) = u.removePrefix("https://").removePrefix("http://").removePrefix("www.")
@@ -380,8 +390,19 @@ class MainActivity : BaseActivity() {
             val h = hits[key]
             if (h == null) hits[key] = Hit(url, title, score, star) else h.score += 4   // visited again: more likely
         }
-        Store.bookmarkList().filter { !it.deleted }.forEach { consider(it.url, it.title, true, 0) }
-        Store.historyList().take(3000).forEachIndexed { i, v -> consider(v.url, v.title, false, if (i < 100) 10 else 0) }
+        if (q.isNotEmpty()) {
+            Store.bookmarkList().filter { !it.deleted }.forEach { consider(it.url, it.title, true, 0) }
+            Store.historyList().take(8000).forEachIndexed { i, v -> consider(v.url, v.title, false, if (i < 100) 10 else 0) }
+        }
+        if (q.isEmpty()) {
+            // nothing typed yet: the most recent pages, from this phone and from your other devices
+            val seen = HashSet<String>()
+            for (v in Store.historyList().take(400)) {
+                val key = bare(v.url).trimEnd('/')
+                if (seen.add(key)) hits[key] = Hit(v.url, v.title, 1000 - seen.size, false)
+                if (seen.size >= 6) break
+            }
+        }
         val top = hits.values.sortedByDescending { it.score }.take(6)
         list.removeAllViews()
         if (top.isEmpty()) { scroll.visibility = View.GONE; return }
