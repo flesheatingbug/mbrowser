@@ -41,6 +41,7 @@
   <div id="list"></div>
   <p><button id="new">+ Add a profile</button></p>
   <label style="display:flex;gap:8px;align-items:center;margin-top:18px"><input type="checkbox" id="ask"> Ask which profile to use every time mbrowser starts</label>
+  <label style="display:flex;gap:8px;align-items:center;margin-top:10px"><input type="checkbox" id="open-last"> Re-open the last used profile on start</label>
   <p class="note">A profile password keeps other people from opening that profile in mbrowser. It does not encrypt the profile's files on disk; saved passwords have their own, separate master password and are encrypted. Opening a profile starts a new mbrowser window group; close the one you no longer need.</p>
 
   <div class="danger-zone">
@@ -159,19 +160,30 @@
     });
   }
 
+  let prefs = {};
+
   async function load() {
     S = await browser.profilesList();
+    prefs = await browser.profilesGetPrefs();
     $('ask').checked = S.askAtStart;
+    $('open-last').checked = prefs.openLastProfile;
     const list = $('list'); list.textContent = '';
     for (const p of S.profiles) {
       const row = el('div', 'p');
       const info = el('div', 'info'); const b = el('b', null, p.name);
       if (p.id === S.current) b.append(el('span', 'badge', 'this window'));
+      if (p.id === prefs.defaultProfile) b.append(el('span', 'badge', 'default'));
       info.append(b, el('span', 'muted', p.locked ? 'Password protected' : 'No password'));
       const acts = el('div', 'acts');
       const btn = (t, fn, cls) => { const x = el('button', cls || '', t); x.onclick = fn; acts.append(x); return x; };
       const open = btn('Open', async () => { await browser.profilesOpen(p.id); });
       if (p.id === S.current) open.disabled = true;
+      if (p.id !== prefs.defaultProfile) {
+        btn('Set as default', async () => {
+          await browser.profilesSetDefault(p.id);
+          load();
+        });
+      }
       btn('Rename / avatar', async () => {
         const r = await ask('Edit profile', [{ key: 'name', label: 'Name', value: p.name }], 'Save', {
           color: p.color, avatar: p.avatar || '',
@@ -223,6 +235,7 @@
     if (r) load();
   };
   $('ask').onchange = () => browser.profilesAskAtStart($('ask').checked);
+  $('open-last').onchange = () => browser.profilesSetOpenLast($('open-last').checked);
 
   $('btn-wizard').onclick = () => browser.appRerunWizard();
 

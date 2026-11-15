@@ -126,6 +126,7 @@ const TAB_H = 38, TOOL_H = 50, TRANSLATE_H = 34, SIDE_W = 220, STATUS_H = 26, PA
 const MOBILE_UA = 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36';
 
 let store, blocker, vault;
+let resetInProgress = false;
 let vaultTimer = null;
 let vaultSyncInfo = { state: 'idle', message: 'Not synced yet' };
 let settingsSyncNote = '';
@@ -1305,8 +1306,9 @@ function popup(menu) {
 function launchProfile(id, unlocked) {
   // Start the same program the same way this instance was started (same Electron, same app folder, same flags),
   // only with another profile. This avoids Electron's default "welcome" page, which appears when the app path is missing.
-  const args = process.argv.slice(1).filter((a) => !a.startsWith('--profile='));
+  const args = process.argv.slice(1).filter((a) => !a.startsWith('--profile=') && a !== '--first-run');
   args.push('--profile=' + id);
+  if (profiles.isFirstRun(id)) { args.push('--first-run'); profiles.clearFirstRun(id); }
   const env = { ...process.env };
   delete env.MB_UNLOCKED_PROFILE;
   if (unlocked) env.MB_UNLOCKED_PROFILE = id;
@@ -1329,11 +1331,14 @@ function profileMenu() {
     enabled: p.id !== profileId,
     click: () => launchProfile(p.id, false),
   }));
+  const syncItem = isSignedIn
+    ? { label: syncLabel, enabled: false }
+    : { label: syncLabel, click: () => { profiles.clearSetupDone(); showWizard(); } };
   popup(Menu.buildFromTemplate([
-    { label: syncLabel, enabled: false },
+    syncItem,
     { type: 'separator' },
     ...items, { type: 'separator' },
-    { label: 'Manage profiles…', click: () => openInternal('profiles') },
+    { label: 'Manage profiles…', click: () => openInternal('settings#profiles') },
     { label: 'Settings → Sync', click: () => openInternal('settings#sync') },
     { type: 'separator' },
     { label: 'Quit this profile', click: () => app.quit() },
@@ -2538,16 +2543,33 @@ function setupIpc() {
   }), BOTH);
   handle('profiles:resetData', async (_e, id) => {
     const target = String(id || profileId);
-    if (target === profileId) {
-      // Current profile: files are locked on Windows while the process runs.
-      // Use the same two-step approach as app:resetAll — flag + relaunch so the
-      // new process can wipe the directory before Chromium opens any files.
-      profiles.setPendingProfileReset(target);
-      app.relaunch(); app.quit();
-      return { ok: true };
+    if (target !== profileId) {
+      // Other profiles are not running, so we can delete directly.
+      return profiles.resetProfile(target);
     }
-    // Other profiles are not running, so we can delete directly.
-    return profiles.resetProfile(target);
+    // Current profile: delete our own data files in-place.
+    // Chromium's LevelDB files may be locked on Windows — clearStorageData clears them in-process.
+    setImmediate(async () => {
+      const dir = profiles.dirFor(profileId);
+      for (const f of ['bookmarks.json', 'history.json', 'notes.json', 'bookmark-folders.json',
+                        'settings.json', 'vault.json', 'session.json', 'syncstate.json',
+                        'vault-remember.key', 'vault-device.key', 'dialicons']) {
+        try { fs.rmSync(path.join(dir, f), { recursive: true, force: true }); } catch {}
+      }
+      store = createStore(file('settings.json'));
+      vault = createVault(file('vault.json'));
+      bookmarks = []; bookmarkFolders = []; history = []; notes = [];
+      syncState = { bRev: 0, hRev: 0, hPushed: 0 };
+      syncStatus = 'Sync not configured';
+      clearTimeout(syncTimer); syncTimer = null;
+      try { await session.defaultSession.clearStorageData(); } catch {}
+      try { await session.defaultSession.clearCache(); } catch {}
+      resetInProgress = true;
+      for (const w of [...windows]) { try { w.win.close(); } catch {} }
+      resetInProgress = false;
+      createWindow({ first: true });
+    });
+    return { ok: true };
   }, BOTH);
   handle('blocker:status', () => blocker.getStatus(), BOTH);
   handle('blocker:update', async () => { const r = await blocker.download(); return r; }, BOTH);
@@ -2577,11 +2599,54 @@ function setupIpc() {
   }, BOTH);
 
   handle('app:resetAll', async () => {
-    // Strip --profile so the relaunched process starts as default (the others are gone).
-    const cleanArgs = process.argv.slice(1).filter((a) => !a.startsWith('--profile='));
-    quitCleared = true;
-    app.relaunch({ args: [...cleanArgs, '--reset-on-start'] });
-    app.quit();
+    if (wizardActive) return { error: 'Setup wizard is already running.' };
+    // Send the response first, then do the reset asynchronously so the renderer
+    // can close its modal before its window is destroyed.
+    setImmediate(async () => {
+      const baseDir = profiles.dirFor('default');
+      const appDataDir = path.dirname(baseDir);
+      // Delete all extra profile dirs (separate processes — not locked)
+      for (const p of profiles.list()) {
+        if (p.id !== 'default') {
+          try { fs.rmSync(profiles.dirFor(p.id), { recursive: true, force: true }); } catch {}
+        }
+      }
+      // Sweep old-style scattered files from parent appData dir
+      try {
+        for (const entry of fs.readdirSync(appDataDir)) {
+          if (entry.startsWith('mbrowser-profile-') || entry === 'mbrowser-profiles.json') {
+            try { fs.rmSync(path.join(appDataDir, entry), { recursive: true, force: true }); } catch {}
+          }
+        }
+      } catch {}
+      // Delete our own data files from the active profile dir
+      // (Chromium's LevelDB files may be locked on Windows — clearStorageData clears them in-process)
+      for (const f of ['bookmarks.json', 'history.json', 'notes.json', 'bookmark-folders.json',
+                        'settings.json', 'vault.json', 'session.json', 'syncstate.json',
+                        'vault-remember.key', 'vault-device.key', 'dialicons']) {
+        try { fs.rmSync(path.join(baseDir, f), { recursive: true, force: true }); } catch {}
+      }
+      // Reset profiles registry
+      profiles.resetAll();
+      // Reset in-memory state
+      store = createStore(file('settings.json'));
+      vault = createVault(file('vault.json'));
+      bookmarks = []; bookmarkFolders = []; history = []; notes = [];
+      syncState = { bRev: 0, hRev: 0, hPushed: 0 };
+      syncStatus = 'Sync not configured';
+      clearTimeout(syncTimer); syncTimer = null;
+      // Clear Chromium session data in-process
+      try { await session.defaultSession.clearStorageData(); } catch {}
+      try { await session.defaultSession.clearCache(); } catch {}
+      try { await session.fromPartition('private').clearStorageData(); } catch {}
+      // Close all browser windows without quitting the app
+      resetInProgress = true;
+      for (const w of [...windows]) { try { w.win.close(); } catch {} }
+      // Show wizard, then open a fresh browser window
+      try { await showWizard(); } catch {}
+      resetInProgress = false;
+      createWindow({ first: true });
+    });
     return { ok: true };
   }, BOTH);
   handle('app:rerunWizard', async () => {
@@ -3400,7 +3465,7 @@ app.whenReady().then(async () => {
   Menu.setApplicationMenu(null); // no File / Edit / View menu bar
   nativeTheme.on('updated', () => pushAll());
 
-  if (!profiles.setupDone()) await showWizard();
+  if (process.argv.includes('--first-run') || !profiles.setupDone()) await showWizard();
 
   profiles.setLastProfile(profileId);
   createWindow({ first: true });
@@ -3448,5 +3513,5 @@ app.on('before-quit', (e) => {
   Promise.allSettled(jobs).then(() => { quitCleared = true; app.quit(); });
 });
 
-app.on('window-all-closed', () => app.quit());
+app.on('window-all-closed', () => { if (!resetInProgress) app.quit(); });
 
