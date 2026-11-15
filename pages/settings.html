@@ -466,7 +466,58 @@
     if (cur === 'search') { searchSection(m); return; }
     if (cur === 'keyboard') { await keyboardSection(m); return; }
     if (cur === 'about') {
-      m.append(el('p', null, 'mbrowser: a Chromium-based browser with self-hosted sync. Your data, your server.'));
+      const build = await browser.appBuildNumber();
+      const logo = document.createElement('img');
+      logo.src = 'my://assets/icons/color-128.png';
+      logo.style.cssText = 'width:64px;height:64px;border-radius:16px;display:block;margin:0 0 16px;';
+      m.append(logo);
+      const title = el('h2', null, 'mbrowser');
+      title.style.cssText = 'font-size:24px;margin:0 0 4px;font-weight:700;';
+      m.append(title);
+      const verLine = el('p', 'muted', `Version 0.9.0 Build ${build > 0 ? build : 'dev'}`);
+      verLine.style.marginBottom = '16px';
+      m.append(verLine);
+      const tagline = el('p', null, 'A Chromium-based browser with self-hosted sync. Your data, your server.');
+      tagline.style.marginBottom = '16px';
+      m.append(tagline);
+      const ghLink = document.createElement('a');
+      ghLink.href = 'https://github.com/flesheatingbug/mbrowser';
+      ghLink.textContent = 'github.com/flesheatingbug/mbrowser →';
+      ghLink.onclick = (e) => { e.preventDefault(); browser.openUrl(ghLink.href, 'tab'); };
+      ghLink.style.cssText = 'font-size:14px;';
+      m.append(ghLink);
+
+      const sep = el('div'); sep.style.cssText = 'border-top:1px solid var(--line);margin:24px 0;';
+      m.append(sep);
+
+      const updateRow = el('div', 'btn-row'); updateRow.style.alignItems = 'center';
+      const checkBtn = el('button', null, 'Check for updates');
+      const updateMsg = el('span', 'msg', '');
+      updateRow.append(checkBtn, updateMsg);
+      m.append(updateRow);
+
+      let pendingInfo = null;
+      checkBtn.onclick = async () => {
+        checkBtn.disabled = true; checkBtn.textContent = 'Checking…';
+        updateMsg.textContent = ''; pendingInfo = null;
+        const installBtn = updateRow.querySelector('.install-btn');
+        if (installBtn) installBtn.remove();
+        const info = await browser.appUpdateInfo();
+        checkBtn.disabled = false; checkBtn.textContent = 'Check for updates';
+        if (info.error) { updateMsg.textContent = 'Error: ' + info.error; return; }
+        if (info.upToDate) { updateMsg.textContent = `You’re up to date (build ${info.build}).`; return; }
+        updateMsg.textContent = `Build ${info.build} is available.`;
+        pendingInfo = info;
+        const ib = el('button', 'install-btn', info.canInstall ? 'Install now' : 'Open download page');
+        ib.onclick = async () => {
+          ib.disabled = true; ib.textContent = info.canInstall ? 'Installing…' : 'Opening…';
+          await browser.appAutoInstall(pendingInfo);
+        };
+        updateRow.append(ib);
+      };
+
+      const uaSep = el('div'); uaSep.style.cssText = 'border-top:1px solid var(--line);margin:24px 0;';
+      m.append(uaSep);
       m.append(el('p', 'muted', navigator.userAgent));
       return;
     }

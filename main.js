@@ -2339,6 +2339,34 @@ function setupIpc() {
   handle('app:check-updates', async () => { await checkForUpdates(true); }, BOTH);
   handle('app:install-update', async (_e, info) => { await promptInstallUpdate(info); }, BOTH);
   handle('app:build-number', () => BUILD_NUMBER, BOTH);
+  handle('app:update-info', async () => {
+    try {
+      const r = await fetch(`https://api.github.com/repos/${UPDATE_REPO}/releases/tags/${UPDATE_TAG}`, {
+        headers: { 'User-Agent': 'mbrowser-desktop', Accept: 'application/vnd.github+json' },
+      });
+      if (!r.ok) return { error: `HTTP ${r.status}` };
+      const j = await r.json();
+      const notes = j.body || '';
+      const mt = notes.match(/[Bb]uild\s+(\d+)/);
+      const remote = mt ? parseInt(mt[1], 10) : 0;
+      if (BUILD_NUMBER > 0 && remote <= BUILD_NUMBER) return { upToDate: true, build: BUILD_NUMBER };
+      const isWin = process.platform === 'win32';
+      const isAppImage = !!process.env.APPIMAGE;
+      const assetName = isWin ? 'mbrowser-windows-setup.exe' : 'mbrowser-linux.AppImage';
+      const asset = (j.assets || []).find((a) => a.name === assetName);
+      const downloadUrl = asset?.browser_download_url || j.html_url;
+      return { build: remote, currentBuild: BUILD_NUMBER, url: downloadUrl, canInstall: !!(asset && (isWin || isAppImage)) };
+    } catch (e) {
+      return { error: e.message };
+    }
+  }, BOTH);
+  handle('app:auto-install', async (_e, info) => {
+    const isWin = process.platform === 'win32';
+    const isAppImage = !!process.env.APPIMAGE;
+    if (!info.canInstall) { shell.openExternal(info.url); return { ok: true }; }
+    await downloadAndInstall(info.url, isWin, isAppImage);
+    return { ok: true };
+  }, BOTH);
 
   handle('app:resetAll', async () => {
     // Mark a pending reset so the new process wipes data before loading anything.
