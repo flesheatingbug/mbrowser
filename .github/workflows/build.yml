@@ -138,10 +138,23 @@ jobs:
             fi
           }
           rotate_backup "desktop-backup-1" "desktop-backup-2"
-          rotate_backup "$TAG"             "desktop-backup-1"
+          # Move current latest to backup-1 with build number in title
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            PREV_NOTES=$(gh release view "$TAG" --json body -q .body 2>/dev/null || true)
+            PREV_BUILD=$(echo "$PREV_NOTES" | grep -oP 'Build \K[0-9]+' | head -1 || true)
+            PREV_TITLE="mbrowser Desktop${PREV_BUILD:+ Build ${PREV_BUILD}}"
+            mkdir -p "_dl_desktop-backup-1"
+            gh release download "$TAG" --dir "_dl_desktop-backup-1" --clobber 2>/dev/null || true
+            gh release delete "desktop-backup-1" --yes --cleanup-tag 2>/dev/null || true
+            if ls "_dl_desktop-backup-1"/* > /dev/null 2>&1; then
+              gh release create "desktop-backup-1" "_dl_desktop-backup-1"/* \
+                --title "${PREV_TITLE}" \
+                --notes "${PREV_NOTES}" 2>/dev/null || true
+            fi
+          fi
 
           gh release delete "$TAG" --yes --cleanup-tag 2>/dev/null || true
           gh release create "$TAG" release-assets/* \
-            --title "mbrowser Desktop Build ${{ github.run_number }}" \
+            --title "mbrowser Desktop" \
             --notes "$NOTES" \
             --latest
