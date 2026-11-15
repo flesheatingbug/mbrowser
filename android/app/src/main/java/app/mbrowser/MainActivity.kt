@@ -876,6 +876,28 @@ class MainActivity : BaseActivity() {
 
     private class Entry(val title: String, val sub: String, val url: String, val onOpen: () -> Unit)
 
+    // swipe left/right on the tab switcher to move between Tabs, Private, Other devices and Recently closed
+    private val switcherSwipes by lazy {
+        android.view.GestureDetector(this, object : android.view.GestureDetector.SimpleOnGestureListener() {
+            override fun onFling(a: android.view.MotionEvent?, b: android.view.MotionEvent, vx: Float, vy: Float): Boolean {
+                if (a == null) return false
+                val dx = b.x - a.x; val dy = b.y - a.y
+                if (Math.abs(dx) < dp(70) || Math.abs(dx) < Math.abs(dy) * 1.8f || Math.abs(vx) < 600) return false
+                val n = switcherMode + if (dx < 0) 1 else -1
+                if (n !in 0..3) return false
+                switcherMode = n; refreshSwitcher()
+                switcherList.translationX = if (dx < 0) dp(60).toFloat() else -dp(60).toFloat(); switcherList.alpha = 0.3f
+                switcherList.animate().translationX(0f).alpha(1f).setDuration(160).start()
+                return true
+            }
+        })
+    }
+
+    override fun dispatchTouchEvent(ev: android.view.MotionEvent): Boolean {
+        if (::switcher.isInitialized && switcher.visibility == View.VISIBLE) switcherSwipes.onTouchEvent(ev)
+        return super.dispatchTouchEvent(ev)
+    }
+
     private fun refreshSwitcher() {
         val modes = listOf(R.id.modeTabs, R.id.modePrivate, R.id.modeSynced, R.id.modeClosed)
         modes.forEachIndexed { i, id ->
