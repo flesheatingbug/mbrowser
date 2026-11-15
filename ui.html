@@ -252,7 +252,7 @@
   $('dlbtn-ic').innerHTML = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v10.5M8 11.2l4 4 4-4M5 19.5h14"/></svg>';
   const part = new URLSearchParams(location.search).get('part');
   document.body.classList.add('part-' + part);
-  let lastState = null, dlDoneShownId = 0, dlDoneVisible = false, dlDoneTimer = null, lastActiveId = null;
+  let lastState = null, lastActiveId = null;
   const urlInput = $('url');
   const TAB_MIME = 'application/x-mybrowser-tab';
 
@@ -572,32 +572,18 @@
     }
     const pill = $('dl-pill');
     const dlbtn = $('dlbtn');
-    const shownStillPresent = dlDoneVisible && dls.some((d) => d.id === dlDoneShownId);
-    if (!dls.length || (dlDoneVisible && !shownStillPresent)) {
-      clearTimeout(dlDoneTimer); dlDoneTimer = null; dlDoneVisible = false;
-      pill.style.display = 'none';
+    if (!dls.length) {
+      pill.style.display = 'none'; pill.classList.remove('active');
       dlbtn.className = 'ic'; $('dlbtn-n').textContent = '';
     } else if (activeDl) {
-      clearTimeout(dlDoneTimer); dlDoneTimer = null; dlDoneVisible = false;
       const pct = activeDl.total ? ' · ' + Math.round(activeDl.received / activeDl.total * 100) + '%' : '';
-      pill.style.display = 'flex';
-      pill.classList.add('active');
+      pill.style.display = 'flex'; pill.classList.add('active');
       pill.textContent = '⬇ ' + activeDl.name + pct;
       dlbtn.className = 'ic show active';
       $('dlbtn-n').textContent = activeDl.total ? Math.round(activeDl.received / activeDl.total * 100) + '%' : '…';
-    } else if (dls[0].state === 'completed' && dls[0].id !== dlDoneShownId) {
-      dlDoneShownId = dls[0].id;
-      dlDoneVisible = true;
-      clearTimeout(dlDoneTimer);
-      pill.style.display = 'flex';
-      pill.classList.remove('active');
-      pill.textContent = '✓ ' + dls[0].name;
-      dlbtn.className = 'ic show done';
-      $('dlbtn-n').textContent = '✓';
-      dlDoneTimer = setTimeout(() => { dlDoneVisible = false; dlDoneTimer = null; pill.style.display = 'none'; dlbtn.className = 'ic'; $('dlbtn-n').textContent = ''; }, 5000);
-    } else if (!dlDoneVisible) {
-      pill.style.display = 'none';
-      dlbtn.className = 'ic'; $('dlbtn-n').textContent = '';
+    } else {
+      pill.style.display = 'none'; pill.classList.remove('active');
+      dlbtn.className = 'ic show done'; $('dlbtn-n').textContent = '';
     }
 
     if (part === 'tabs') {
