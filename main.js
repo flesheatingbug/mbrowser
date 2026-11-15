@@ -74,7 +74,7 @@ try {
 } catch { /* nothing to migrate */ }
 
 // Profiles: every profile has its own data folder and runs as its own program instance (--profile=<id>).
-const profiles = createProfiles(app.getPath('appData'));
+const profiles = createProfiles(app.getPath('userData'));
 const requestedProfile = (process.argv.find((a) => a.startsWith('--profile=')) || '').slice(10);
 const profileExplicit = !!(requestedProfile && profiles.get(requestedProfile));
 let profileId;
@@ -2560,11 +2560,11 @@ function setupIpc() {
   }, BOTH);
 
   handle('app:resetAll', async () => {
-    profiles.setPendingReset();
-    // Skip the privacy-clearing before-quit delay so the single-instance lock
-    // is released before the relaunched process starts (critical on Linux).
+    // Pass --reset-on-start so the new process knows to wipe data before loading.
+    // We can't use a flag file because the file would be inside the dir we're deleting.
+    // Skip privacy-clearing (quitCleared) so the lock is released before relaunch (Linux).
     quitCleared = true;
-    app.relaunch({ args: process.argv.slice(1) });
+    app.relaunch({ args: [...process.argv.slice(1), '--reset-on-start'] });
     app.quit();
     return { ok: true };
   }, BOTH);
@@ -3337,13 +3337,11 @@ app.whenReady().then(async () => {
   }
   // If a reset was requested in the previous session, wipe the userData directory NOW —
   // before Chromium loads anything from it — then continue with a fresh data directory.
-  if (profiles.pendingReset()) {
-    // Clear the flag before we delete so the file write doesn't fail on a fresh dir.
-    profiles.clearPendingReset();
-    const appDataDir = app.getPath('appData');
-    // Delete default profile userData dir.
+  if (process.argv.includes('--reset-on-start')) {
+    // Wipe everything under userData (profiles.json, all profile subdirs, Chromium data).
+    // Also clean up old-layout scattered files in appData in case they still exist.
     try { fs.rmSync(app.getPath('userData'), { recursive: true, force: true }); } catch { /* ignore */ }
-    // Delete all extra profile directories and the profiles registry file.
+    const appDataDir = app.getPath('appData');
     try {
       for (const entry of fs.readdirSync(appDataDir)) {
         if (entry.startsWith('mbrowser-profile-') || entry === 'mbrowser-profiles.json') {
@@ -3351,7 +3349,6 @@ app.whenReady().then(async () => {
         }
       }
     } catch { /* ignore */ }
-    // Reload profiles so in-memory state is fresh (setupDone gone → wizard will show).
     profiles.reload();
     try { await session.defaultSession.clearStorageData(); } catch { /* ignore */ }
     try { await session.defaultSession.clearCache(); } catch { /* ignore */ }
