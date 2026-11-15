@@ -11,7 +11,7 @@ import java.io.File
 /** Start page wallpapers: the built-in ones (original artwork, made by tools/gen_wallpapers.py, CC0) or your own photo. */
 object Wallpapers {
     val LIST = listOf(
-        "aurora" to "Aurora", "dusk" to "Dusk", "ocean" to "Ocean", "dunes" to "Dunes", "mist" to "Mist", "forest" to "Forest",
+        "grey" to "Grey", "aurora" to "Aurora", "dusk" to "Dusk", "ocean" to "Ocean", "dunes" to "Dunes", "mist" to "Mist", "forest" to "Forest",
         "ember" to "Ember", "orchid" to "Orchid", "slate" to "Slate", "nebula" to "Nebula", "peaks" to "Peaks", "paper" to "Paper",
     )
 

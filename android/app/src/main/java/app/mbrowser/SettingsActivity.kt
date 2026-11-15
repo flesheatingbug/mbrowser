@@ -397,8 +397,30 @@ class SettingsActivity : BaseActivity() {
         toolbarSection()
 
         header("App icon")
-        choiceRow("App icon", AppIcon.LIST.map { it.label }, { AppIcon.LIST.indexOfFirst { it.id == prefs.appIcon }.coerceAtLeast(0) },
-            { prefs.appIcon = AppIcon.LIST[it].id; AppIcon.applyLauncher(this); toast("Address bar logo changed. The home screen icon may take a moment to follow.") })
+        appIconSection()
+    }
+
+    private fun appIconSection() {
+        hscroll("app icon logo launcher home screen") { row ->
+            for (e in AppIcon.LIST) {
+                val on = prefs.appIcon == e.id
+                val col = LinearLayout(this); col.orientation = LinearLayout.VERTICAL; col.gravity = android.view.Gravity.CENTER_HORIZONTAL
+                col.background = ring(on, 16); col.setPadding(dp(8), dp(8), dp(8), dp(8))
+                val iv = ImageView(this)
+                iv.setImageDrawable(androidx.core.content.ContextCompat.getDrawable(this, if (e.id == "classic") R.mipmap.ic_launcher else resources.getIdentifier("ic_launcher_" + e.id.replace('-', '_'), "mipmap", packageName)))
+                iv.scaleType = ImageView.ScaleType.FIT_CENTER
+                col.addView(iv, LinearLayout.LayoutParams(dp(64), dp(64)))
+                val l = TextView(this); l.text = (if (on) "✓ " else "") + e.label; l.textSize = 12f; l.gravity = android.view.Gravity.CENTER; l.maxLines = 1
+                l.setTextColor(tc(if (on) R.attr.mbText else R.attr.mbMuted)); l.setPadding(0, dp(6), 0, 0)
+                col.addView(l, LinearLayout.LayoutParams(dp(84), -2))
+                col.setOnClickListener {
+                    prefs.appIcon = e.id; AppIcon.applyLauncher(this)
+                    toast("Address bar logo changed. The home screen icon may take a moment to follow."); build()
+                }
+                val lp = LinearLayout.LayoutParams(-2, -2); lp.setMargins(dp(5), 0, dp(5), 0)
+                row.addView(col, lp)
+            }
+        }
     }
 
     private fun startPageSettings() {

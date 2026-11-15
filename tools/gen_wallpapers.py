@@ -99,16 +99,21 @@ def make(name, w, h, desktop):
         img = mesh(w, h, '#f6c9a0', [(0.5, 0.55, '#ffd9a0', 0.4), (0.5, 0.0, '#6a79c9', 0.6), (0.1, 0.3, '#c99ac9', 0.4)], s)
         for i, (c, b) in enumerate([('#8d7fb0', 0.52), ('#6a5f93', 0.64), ('#4a416f', 0.76), ('#2c2650', 0.88)]):
             img = ridge(img, c, b, 0.07, [1.2, 3.0, 7.0], s + i, 0.35)
+    elif name == 'grey':
+        # plain, quiet grey: a soft top-to-bottom gradient, no pattern, no lines
+        img = sky(w, h, '#4b4e53', '#2d2f33')
     elif name == 'paper':
         img = mesh(w, h, '#f4efe6', [(0.2, 0.2, '#fbf7ef', 0.5), (0.8, 0.8, '#e9dfcf', 0.5), (0.7, 0.2, '#efe4d2', 0.4)], s)
     else:
         raise SystemExit(name)
     return img
 
-NAMES = ['aurora', 'dusk', 'ocean', 'dunes', 'mist', 'forest', 'ember', 'orchid', 'slate', 'nebula', 'peaks', 'paper']
+NAMES = ['grey', 'aurora', 'dusk', 'ocean', 'dunes', 'mist', 'forest', 'ember', 'orchid', 'slate', 'nebula', 'peaks', 'paper']
 if __name__ == '__main__':
     os.makedirs(ANDROID, exist_ok=True); os.makedirs(DESKTOP, exist_ok=True)
+    only = os.environ.get('ONLY')
     for n in NAMES:
+        if only and n not in only.split(','): continue
         finish(make(n, 1080, 2400, False), 1, os.path.join(ANDROID, f'wp_{n}.jpg'), blur=1.2)
         finish(make(n, 1920, 1080, True), 2, os.path.join(DESKTOP, f'{n}.jpg'), blur=1.2)
         print('made', n)

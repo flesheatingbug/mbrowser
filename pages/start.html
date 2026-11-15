@@ -616,7 +616,8 @@ function renderGrid() {
 
   if (SP.showAddButton !== false) {
     const add = document.createElement('div'); add.className = 'tile add';
-    add.innerHTML = '<div class="thumb">+</div><div class="nm">Add</div>';
+    add.innerHTML = SP.dialStyle === 'icons' ? '<div class="thumb">+</div>' : '<div class="thumb">+</div><div class="nm">Add</div>';
+    add.title = 'Add speed dial';
     add.onclick = () => showModal('dial', { d: null, idx: -1 });
     grid.append(add);
   }

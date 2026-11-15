@@ -432,8 +432,22 @@ class StartPage(
         private fun bind(h: RecyclerView.ViewHolder, pos: Int) {
             if (h is AddVH) {
                 val pill = h.itemView.findViewById<TextView>(R.id.addPill)
+                val plus = prefs.dialStyle == "icons" && !reorder
+                if (plus) {
+                    // icons-only look: just a round +, no text
+                    pill.text = "+"; pill.textSize = 30f; pill.gravity = Gravity.CENTER
+                    pill.setCompoundDrawables(null, null, null, null)
+                    pill.minWidth = act.dp(60); pill.minHeight = act.dp(60)
+                    pill.setPadding(0, 0, 0, act.dp(4))
+                    pill.contentDescription = "Add speed dial"
+                } else {
+                    pill.textSize = 16f; pill.gravity = Gravity.CENTER_VERTICAL
+                    pill.minWidth = 0; pill.minHeight = 0
+                    pill.setCompoundDrawablesRelativeWithIntrinsicBounds(R.drawable.ic_add, 0, 0, 0)
+                    pill.setPadding(act.dp(22), act.dp(14), act.dp(22), act.dp(14))
+                }
                 if (reorder) { pill.text = "Done"; pill.setOnClickListener { reorder = false; refresh() } }
-                else { pill.text = "Add"; pill.setOnClickListener { addMenu(groupId) } }
+                else { if (!plus) pill.text = "Add"; pill.setOnClickListener { addMenu(groupId) } }
                 return
             }
             h as CardVH
