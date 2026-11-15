@@ -537,8 +537,39 @@ function scheduleSessionSave() {
 }
 
 // ---------- tabs ----------
+function maskUserAgentData(wc) {
+  // Override navigator.userAgentData via CDP so Google sign-in doesn't see "Electron" in the brand list.
+  // ses.setUserAgent() patches navigator.userAgent but not the Client Hints API.
+  if (S().general.browserId === 'none') return;
+  try { wc.debugger.attach('1.3'); } catch { return; }
+  const chromeVer = (process.versions.chrome || '130.0.0.0');
+  const major = chromeVer.split('.')[0];
+  const plat = process.platform === 'win32' ? 'Windows' : 'Linux';
+  const ua = `Mozilla/5.0 ${plat === 'Windows' ? '(Windows NT 10.0; Win64; x64)' : '(X11; Linux x86_64)'} AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${major}.0.0.0 Safari/537.36`;
+  wc.debugger.sendCommand('Emulation.setUserAgentOverride', {
+    userAgent: ua,
+    userAgentMetadata: {
+      brands: [
+        { brand: 'Not?A_Brand', version: '24' },
+        { brand: 'Chromium', version: major },
+        { brand: 'Google Chrome', version: major },
+      ],
+      fullVersionList: [
+        { brand: 'Not?A_Brand', version: '24.0.0.0' },
+        { brand: 'Chromium', version: chromeVer },
+        { brand: 'Google Chrome', version: chromeVer },
+      ],
+      platform: plat,
+      platformVersion: '',
+      architecture: 'x86',
+      model: '',
+      mobile: false,
+    },
+  }).catch(() => {});
+}
+
 function createView(isPrivate) {
-  return new WebContentsView({
+  const v = new WebContentsView({
     webPreferences: {
       sandbox: true,
       contextIsolation: true,
@@ -548,6 +579,8 @@ function createView(isPrivate) {
       partition: isPrivate ? 'private' : undefined,
     },
   });
+  maskUserAgentData(v.webContents);
+  return v;
 }
 
 function insertOrder(id, tab, opts) {
