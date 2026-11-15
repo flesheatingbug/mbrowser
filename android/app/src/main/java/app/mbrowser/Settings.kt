@@ -12,7 +12,7 @@ class Engine(val id: String, val name: String, val url: String)
  * browser has more). Same shape as the server document: { key: { updated, value } }.
  */
 object Settings {
-    val MANAGED = listOf("search", "startPage", "look")
+    val MANAGED = listOf("search", "startPage", "look", "profileMeta")
     private lateinit var file: File
     private var groups = JSONObject()
     private var loaded = false
@@ -43,6 +43,7 @@ object Settings {
             """{"tileSize":150,"thumbnails":true,"showSearch":true,"activeGroup":"main",
             "groups":[{"id":"main","name":"Speed Dial","dials":[]}]}"""
         )
+        "profileMeta" -> JSONObject("""{"color":"","avatar":""}""")
         else -> JSONObject()
     }
 

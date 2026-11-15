@@ -91,11 +91,6 @@ object Sync {
             val version = remote.optLong("version")
             val doc = remote.optJSONObject("doc")
             val rgroups = doc?.optJSONObject("groups") ?: JSONObject()
-            // the profile picture and colour come from the desktop browser's profile
-            rgroups.optJSONObject("profileMeta")?.optJSONObject("value")?.let { pm ->
-                if (pm.has("color")) prefs.profileColor = pm.optString("color")
-                if (pm.has("avatar")) prefs.profileAvatar = pm.optString("avatar")
-            }
             val merged = JSONObject()
             var push = doc == null
             // the look: if it changed on this phone since the last sync, that is a new local change
@@ -119,6 +114,10 @@ object Sync {
                 }
                 else if (ru < lu) { merged.put(key, local); push = true }
                 else merged.put(key, r)
+            }
+            if (Settings.updated("profileMeta") > 0) {
+                val pm = Settings.value("profileMeta")
+                prefs.profileColor = pm.optString("color"); prefs.profileAvatar = pm.optString("avatar")
             }
             prefs.lookHash = Look.hash(prefs)
             if (!push) return

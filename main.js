@@ -1595,6 +1595,15 @@ async function syncAll() {
           afterSettingsChange();
           if (sr.applied.includes('profileMeta')) applyProfileMeta();
         }
+        // a profile picture chosen before sync existed was never put in the synced settings: send it once
+        try {
+          const p = profiles.get(profileId);
+          if (p && (p.avatar || p.color) && store.updatedOf('profileMeta') === 0) {
+            store.set('profileMeta.color', p.color || '');
+            store.set('profileMeta.avatar', p.avatar || '');
+            syncSoon();
+          }
+        } catch { /* optional */ }
       } catch (e) { settingsSyncNote = /HTTP 404/.test(e.message) ? ' (update the sync server to sync settings)' : ' (settings: ' + e.message + ')'; }
     }
 

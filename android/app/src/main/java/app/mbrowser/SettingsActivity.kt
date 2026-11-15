@@ -506,6 +506,48 @@ class SettingsActivity : BaseActivity() {
         if (it.resultCode == RESULT_OK) { build(); toast("Connected") }
     }
 
+    private val avPicker = registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.GetContent()) { uri ->
+        if (uri != null) {
+            val data = try {
+                val src = contentResolver.openInputStream(uri)?.use { android.graphics.BitmapFactory.decodeStream(it) }
+                if (src == null) null else {
+                    val side = minOf(src.width, src.height)
+                    val sq = android.graphics.Bitmap.createBitmap(src, (src.width - side) / 2, (src.height - side) / 2, side, side)
+                    val out = android.graphics.Bitmap.createScaledBitmap(sq, 256, 256, true)
+                    val bos = java.io.ByteArrayOutputStream()
+                    @Suppress("DEPRECATION") out.compress(android.graphics.Bitmap.CompressFormat.WEBP, 85, bos)
+                    "data:image/webp;base64," + android.util.Base64.encodeToString(bos.toByteArray(), android.util.Base64.NO_WRAP)
+                }
+            } catch (_: Exception) { null }
+            if (data != null) saveProfileMeta(prefs.profileColor, data) else toast("Could not use that picture")
+        }
+    }
+
+    /** The profile picture and colour travel with the settings, so the desktop browser shows the same ones. */
+    private fun saveProfileMeta(color: String, avatar: String) {
+        prefs.profileColor = color; prefs.profileAvatar = avatar
+        Settings.set("profileMeta", org.json.JSONObject().put("color", color).put("avatar", avatar))
+        toast("Profile picture saved. It reaches your other devices the next time you sync.")
+        build()
+    }
+
+    private fun profilePictureRow() {
+        val name = prefs.profileName.ifBlank { "Profile" }
+        actionRow("Profile picture", "Photo, emoji or colour. Shown in the menu and on your desktop browser.") {
+            val items = arrayOf("Choose a photo", "Pick an emoji", "Pick a colour", "Remove the picture")
+            val colors = listOf("Blue" to "#3b82f6", "Green" to "#22c55e", "Red" to "#ef4444", "Orange" to "#f97316", "Purple" to "#a855f7", "Pink" to "#ec4899", "Teal" to "#14b8a6", "Grey" to "#6b7280")
+            AlertDialog.Builder(this).setTitle("Profile picture · $name").setItems(items) { _, i ->
+                when (i) {
+                    0 -> avPicker.launch("image/*")
+                    1 -> promptFields(this, "Emoji", listOf("One emoji, e.g. 🦊"), listOf(if (prefs.profileAvatar.startsWith("data:")) "" else prefs.profileAvatar), "Save") { v ->
+                        if (v[0].isNotBlank()) saveProfileMeta(prefs.profileColor, v[0].trim().take(4)) }
+                    2 -> AlertDialog.Builder(this).setTitle("Colour").setItems(colors.map { it.first }.toTypedArray()) { _, k -> saveProfileMeta(colors[k].second, prefs.profileAvatar) }.show()
+                    3 -> saveProfileMeta(prefs.profileColor, "")
+                }
+            }.show()
+        }
+    }
+
     private fun accountRows() {
         val who = when {
             !prefs.syncConfigured -> "Not connected"
@@ -516,6 +558,7 @@ class SettingsActivity : BaseActivity() {
             loginLauncher.launch(android.content.Intent(this, ServerLoginActivity::class.java))
         }
         if (prefs.syncConfigured) {
+            profilePictureRow()
             actionRow("Switch profile or account", "Sign in again to pick a different profile") {
                 loginLauncher.launch(android.content.Intent(this, ServerLoginActivity::class.java))
             }
