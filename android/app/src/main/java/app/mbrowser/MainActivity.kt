@@ -1271,53 +1271,102 @@ class MainActivity : BaseActivity() {
         IconStyle.apply(this, onWallpaper)
     }
 
-    /** Lists the profiles on the server and switches this phone to the one that is tapped. */
-    private fun showProfiles() {
+    private fun serverApi() = Api(prefs.server, prefs.token, prefs.device)
+
+    /** Moves this phone to another profile of the account: its data replaces what is shown here. */
+    private fun switchTo(id: Int, name: String, color: String, avatar: String) {
         val app = applicationContext
+        Toast.makeText(this, "Switching to $name…", Toast.LENGTH_SHORT).show()
         Thread {
-            val res = try { Api(prefs.server, prefs.token, prefs.device).request("GET", "/api/profiles") } catch (e: Exception) { null }
+            try {
+                val sw = serverApi().request("POST", "/api/switch", org.json.JSONObject().put("profile", id).put("device", prefs.device))
+                ui.post {
+                    Store.resetAll(); Settings.reset(); Vault.forgetLocal(app)
+                    prefs.bmRev = 0; prefs.histRev = 0; prefs.otherTabs = "[]"; prefs.lookHash = ""
+                    prefs.token = sw.getString("token")
+                    prefs.profileId = sw.getJSONObject("profile").get("id").toString()
+                    prefs.profileName = name; prefs.profileColor = color; prefs.profileAvatar = avatar
+                    syncNow(true)
+                    recreate()
+                }
+            } catch (e: Exception) { ui.post { Toast.makeText(this, "Could not switch: ${e.message}", Toast.LENGTH_LONG).show() } }
+        }.start()
+    }
+
+    /** Runs a profile change on the server, then reopens the list (or runs [then] with the answer). */
+    private fun profileCall(path: String, body: org.json.JSONObject, ok: (org.json.JSONObject) -> Unit = { showProfiles() }) {
+        Thread {
+            try { val r = serverApi().request("POST", path, body); ui.post { ok(r) } }
+            catch (e: Exception) { ui.post { Toast.makeText(this, e.message?.substringAfter(": ") ?: "Failed", Toast.LENGTH_LONG).show() } }
+        }.start()
+    }
+
+    /** Lists the profiles on the server: tap one to switch, the dots rename or delete it, and a new one can be added. */
+    private fun showProfiles() {
+        Thread {
+            val res = try { serverApi().request("GET", "/api/profiles") } catch (e: Exception) { null }
             ui.post {
                 val arr = res?.optJSONArray("profiles")
                 if (arr == null) { Toast.makeText(this, "Could not reach the server", Toast.LENGTH_LONG).show(); return@post }
                 val box = LinearLayout(this); box.orientation = LinearLayout.VERTICAL; box.setPadding(dp(8), dp(8), dp(8), dp(8))
-                val dlg = androidx.appcompat.app.AlertDialog.Builder(this).setTitle("Switch profile").setView(box).setNegativeButton("Close", null).create()
-                for (i in 0 until arr.length()) {
+                val dlg = androidx.appcompat.app.AlertDialog.Builder(this).setTitle("Profiles").setView(box).setNegativeButton("Close", null).create()
+                val count = arr.length()
+                for (i in 0 until count) {
                     val o = arr.getJSONObject(i)
-                    val name = o.optString("name"); val cur = o.optBoolean("current")
-                    if (cur) { prefs.profileName = name; prefs.profileColor = o.optString("color"); prefs.profileAvatar = o.optString("avatar") }
-                    val r = LinearLayout(this); r.orientation = LinearLayout.HORIZONTAL; r.gravity = Gravity.CENTER_VERTICAL; r.setPadding(dp(8), 0, dp(8), 0)
+                    val id = o.optInt("id"); val name = o.optString("name"); val cur = o.optBoolean("current")
+                    val color = o.optString("color"); val avatar = o.optString("avatar")
+                    if (cur) { prefs.profileName = name; prefs.profileColor = color; prefs.profileAvatar = avatar }
+                    val r = LinearLayout(this); r.orientation = LinearLayout.HORIZONTAL; r.gravity = Gravity.CENTER_VERTICAL; r.setPadding(dp(8), 0, dp(0), 0)
                     r.foreground = TypedValueHolder.selectable(this)
-                    val av = ImageView(this); av.setImageDrawable(Avatars.make(this, name, o.optString("color"), o.optString("avatar"), dp(40)))
+                    val av = ImageView(this); av.setImageDrawable(Avatars.make(this, name, color, avatar, dp(40)))
                     r.addView(av, LinearLayout.LayoutParams(dp(40), dp(40)))
                     val tv = TextView(this); tv.text = name; tv.textSize = 16f; tv.setTextColor(tc(R.attr.mbText)); tv.setPadding(dp(14), 0, 0, 0)
                     r.addView(tv, LinearLayout.LayoutParams(0, -2, 1f))
                     if (cur) { val ck = TextView(this); ck.text = "Current"; ck.textSize = 13f; ck.setTextColor(tc(R.attr.mbAccent)); r.addView(ck) }
+                    val more = ImageButton(this); more.setImageResource(R.drawable.ic_more); more.imageTintList = tcl(R.attr.mbMuted); more.background = TypedValueHolder.selectable(this)
+                    more.contentDescription = "Manage $name"
+                    more.setOnClickListener {
+                        val opts = arrayOf("Rename", "Delete…")
+                        androidx.appcompat.app.AlertDialog.Builder(this).setTitle(name).setItems(opts) { _, k ->
+                            if (k == 0) promptFields(this, "Rename profile", listOf("Name"), listOf(name), "Rename") { v ->
+                                if (v[0].isNotBlank()) { dlg.dismiss(); profileCall("/api/profiles/$id/rename", org.json.JSONObject().put("name", v[0])) { if (cur) prefs.profileName = v[0].trim(); showProfiles() } }
+                            } else if (count <= 1) Toast.makeText(this, "You cannot delete your only profile", Toast.LENGTH_LONG).show()
+                            else promptFields(this, "Delete “$name”?", listOf("Type the profile name to confirm. Its bookmarks, history, passwords and settings are deleted from the server for good."), listOf(""), "Delete") { v ->
+                                if (v[0].trim() != name) { Toast.makeText(this, "The name did not match", Toast.LENGTH_LONG).show(); return@promptFields }
+                                dlg.dismiss()
+                                profileCall("/api/profiles/$id/delete", org.json.JSONObject().put("confirm", name)) {
+                                    if (cur) {
+                                        // the profile this phone was on is gone: move to another one
+                                        var next: org.json.JSONObject? = null
+                                        for (j in 0 until count) { val c = arr.getJSONObject(j); if (c.optInt("id") != id) { next = c; break } }
+                                        if (next != null) switchTo(next.optInt("id"), next.optString("name"), next.optString("color"), next.optString("avatar"))
+                                    } else showProfiles()
+                                }
+                            }
+                        }.show()
+                    }
+                    r.addView(more, LinearLayout.LayoutParams(dp(44), dp(44)))
                     r.setOnClickListener {
                         if (cur) { dlg.dismiss(); return@setOnClickListener }
                         androidx.appcompat.app.AlertDialog.Builder(this).setTitle("Switch to “$name”?")
                             .setMessage("This phone will show that profile's bookmarks, history, tabs, settings and passwords. Nothing is lost: the profile you leave stays on the server.")
                             .setNegativeButton("Cancel", null)
-                            .setPositiveButton("Switch") { _, _ ->
-                                dlg.dismiss()
-                                Toast.makeText(this, "Switching to $name…", Toast.LENGTH_SHORT).show()
-                                Thread {
-                                    try {
-                                        val sw = Api(prefs.server, prefs.token, prefs.device).request("POST", "/api/switch", org.json.JSONObject().put("profile", o.optInt("id")).put("device", prefs.device))
-                                        ui.post {
-                                            Store.resetAll(); Settings.reset(); Vault.forgetLocal(app)
-                                            prefs.bmRev = 0; prefs.histRev = 0; prefs.otherTabs = "[]"; prefs.lookHash = ""
-                                            prefs.token = sw.getString("token")
-                                            prefs.profileId = sw.getJSONObject("profile").get("id").toString()
-                                            prefs.profileName = name; prefs.profileColor = o.optString("color"); prefs.profileAvatar = o.optString("avatar")
-                                            syncNow(true)
-                                            recreate()
-                                        }
-                                    } catch (e: Exception) { ui.post { Toast.makeText(this, "Could not switch: ${e.message}", Toast.LENGTH_LONG).show() } }
-                                }.start()
-                            }.show()
+                            .setPositiveButton("Switch") { _, _ -> dlg.dismiss(); switchTo(id, name, color, avatar) }.show()
                     }
                     box.addView(r, LinearLayout.LayoutParams(-1, dp(56)))
                 }
+                // add a profile
+                val add = LinearLayout(this); add.orientation = LinearLayout.HORIZONTAL; add.gravity = Gravity.CENTER_VERTICAL; add.setPadding(dp(8), 0, dp(8), 0)
+                add.foreground = TypedValueHolder.selectable(this)
+                val plus = ImageView(this); plus.setImageResource(R.drawable.ic_add); plus.imageTintList = tcl(R.attr.mbAccent)
+                add.addView(plus, LinearLayout.LayoutParams(dp(40), dp(24)))
+                val at = TextView(this); at.text = "New profile"; at.textSize = 16f; at.setTextColor(tc(R.attr.mbAccent)); at.setPadding(dp(14), 0, 0, 0); add.addView(at)
+                add.setOnClickListener {
+                    promptFields(this, "New profile", listOf("Name"), listOf(""), "Create") { v ->
+                        if (v[0].isNotBlank()) { dlg.dismiss(); profileCall("/api/profiles", org.json.JSONObject().put("name", v[0])) { showProfiles() } }
+                    }
+                }
+                box.addView(add, LinearLayout.LayoutParams(-1, dp(56)))
                 dlg.show()
             }
         }.start()

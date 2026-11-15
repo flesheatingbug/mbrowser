@@ -162,6 +162,42 @@ def _switch_profile(ctx, req):
 
 route('GET', '/api/profiles', 'token')(_my_profiles)
 route('POST', '/api/switch', 'token')(_switch_profile)
+
+def _sibling(ctx, req, pid):
+    """A profile of the same account as the calling token."""
+    me, p = ctx.store.get_profile(req.profile_id), ctx.store.get_profile(int(pid))
+    if not me or not p or me.get('owner_id') is None or p.get('owner_id') != me.get('owner_id'):
+        raise ApiError(404, 'That profile is not available.')
+    return me, p
+
+
+def _create_profile(ctx, req):
+    me = ctx.store.get_profile(req.profile_id)
+    if not me or me.get('owner_id') is None:
+        raise ApiError(403, 'This key is not tied to an account, so it cannot add profiles.')
+    pid = ctx.store.create_profile(me['owner_id'], req.json().get('name'))
+    return 200, {'id': pid, 'name': ctx.store.get_profile(pid)['name']}
+
+
+def _rename_profile(ctx, req, pid):
+    _, p = _sibling(ctx, req, pid)
+    ctx.store.rename_profile(p['id'], req.json().get('name'))
+    return 200, {'ok': True, 'name': ctx.store.get_profile(p['id'])['name']}
+
+
+def _delete_profile(ctx, req, pid):
+    me, p = _sibling(ctx, req, pid)
+    if str(req.json().get('confirm') or '') != p['name']:
+        raise ApiError(400, 'Type the profile name to confirm.')
+    if len(ctx.store.list_profiles(me['owner_id'])) <= 1:
+        raise ApiError(409, 'You cannot delete your only profile.')
+    ctx.store.delete_profile(p['id'])
+    return 200, {'ok': True}
+
+
+route('POST', '/api/profiles', 'token')(_create_profile)
+route('POST', r'/api/profiles/(\d+)/rename', 'token')(_rename_profile)
+route('POST', r'/api/profiles/(\d+)/delete', 'token')(_delete_profile)
 route('GET', '/api/wallpaper', 'token')(_with_profile(lambda c, r: syncapi.wallpaper_get(c)))
 route('PUT', '/api/wallpaper', 'token', 5 * MB)(_with_profile(lambda c, r: syncapi.wallpaper_put(c, r.json())))
 route('GET', '/api/settings', 'token')(_with_profile(lambda c, r: syncapi.settings_get(c)))
