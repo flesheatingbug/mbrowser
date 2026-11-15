@@ -60,7 +60,49 @@ class StartPage(
         root.postDelayed({ refreshPending = false; if (!reorder) grid.adapter?.notifyDataSetChanged() }, 400)
     }
 
+    /** Swipe right: next speed dial (on the last one, offers a new one). Swipe left: back to the previous one. */
+    private fun swipeDial(forward: Boolean) {
+        if (reorder) return
+        val sp = Settings.value("startPage")
+        val g = groupsOf(sp)
+        val cur = currentId(sp)
+        var i = 0
+        for (k in 0 until g.length()) if (g.getJSONObject(k).optString("id") == cur) i = k
+        val n = i + if (forward) 1 else -1
+        if (n < 0) return
+        if (n >= g.length()) { newDialPrompt(); return }
+        prefs.currentDial = g.getJSONObject(n).optString("id"); path.clear(); refresh()
+        val w = grid.width.toFloat()
+        grid.translationX = if (forward) -w * 0.35f else w * 0.35f; grid.alpha = 0.3f
+        grid.animate().translationX(0f).alpha(1f).setDuration(180).start()
+    }
+
+    private fun newDialPrompt() {
+        AlertDialog.Builder(act).setTitle("New speed dial?").setMessage("You're on the last speed dial. Make a new one here?")
+            .setPositiveButton("Create") { _, _ -> newDial() }.setNegativeButton("Cancel", null).show()
+    }
+
+    private fun newDial() {
+        promptFields(act, "New speed dial", listOf("Name"), listOf(""), "Create") { v ->
+            if (v[0].isEmpty()) return@promptFields
+            val id = "g" + System.currentTimeMillis()
+            edit { s -> groupsOf(s).put(JSONObject().put("id", id).put("name", v[0]).put("dials", JSONArray())) }
+            prefs.currentDial = id; path.clear(); refresh()
+        }
+    }
+
     init {
+        val swipes = android.view.GestureDetector(act, object : android.view.GestureDetector.SimpleOnGestureListener() {
+            override fun onFling(a: android.view.MotionEvent?, b: android.view.MotionEvent, vx: Float, vy: Float): Boolean {
+                if (a == null) return false
+                val dx = b.x - a.x; val dy = b.y - a.y
+                if (Math.abs(dx) > act.dp(70) && Math.abs(dx) > Math.abs(dy) * 1.8f && Math.abs(vx) > 600) { swipeDial(dx > 0); return true }
+                return false
+            }
+        })
+        grid.addOnItemTouchListener(object : RecyclerView.SimpleOnItemTouchListener() {
+            override fun onInterceptTouchEvent(rv: RecyclerView, e: android.view.MotionEvent): Boolean { swipes.onTouchEvent(e); return false }
+        })
         root.findViewById<ImageButton>(R.id.btnTune).setOnClickListener { tuneMenu() }
         crumb.setOnClickListener { up() }
         val helper = ItemTouchHelper(object : ItemTouchHelper.Callback() {
@@ -325,12 +367,7 @@ class StartPage(
         AlertDialog.Builder(act).setTitle("Speed dial").setItems(opts) { _, i ->
             when (i) {
                 0 -> addFolder(cur)
-                1 -> promptFields(act, "New speed dial", listOf("Name"), listOf(""), "Create") { v ->
-                    if (v[0].isEmpty()) return@promptFields
-                    val id = "g" + System.currentTimeMillis()
-                    edit { s -> groupsOf(s).put(JSONObject().put("id", id).put("name", v[0]).put("dials", JSONArray())) }
-                    prefs.currentDial = id; path.clear(); refresh()
-                }
+                1 -> newDial()
                 2 -> promptFields(act, "Rename dial", listOf("Name"), listOf(curName), "Rename") { v ->
                     if (v[0].isNotEmpty()) { edit { s -> group(s, cur)?.put("name", v[0]) }; refresh() }
                 }

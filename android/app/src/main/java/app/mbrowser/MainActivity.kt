@@ -1096,6 +1096,7 @@ class MainActivity : BaseActivity() {
         val barBg = if (on) android.graphics.Color.TRANSPARENT else tc(R.attr.mbBar)
         findViewById<View>(R.id.topBar).setBackgroundColor(barBg)
         findViewById<View>(R.id.bottomBar).setBackgroundColor(barBg)
+        findViewById<View>(R.id.engineStrip).setBackgroundColor(barBg)   // the search engine strip: no dark band over the wallpaper
         if (on) {
             val g = android.graphics.drawable.GradientDrawable(); g.cornerRadius = dp(26).toFloat(); g.setColor(android.graphics.Color.argb(0xCC, 0x1C, 0x1A, 0x1A))
             findViewById<View>(R.id.addressPill).background = g
