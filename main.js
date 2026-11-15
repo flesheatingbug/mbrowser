@@ -407,7 +407,7 @@ function stateFor() {
     security: securityLevel(url, host),
     frameless: !!cur.frameless,
     logins: (() => {
-      if (!t || t.private || !vault || !vault.exists() || !isWeb(url)) return null;
+      if (!t || !vault || !vault.exists() || !isWeb(url)) return null;
       const origin = originOf(url);
       return { form: !!t.loginForm, count: vault.unlocked() && origin ? vault.findByOrigin(origin).length : null, locked: !vault.unlocked() };
     })(),
@@ -1049,7 +1049,7 @@ function maybeShowPwSave(w) {
 function showPwFill(w, tab, rect, force = false) {
   use(w);
   if (w.pwSuppressUntil && Date.now() < w.pwSuppressUntil) return;
-  if (!vault.exists() || !S().passwords.enabled || tab.private) return;
+  if (!vault.exists() || !S().passwords.enabled) return;
   const origin = tabOrigin(tab);
   if (!origin) return;
   if (cur.overlayMode && !(cur.overlayMode === 'pw' && cur.overlayData && cur.overlayData.view === 'fill')) return;
@@ -1780,7 +1780,7 @@ function setupIpc() {
   ipcMain.on('card:focus', (e, rect) => {
     const t = tabByWc.get(e.sender.id);
     if (!t || !rect || t.id !== t.owner.activeId) return;
-    if (!vault.unlocked() || !S().passwords.enabled || t.private) return;
+    if (!vault.unlocked() || !S().passwords.enabled) return;
     const cards = vault.listCards();
     if (!cards.length) return;
     use(t.owner);
@@ -1792,7 +1792,7 @@ function setupIpc() {
   ipcMain.on('addr:focus', (e, rect) => {
     const t = tabByWc.get(e.sender.id);
     if (!t || !rect || t.id !== t.owner.activeId) return;
-    if (!vault.unlocked() || !S().passwords.enabled || t.private) return;
+    if (!vault.unlocked() || !S().passwords.enabled) return;
     const addrs = vault.listAddresses();
     if (!addrs.length) return;
     use(t.owner);

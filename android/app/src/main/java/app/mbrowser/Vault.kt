@@ -110,10 +110,44 @@ object Vault {
     fun lock() { key?.fill(0); key = null; entries = mutableListOf(); folders = mutableListOf() }
 
     private fun live() = entries.filter { !it.optBoolean("deleted") }
-    fun list(): List<JSONObject> = live().sortedBy { displayName(it).lowercase() }
+    private fun logins() = live().filter { it.optString("type").let { t -> t.isEmpty() || t == "login" } }
+    fun list(): List<JSONObject> = logins().sortedBy { displayName(it).lowercase() }
+    fun listCards(): List<JSONObject> = live().filter { it.optString("type") == "card" }.sortedBy { it.optString("holder").lowercase() }
+    fun listAddresses(): List<JSONObject> = live().filter { it.optString("type") == "address" }.sortedBy { it.optString("name").lowercase() }
     fun displayName(e: JSONObject): String = e.optString("name").ifBlank { hostOf(e.optString("origin")) }
     fun hostOf(origin: String): String = try { java.net.URI(origin).host?.removePrefix("www.") ?: origin } catch (_: Exception) { origin }
-    fun findByOrigin(origin: String): List<JSONObject> = live().filter { it.optString("origin") == origin }
+    fun findByOrigin(origin: String): List<JSONObject> = logins().filter { it.optString("origin") == origin }
+
+    fun saveCard(ctx: Context, id: String?, holder: String, number: String, expMonth: String, expYear: String, cvv: String) {
+        if (number.isBlank()) throw IllegalArgumentException("Enter the card number.")
+        val now = System.currentTimeMillis()
+        var e = if (id != null) live().find { it.optString("id") == id } else null
+        if (e == null) {
+            val rnd = ByteArray(8).also { SecureRandom().nextBytes(it) }
+            e = JSONObject().put("id", "c" + rnd.joinToString("") { "%02x".format(it) })
+                .put("created", now).put("type", "card")
+            entries.add(e)
+        }
+        e!!.put("holder", holder.trim()).put("number", number.trim()).put("expMonth", expMonth.trim())
+            .put("expYear", expYear.trim()).put("cvv", cvv.trim()).put("updated", now)
+        persist(ctx)
+    }
+
+    fun saveAddress(ctx: Context, id: String?, name: String, address1: String, city: String, state: String, zip: String, country: String, phone: String, email: String) {
+        if (name.isBlank() && address1.isBlank()) throw IllegalArgumentException("Enter a name or address.")
+        val now = System.currentTimeMillis()
+        var e = if (id != null) live().find { it.optString("id") == id } else null
+        if (e == null) {
+            val rnd = ByteArray(8).also { SecureRandom().nextBytes(it) }
+            e = JSONObject().put("id", "a" + rnd.joinToString("") { "%02x".format(it) })
+                .put("created", now).put("type", "address")
+            entries.add(e)
+        }
+        e!!.put("name", name.trim()).put("address1", address1.trim()).put("city", city.trim())
+            .put("state", state.trim()).put("zip", zip.trim()).put("country", country.trim())
+            .put("phone", phone.trim()).put("email", email.trim()).put("updated", now)
+        persist(ctx)
+    }
 
     fun originOf(url: String): String? = try {
         val u = java.net.URI(url.trim())
