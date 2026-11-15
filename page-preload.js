@@ -261,11 +261,7 @@ window.addEventListener('mouseup', (e) => {
 window.addEventListener('contextmenu', (e) => {
   if (!enabled || allowCtx) return;
   if (tracking) { e.preventDefault(); deferred = true; return; }
-  if (suppress) { e.preventDefault(); suppress = false; return; }
-  // Some Wayland/Electron configs deliver contextmenu after mouseup (tracking
-  // already cleared). Handle it here so the main process always gets ctxmenu IPC.
-  e.preventDefault();
-  ipcRenderer.send('ctxmenu', e.clientX, e.clientY);
+  if (suppress) { e.preventDefault(); suppress = false; }
 }, true);
 
 // ---- password capture and autofill (web pages only; nothing is filled until the user picks a login) ----

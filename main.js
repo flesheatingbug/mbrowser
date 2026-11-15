@@ -2464,9 +2464,13 @@ function setupIpc() {
     if (!t) return;
     use(t.owner);
     if (t.id !== cur.activeId) return;
-    if (t.ctxParams) { showContextMenu(t, t.ctxParams); t.ctxParams = null; }
-    // No sendInputEvent fallback — it creates a feedback loop; ctxParams is always
-    // set before this IPC arrives because wc.on('context-menu') fires first.
+    if (t.ctxParams) {
+      showContextMenu(t, t.ctxParams);
+      t.ctxParams = null;
+    } else {
+      // Race fallback: ctxmenu IPC arrived before wc.on('context-menu') stored params.
+      e.sender.sendInputEvent({ type: 'contextMenu', x: Math.round(x), y: Math.round(y) });
+    }
   });
 
   // internal my:// pages (and chrome)
