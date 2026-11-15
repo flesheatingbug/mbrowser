@@ -439,6 +439,7 @@ function stateFor() {
     blockerOn: S().privacy.blockTrackers,
     siteAllowed: !!host && allow.some((h) => host === h || host.endsWith('.' + h)),
     private: !!(t && t.private),
+    downloadCount: downloads.filter((d) => !d.winUid || d.winUid === cur.uid).length,
     downloads: downloads.filter((d) => !d.winUid || d.winUid === cur.uid).slice(0, 5).map((d) => ({ id: d.id, name: d.name, url: d.url, path: d.path, state: d.state, received: d.received, total: d.total })),
     tabs: cur.order.map((id) => {
       const x = cur.tabs.get(id);
