@@ -691,7 +691,6 @@ function wire(tab) {
     wc.loadURL('my://error?' + new URLSearchParams({ url, code: String(code), desc: desc || '' }));
   }));
   wc.on('dom-ready', () => {
-    wc.send('gestures:enabled', S().mouse.gestures);
     use(tab.owner);
     tab.status = 'Loading resources…';
     pushState();
@@ -731,10 +730,7 @@ function wire(tab) {
     if (!isAuth) maskUserAgentData(newWin.webContents);
     applyAutoIdentity(newWin.webContents);
   });
-  // The menu is shown from here and only here. During a right-button drag (a gesture) the page cancels the contextmenu event,
-  // so this does not fire; on Linux the page asks for it back after the button is released (see the 'ctxmenu' message below).
   wc.on('context-menu', h((_e, params) => {
-    tab.ctxParams = null;
     showContextMenu(tab, params);
   }));
   wc.on('found-in-page', h((_e, result) => {
@@ -979,11 +975,6 @@ const COMMANDS = [
   { id: 'app-server-admin', label: 'Server Admin', keys: [], run: () => openInternal('server-admin') },
   { id: 'sync-now', label: 'Sync Now', keys: [], run: syncAll },
 ];
-
-const GESTURES = {
-  L: 'nav-back', R: 'nav-forward', D: 'tab-new', DR: 'tab-close', UD: 'nav-reload',
-  UL: 'tab-prev', UR: 'tab-next', DL: 'tab-reopen',
-};
 
 const shortcutMap = new Map();
 function effectiveKeys(c) {
@@ -1853,7 +1844,6 @@ function afterSettingsChange(p) {
   if (p && p.startsWith('appearance')) {
     for (const w of windows) { try { w.win.setIcon(appIconImage()); } catch { /* not supported here */ } }
   }
-  for (const t of tabById.values()) t.wc.send('gestures:enabled', S().mouse.gestures);
   for (const w of windows) {
     use(w);
     syncWebPanel();
@@ -2443,24 +2433,6 @@ function setupIpc() {
   on('palette:run', (_e, item) => paletteRun(item));
 
   // from web pages
-  ipcMain.on('gesture', (e, g) => {
-    const t = tabByWc.get(e.sender.id);
-    if (!t) return;
-    t.ctxParams = null;
-    use(t.owner);
-    if (!S().mouse.gestures || t.id !== cur.activeId) return;
-    const id = GESTURES[g];
-    if (id) runCommand(id);
-  });
-  ipcMain.on('ctxmenu', (e, x, y) => {
-    const t = tabByWc.get(e.sender.id);
-    if (!t) return;
-    use(t.owner);
-    if (t.id !== cur.activeId) return;
-    // the page blocked the first contextmenu (it could have been a gesture); now that the button is up, ask Chromium for it again
-    e.sender.sendInputEvent({ type: 'contextMenu', x: Math.round(x), y: Math.round(y) });
-  });
-
   // internal my:// pages (and chrome)
   handle('settings:get', () => JSON.parse(JSON.stringify(S())), BOTH);
   handle('settings:set', (_e, p, v) => {
@@ -3019,28 +2991,9 @@ const FIREFOX_UA = process.platform === 'win32'
   ? 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0'
   : 'Mozilla/5.0 (X11; Linux x86_64; rv:140.0) Gecko/20100101 Firefox/140.0';
 
-// "Automatic": the whole browser (every frame, worker and request) says Firefox, which is what Google's sign-in accepts. Pages that are
-// not Google's get a Chrome identity on top of that, set per page. A page that moves between the two is loaded again with the right one,
-// because the identity a page sees is fixed when its navigation starts.
-function applyAutoIdentity(wc) {
-  if (S().general.browserId !== 'auto') return;
-  const chromeUA = uaForMode('chrome');
-  let last = FIREFOX_UA;   // what the process says by default
-  const set = (url) => { const ua = isGoogleUrl(url) ? FIREFOX_UA : chromeUA; if (ua !== last) { last = ua; try { wc.setUserAgent(ua); } catch { /* closed */ } return true; } return false; };
-  const orig = wc.loadURL.bind(wc);
-  let reloading = false;
-  wc.loadURL = (url, opts) => { set(url); return orig(url, opts); };   // the address bar loads pages this way
-  const cross = (e, url) => {
-    if (reloading || !/^https?:/i.test(url)) return;
-    if (set(url)) {   // the identity changes: stop this navigation and start it again under the new one
-      e.preventDefault(); reloading = true;
-      setImmediate(() => { reloading = false; });
-      orig(url).catch(() => {});
-    }
-  };
-  wc.on('will-navigate', cross);
-  wc.on('will-redirect', cross);
-}
+// "Automatic" is the genuine Firefox identity everywhere (the one Google's sign-in accepts). Switching identity per page was unreliable
+// (redirects, popups and workers kept the wrong one), so there is nothing to apply per page.
+function applyAutoIdentity() {}
 
 function uaForMode(mode) {
   const win = process.platform === 'win32';

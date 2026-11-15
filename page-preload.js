@@ -1,4 +1,4 @@
-// Preload for every web page tab: mouse gestures, and the `browser` API for my:// pages
+// Preload for every web page tab: the `browser` API for my:// pages
 const { contextBridge, ipcRenderer } = require('electron');
 
 if (location.protocol === 'my:') {
@@ -207,62 +207,6 @@ if (/^https?:$/.test(location.protocol)) {
   // Some SPAs set lang after initial render
   window.addEventListener('load', sendLang);
 }
-
-// ---- right-button-drag mouse gestures ----
-let enabled = false;
-ipcRenderer.on('gestures:enabled', (_e, v) => { enabled = !!v; });
-
-let tracking = false, moved = false, suppress = false, deferred = false, allowCtx = false;
-let pts = [];
-
-function recognize(points) {
-  const MIN = 30;
-  const dirs = [];
-  let [lx, ly] = points[0];
-  for (const [x, y] of points) {
-    const dx = x - lx, dy = y - ly;
-    if (Math.max(Math.abs(dx), Math.abs(dy)) < MIN) continue;
-    const d = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'R' : 'L') : (dy > 0 ? 'D' : 'U');
-    if (dirs[dirs.length - 1] !== d) dirs.push(d);
-    lx = x; ly = y;
-  }
-  return dirs.slice(0, 4).join('');
-}
-
-window.addEventListener('mousedown', (e) => {
-  if (!enabled || e.button !== 2) return;
-  tracking = true; moved = false; suppress = false; deferred = false;
-  pts = [[e.clientX, e.clientY]];
-}, true);
-
-window.addEventListener('mousemove', (e) => {
-  if (!tracking) return;
-  pts.push([e.clientX, e.clientY]);
-  const [sx, sy] = pts[0];
-  if (Math.abs(e.clientX - sx) > 8 || Math.abs(e.clientY - sy) > 8) moved = true;
-}, true);
-
-window.addEventListener('mouseup', (e) => {
-  if (!tracking || e.button !== 2) return;
-  tracking = false;
-  if (moved) {
-    suppress = true;
-    const g = recognize(pts);
-    if (g) ipcRenderer.send('gesture', g);
-  } else if (deferred) {
-    // Linux fires "contextmenu" on press; we blocked it, so ask for it back now
-    deferred = false;
-    allowCtx = true;
-    setTimeout(() => { allowCtx = false; }, 500);
-    ipcRenderer.send('ctxmenu', e.clientX, e.clientY);
-  }
-}, true);
-
-window.addEventListener('contextmenu', (e) => {
-  if (!enabled || allowCtx) return;
-  if (tracking) { e.preventDefault(); deferred = true; return; }
-  if (suppress) { e.preventDefault(); suppress = false; }
-}, true);
 
 // ---- password capture and autofill (web pages only; nothing is filled until the user picks a login) ----
 if (/^https?:$/.test(location.protocol)) {

@@ -51,14 +51,14 @@
 <script>
   const CATS = [
     ['general', 'General'], ['appearance', 'Appearance'], ['startpage', 'Start Page'], ['tabs', 'Tabs'], ['search', 'Search'],
-    ['privacy', 'Privacy'], ['adblocker', 'Adblocker'], ['passwords', 'Passwords'], ['downloads', 'Downloads'], ['mouse', 'Mouse'], ['keyboard', 'Keyboard'],
+    ['privacy', 'Privacy'], ['adblocker', 'Adblocker'], ['passwords', 'Passwords'], ['downloads', 'Downloads'], ['keyboard', 'Keyboard'],
     ['sync', 'Sync'], ['server', 'Server Admin'], ['import', 'Import'], ['profiles', 'Profiles'], ['about', 'About'],
   ];
   const FIELDS = {
     general: [
       { path: 'general.startup', label: 'On startup', type: 'select', options: [['start', 'Open the start page'], ['home', 'Open the homepage'], ['restore', 'Restore the last session']] },
       { path: 'general.homepage', label: 'Homepage', type: 'text' },
-      { path: 'general.browserId', label: 'Identify as', type: 'select', options: [['auto', 'Automatic: Firefox on Google sites, Chrome elsewhere (recommended)'], ['chrome', 'Chrome everywhere'], ['firefox', 'Firefox everywhere'], ['safari', 'Safari'], ['none', 'mbrowser / Electron (no spoofing)']], help: 'Some sites show “unsupported browser” banners otherwise. Restart the browser after changing this. With Firefox or Safari nothing is faked: the browser simply says it is that browser.' },
+      { path: 'general.browserId', label: 'Identify as', type: 'select', options: [['auto', 'Automatic: Firefox (works with Google sign-in) (recommended)'], ['chrome', 'Chrome everywhere'], ['firefox', 'Firefox everywhere'], ['safari', 'Safari'], ['none', 'mbrowser / Electron (no spoofing)']], help: 'Some sites show “unsupported browser” banners otherwise. Restart the browser after changing this. With Firefox or Safari nothing is faked: the browser simply says it is that browser.' },
       { path: 'general.autoUpdate', label: 'Check for updates automatically', type: 'toggle', help: 'Looks every few hours and shows a notice in the status bar. Turn off to only check from the menu.' },
       { path: 'general.newTab', label: 'New tab page', type: 'select', options: [['start', 'Start page'], ['home', 'Homepage'], ['blank', 'Blank page']] },
       { path: 'pages.defaultZoom', label: 'Default page zoom (%)', type: 'number', min: 30, max: 300, help: 'Applies to newly opened tabs.' },
@@ -116,9 +116,6 @@
       { path: 'downloads.askWhere', label: 'Ask where to save each file', type: 'toggle' },
       { path: 'downloads.directory', label: 'Download folder', type: 'text', help: 'Leave empty to use your system Downloads folder.' },
     ],
-    mouse: [
-      { path: 'mouse.gestures', label: 'Enable mouse gestures', type: 'toggle', help: 'Hold the right mouse button, drag, and release.' },
-    ],
     adblocker: [
       { path: 'privacy.blockTrackers', label: 'Enable ad and tracker blocking', type: 'toggle', help: 'Blocks third-party requests matching the built-in domain list.' },
       { path: 'privacy.doNotTrack', label: 'Send "Do Not Track" and Global Privacy Control headers', type: 'toggle' },
@@ -131,7 +128,6 @@
     ],
 
   };
-  const GESTURE_HELP = [['←', 'Back'], ['→', 'Forward'], ['↓', 'New tab'], ['↓ →', 'Close tab'], ['↑ ↓', 'Reload'], ['↑ ←', 'Previous tab'], ['↑ →', 'Next tab'], ['↓ ←', 'Reopen closed tab']];
 
   const $ = (id) => document.getElementById(id);
   const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
@@ -668,12 +664,6 @@
         adminLink.append(a);
         m.append(adminLink);
       }
-    }
-    if (cur === 'mouse') {
-      m.append(el('h2', null, 'Gestures'));
-      const t = el('table');
-      GESTURE_HELP.forEach(([g, a]) => { const tr = el('tr'); tr.append(el('td', null, g), el('td', null, a)); t.append(tr); });
-      m.append(t);
     }
   }
   if (!CATS.some((c) => c[0] === cur)) cur = 'general';
