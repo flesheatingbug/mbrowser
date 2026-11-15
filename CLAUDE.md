@@ -45,3 +45,8 @@ Cards/Addresses in vault, setupDone flag + `my://welcome` wizard.
 12. Translate.
 13. Verify Linux AppImage build; Android later.
 Also: rebuild tests (server e2e, vault, sync, profiles, importers).
+
+## Vault modes (0.9)
+- Two modes: **master password** (scrypt; works on every device, default when a server is connected) and **device key** (random key in `vault-device.key` via safeStorage; this computer only, default for local). Switching re-encrypts (`vault:setMode`).
+- "Only type it once" (`passwords.remember`, default on): derived key kept in `vault-remember.key` (safeStorage); off = ask each launch + auto-lock.
+- `vault:open` never creates/deletes a vault. The server preserves the blob's `device` flag. Second computer joins the server's vault (`vault:join` / wizard "join"), never makes a rival one.

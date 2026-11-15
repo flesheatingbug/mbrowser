@@ -100,7 +100,9 @@ let status = {};
 let serverConnected = false;
 let serverProfiles = null; // from server when needProfile
 let selectedServerProfile = null;
-let vaultChoice = 'skip'; // 'device' | 'skip'
+let vaultChoice = null; // 'master' | 'device' | 'join' | 'skip'
+let vaultFor = null;    // whether the default was picked for a synced or a local setup
+let vMaster = '', vConfirm = '', vKey = '', vRemember = true;
 let openLast = false;
 let profileName = '';      // name for the existing/server profile
 let localProfileName = 'Default (local)'; // name for new standalone profile
@@ -116,7 +118,7 @@ async function init() {
   profileName = status.profileName || 'Default';
   localProfileName = 'Default (local)';
   openLast = status.openLastProfile || false;
-  vaultChoice = (status.safeStorageAvailable && !status.vaultExists) ? 'device' : 'skip';
+  vRemember = status.remember !== false;
   serverConnected = status.serverConfigured;
   standaloneMode = !serverConnected; // default: standalone if no server configured
   render();
@@ -394,31 +396,65 @@ function renderStep3() {
   toggles.append(olRow);
   c.append(toggles);
 
-  // Vault mode
+  // Password vault
+  const syncing = serverConnected && !standaloneMode;
+  const sv = status.serverVault;
+  if (vaultChoice === null || vaultFor !== syncing) {
+    vaultChoice = syncing ? (sv && sv.exists ? 'join' : 'master') : 'device';
+    vaultFor = syncing;
+  }
   const vh = el('h3', null, 'Password manager'); vh.style.marginBottom = '10px';
   c.append(vh);
-  const vcards = el('div', 'cards');
-
-  if (status.safeStorageAvailable && !status.vaultExists) {
-    const cDev = el('div', 'card' + (vaultChoice === 'device' ? ' selected' : ''));
-    cDev.append(el('div', 'card-title', 'Auto-unlock (recommended)'));
-    cDev.append(el('div', 'card-desc', 'No master password needed. The vault key is protected by your OS account via the system keychain.'));
-    cDev.onclick = () => { vaultChoice = 'device'; cDev.classList.add('selected'); cSkip.classList.remove('selected'); };
-
-    const cSkip = el('div', 'card' + (vaultChoice === 'skip' ? ' selected' : ''));
-    cSkip.append(el('div', 'card-title', 'Set up later'));
-    cSkip.append(el('div', 'card-desc', 'You can set a master password in Settings → Passwords at any time.'));
-    cSkip.onclick = () => { vaultChoice = 'skip'; cSkip.classList.add('selected'); cDev.classList.remove('selected'); };
-
-    vcards.append(cDev, cSkip);
-  } else if (status.vaultExists) {
-    const note = el('p', 'note', status.vaultDeviceMode ? '✓ Using auto-unlock (device mode).' : '✓ Vault is already set up.');
-    vcards.append(note);
+  if (status.vaultExists) {
+    c.append(el('p', 'note', status.vaultDeviceMode ? '✓ Vault is set up without a master password (this computer only).' : '✓ Vault is already set up.'));
   } else {
-    const note = el('p', 'note', 'OS keychain is not available on this system. You can set a master password later in Settings → Passwords.');
-    vcards.append(note);
+    const banner = el('p', 'note', syncing
+      ? 'A master password is essential to sync your passwords between devices. Without one, your other devices cannot read the vault.'
+      : 'Passwords stay on this computer. To sync them to other devices later, switch to a master password in Settings → Passwords.');
+    banner.style.marginBottom = '10px';
+    if (syncing) banner.style.color = 'var(--fg)';
+    c.append(banner);
+    const vcards = el('div', 'cards');
+    const cards = {};
+    const choose = (id) => { vaultChoice = id; for (const k in cards) cards[k].classList.toggle('selected', k === id); };
+    const mkCard = (id, title, desc, build) => {
+      const card = el('div', 'card' + (vaultChoice === id ? ' selected' : ''));
+      card.append(el('div', 'card-title', title), el('div', 'card-desc', desc));
+      if (build) { const ex = el('div', 'expand'); build(ex); ex.onclick = (e) => e.stopPropagation(); card.append(ex); }
+      card.onclick = () => choose(id);
+      cards[id] = card; vcards.append(card);
+    };
+    const input = (parent, label, type, get, set) => {
+      const fd = el('div', 'field'); fd.append(el('label', null, label));
+      const i = el('input'); i.type = type; i.value = get(); i.autocomplete = 'off'; i.oninput = () => set(i.value);
+      fd.append(i); parent.append(fd);
+    };
+    const remember = (parent) => {
+      const row = el('div', 'toggle-row');
+      const lb = el('div', 'toggle-label'); lb.append(el('b', null, 'Only type it once on this computer'), el('span', null, 'Remembered with your OS account; you can turn this off later.'));
+      const tg = el('button', 'toggle ' + (vRemember ? 'on' : 'off'));
+      tg.onclick = () => { vRemember = !vRemember; tg.className = 'toggle ' + (vRemember ? 'on' : 'off'); };
+      row.append(lb, tg); parent.append(row);
+    };
+    if (syncing && sv && sv.exists) {
+      mkCard('join', 'Use the vault on your server (recommended)', sv.device
+        ? 'Your server’s vault has no master password. Paste its key from the computer that made it.'
+        : 'Your server already has a password vault. Enter its master password.', (ex) => {
+        if (sv.device) input(ex, 'Vault key', 'text', () => vKey, (v) => { vKey = v; });
+        else { input(ex, 'Master password', 'password', () => vMaster, (v) => { vMaster = v; }); remember(ex); }
+      });
+    } else {
+      mkCard('master', 'Master password' + (syncing ? ' (recommended)' : ''), 'One password opens your vault on every device. Needed to sync passwords.', (ex) => {
+        input(ex, 'Master password', 'password', () => vMaster, (v) => { vMaster = v; });
+        input(ex, 'Repeat it', 'password', () => vConfirm, (v) => { vConfirm = v; });
+        remember(ex);
+        ex.append(el('div', 'note', 'Write it down: it cannot be recovered.'));
+      });
+    }
+    mkCard('device', 'No password (this computer only)', 'Opens automatically, protected by your OS account. Other devices cannot read the vault.');
+    mkCard('skip', 'Set up later', 'Create the vault the first time you save a password.');
+    c.append(vcards);
   }
-  c.append(vcards);
 
   const f = $('footer');
   f.innerHTML = '';
@@ -444,9 +480,10 @@ function renderStep3() {
     // Open last profile
     await browser.wizardSetOpenLast(openLast);
     // Vault device mode
-    if (vaultChoice === 'device' && status.safeStorageAvailable && !status.vaultExists) {
-      const r = await browser.wizardVaultDevice();
+    if (!status.vaultExists && vaultChoice && vaultChoice !== 'skip') {
+      const r = await browser.wizardVaultSetup({ mode: vaultChoice, master: vMaster, confirm: vConfirm, key: vKey, remember: vRemember });
       if (r && r.error) { errEl.textContent = 'Vault: ' + r.error; next.disabled = false; next.textContent = 'Finish →'; return; }
+      status.vaultExists = true;
     }
     step = 4; render();
   };
@@ -471,7 +508,9 @@ function renderStep4() {
   if (standaloneMode) items.push(`New local profile: ${shownName || 'Default (local)'}`);
   else if (profileRenamed || (shownName && shownName !== status.profileName)) items.push(`Profile: ${shownName}`);
   if (openLast) items.push('Opens last-used profile on launch');
-  if (vaultChoice === 'device' && status.safeStorageAvailable) items.push('Password vault: auto-unlock enabled');
+  if (vaultChoice === 'master' || (vaultChoice === 'join' && !(status.serverVault && status.serverVault.device))) items.push('Password vault: master password' + (vRemember ? ' (remembered on this computer)' : ''));
+  else if (vaultChoice === 'join') items.push('Password vault: joined the server’s vault');
+  else if (vaultChoice === 'device') items.push('Password vault: this computer only (no master password)');
 
   const summary = el('div', 'summary');
   summary.style.textAlign = 'left';

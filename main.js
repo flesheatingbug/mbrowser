@@ -1025,9 +1025,47 @@ function paletteRun(item) {
 }
 
 // ---------- password manager ----------
+// Keys kept on this computer, protected by the OS keychain (Electron safeStorage) when there is one.
+//   vault-device.key   the key of a "device" vault (no master password)
+//   vault-remember.key the key derived from the master password, so that it is only typed once on this computer
+const KEYFILES = { device: 'vault-device.key', remember: 'vault-remember.key' };
+function readKey(name) {
+  try {
+    const f = file(name), plain = file(name + '.plain');
+    if (safeStorage.isEncryptionAvailable() && fs.existsSync(f)) return safeStorage.decryptString(Buffer.from(fs.readFileSync(f, 'utf8'), 'base64'));
+    if (fs.existsSync(plain)) return fs.readFileSync(plain, 'utf8').trim();
+  } catch { /* unreadable: treat as missing */ }
+  return null;
+}
+function writeKey(name, b64) {
+  delKey(name);
+  if (safeStorage.isEncryptionAvailable()) fs.writeFileSync(file(name), safeStorage.encryptString(b64).toString('base64'), { mode: 0o600 });
+  else fs.writeFileSync(file(name + '.plain'), b64, { mode: 0o600 });
+}
+function delKey(name) { for (const f of [file(name), file(name + '.plain')]) { try { fs.unlinkSync(f); } catch { /* not there */ } } }
+
+// open the vault without asking, when this computer holds its key
+function autoUnlockVault() {
+  if (!vault.exists() || vault.unlocked()) return;
+  const b = vault.mode() === 'device' ? readKey(KEYFILES.device) : (S().passwords.remember ? readKey(KEYFILES.remember) : null);
+  if (b) vault.unlockWithKey(Buffer.from(b, 'base64'));
+}
+function createDeviceVault() {
+  const rawKey = crypto.randomBytes(32);
+  vault.createWithKey(rawKey);
+  writeKey(KEYFILES.device, rawKey.toString('base64'));
+  rawKey.fill(0);
+}
+// after the master password was typed (or set): remember it on this computer unless that is switched off
+function afterUnlock() {
+  if (vault.unlocked() && vault.mode() === 'master' && S().passwords.remember) { try { writeKey(KEYFILES.remember, vault.exportKey()); } catch { /* ignore */ } }
+  touchVault();
+}
+const keepsUnlocked = () => vault.isDevice() || !!S().passwords.remember;
+
 function touchVault() {
   clearTimeout(vaultTimer);
-  if (vault.isDevice()) return; // device-mode vault stays unlocked
+  if (keepsUnlocked()) return; // device vaults and "remember on this computer" stay unlocked
   const m = Number(S().passwords.autoLockMinutes);
   if (vault.unlocked() && m > 0) vaultTimer = setTimeout(() => vault.lock(), m * 60000);
 }
@@ -1042,7 +1080,7 @@ function maybeShowPwSave(w) {
   use(w);
   showOverlay('pw', {
     view: 'save', host: p.host, username: p.username, mode: p.mode,
-    needsCreate: !vault.exists(), needsUnlock: vault.exists() && !vault.unlocked(),
+    needsCreate: !vault.exists() && syncReady(), needsUnlock: vault.exists() && !vault.unlocked(),
   });
 }
 
@@ -1840,7 +1878,7 @@ function setupIpc() {
         if (master !== String(a.confirm || '')) return { error: 'The two passwords do not match.' };
         vault.create(master);
       } else if (!vault.unlock(master)) { await sleep(500); return { error: 'Wrong master password.' }; }
-      touchVault();
+      afterUnlock();
       if (a.after === 'fill' && t && cur.pwField) showPwFill(cur, t, { left: cur.pwField.x / (t.wc.getZoomFactor() || 1), bottom: (cur.pwField.y - 4) / (t.wc.getZoomFactor() || 1) });
       else hideOverlay();
       return { ok: true };
@@ -1850,14 +1888,16 @@ function setupIpc() {
       if (!p) return { error: 'Nothing to save.' };
       const master = String(a.master || '');
       if (!vault.exists()) {
-        if (!master) return { error: 'Enter a password.' };
-        if (master !== String(a.confirm || '')) return { error: 'The two passwords do not match.' };
-        vault.create(master);
+        if (master) {
+          if (master !== String(a.confirm || '')) return { error: 'The two passwords do not match.' };
+          vault.create(master);
+        } else if (!syncReady()) createDeviceVault(); // local only: no password needed
+        else return { error: 'Enter a master password.' };
       } else if (!vault.unlocked()) {
         if (!vault.unlock(master)) { await sleep(500); return { error: 'Wrong master password.' }; }
       }
       try { vault.upsert({ id: p.existingId, origin: p.origin, username: p.username, password: p.password }); } catch { return { error: 'Could not save.' }; }
-      touchVault();
+      afterUnlock();
       syncSoon();
       cur.pwPending = null;
       hideOverlay();
@@ -1892,7 +1932,8 @@ function setupIpc() {
   const locked = () => { if (!vault.unlocked()) throw new Error('locked'); touchVault(); };
   handle('vault:status', () => ({
     exists: vault.exists(), unlocked: vault.unlocked(), count: vault.unlocked() ? vault.count() : null,
-    autoLock: S().passwords.autoLockMinutes, deviceMode: vault.isDevice(),
+    autoLock: S().passwords.autoLockMinutes, deviceMode: vault.isDevice(), mode: vault.mode(),
+    remember: !!S().passwords.remember, syncReady: syncReady(),
     safeStorageAvailable: safeStorage.isEncryptionAvailable(),
   }), PAGE_ONLY);
   handle('vault:syncStatus', () => ({
@@ -1906,63 +1947,104 @@ function setupIpc() {
     } catch (e) { vaultSyncInfo = { state: 'error', message: 'Vault sync error: ' + e.message }; }
     return vaultSyncInfo;
   }, PAGE_ONLY);
-  handle('vault:create', (_e, master, confirm) => {
+  // first-time setup: { mode: 'master' | 'device', master, confirm, remember }
+  handle('vault:setup', (_e, o) => {
+    o = o || {};
     if (vault.exists()) return { error: 'A vault already exists.' };
-    if (!master) return { error: 'Enter a password.' };
-    if (master !== confirm) return { error: 'The two passwords do not match.' };
-    vault.create(String(master)); touchVault(); syncSoon();
+    if (o.mode === 'device') createDeviceVault();
+    else {
+      if (!o.master) return { error: 'Enter a master password.' };
+      if (o.master !== o.confirm) return { error: 'The two passwords do not match.' };
+      if (typeof o.remember === 'boolean') applySetting('passwords.remember', o.remember);
+      vault.create(String(o.master));
+      afterUnlock();
+    }
+    touchVault(); syncSoon();
     return { ok: true };
   }, PAGE_ONLY);
   handle('vault:unlock', async (_e, master) => {
     if (!vault.unlock(String(master || ''))) { await sleep(500); return { error: 'Wrong master password.' }; }
-    touchVault();
+    afterUnlock();
     return { ok: true };
   }, PAGE_ONLY);
-  handle('vault:lock', () => { if (!vault.isDevice()) { vault.lock(); clearTimeout(vaultTimer); } return true; }, PAGE_ONLY);
+  // does the server already hold a vault? (so that a second computer joins it instead of making a rival one)
+  handle('vault:remoteInfo', async () => {
+    if (!syncReady()) return { configured: false };
+    try { const r = await call('GET', '/api/vault'); return { configured: true, exists: !!r.exists, device: !!(r.blob && r.blob.device) }; }
+    catch (e) { return { configured: true, error: e.message }; }
+  }, PAGE_ONLY);
+  // use the server's vault on this computer: master password, or (for a device vault) the key from the other computer
+  handle('vault:join', async (_e, o) => {
+    o = o || {};
+    if (vault.exists()) return { error: 'This computer already has a vault.' };
+    if (!syncReady()) return { error: 'Sync is not set up.' };
+    try {
+      const r = await call('GET', '/api/vault');
+      if (!r.exists) return { error: 'The server has no vault.' };
+      vault.adopt(r.blob);
+      syncState.vaultVer = r.version; syncState.vaultHash = crypto.createHash('sha256').update(vault.blobText()).digest('hex'); save('syncstate.json', syncState);
+      if (r.blob.device) {
+        const k = String(o.key || '').trim();
+        if (!k || !vault.unlockWithKey(Buffer.from(k, 'base64'))) return { error: 'That key does not open the vault.' };
+        writeKey(KEYFILES.device, k);
+      } else {
+        if (typeof o.remember === 'boolean') applySetting('passwords.remember', o.remember);
+        if (!vault.unlock(String(o.master || ''))) { await sleep(500); return { error: 'Wrong master password.' }; }
+        afterUnlock();
+      }
+      return { ok: true };
+    } catch (e) { return { error: e.message }; }
+  }, PAGE_ONLY);
+  // a device vault whose key is missing on this computer: paste the key from the computer that made it
+  handle('vault:importKey', (_e, k) => {
+    k = String(k || '').trim();
+    if (!vault.isDevice()) return { error: 'This vault uses a master password.' };
+    if (!k || !vault.unlockWithKey(Buffer.from(k, 'base64'))) return { error: 'That key does not open the vault.' };
+    writeKey(KEYFILES.device, k); touchVault();
+    return { ok: true };
+  }, PAGE_ONLY);
+  // switch between master password and device key (the vault is re-encrypted; other devices need the new password / key)
+  handle('vault:setMode', (_e, o) => {
+    o = o || {};
+    if (!vault.unlocked()) return { error: 'Unlock the vault first.' };
+    if (o.mode === 'master') {
+      if (!o.master) return { error: 'Enter a master password.' };
+      if (o.master !== o.confirm) return { error: 'The two passwords do not match.' };
+      vault.setMaster(String(o.master));
+      delKey(KEYFILES.device);
+      afterUnlock();
+    } else if (o.mode === 'device') {
+      const rawKey = crypto.randomBytes(32);
+      vault.setDevice(rawKey);
+      writeKey(KEYFILES.device, rawKey.toString('base64'));
+      delKey(KEYFILES.remember);
+      rawKey.fill(0);
+      touchVault();
+    } else return { error: 'Unknown mode.' };
+    syncSoon();
+    return { ok: true };
+  }, PAGE_ONLY);
+  // "only type the master password once on this computer" on / off
+  handle('vault:setRemember', (_e, on) => {
+    on = !!on;
+    applySetting('passwords.remember', on);
+    if (on) { if (vault.unlocked() && vault.mode() === 'master') afterUnlock(); }
+    else { delKey(KEYFILES.remember); touchVault(); }
+    return { ok: true };
+  }, PAGE_ONLY);
+  handle('vault:lock', () => { if (!vault.isDevice()) { vault.lock(); clearTimeout(vaultTimer); delKey(KEYFILES.remember); } return true; }, PAGE_ONLY);
   // the device key, so that another device of yours (the Android app) can be given the same key once
   handle('vault:exportKey', () => {
-    try {
-      const keyFile = file('vault-device.key');
-      const plainFile = file('vault-device.key.plain');
-      if (safeStorage.isEncryptionAvailable() && fs.existsSync(keyFile))
-        return { key: safeStorage.decryptString(Buffer.from(fs.readFileSync(keyFile, 'utf8'), 'base64')) };
-      if (fs.existsSync(plainFile)) return { key: fs.readFileSync(plainFile, 'utf8').trim() };
-    } catch { /* fall through */ }
-    return { error: 'This computer has no device key (the vault uses a master password).' };
+    if (!vault.isDevice()) return { error: 'This vault uses a master password: just type that password on the other device.' };
+    const k = readKey(KEYFILES.device);
+    return k ? { key: k } : { error: 'This computer does not hold the vault key.' };
   }, PAGE_ONLY);
-  handle('vault:ensureDevice', () => {
-    if (vault.unlocked()) return { ok: true };
-    const keyFile = file('vault-device.key');
-    const plainFile = file('vault-device.key.plain');
-    // Try key files if vault already exists
-    if (vault.exists()) {
-      try {
-        if (safeStorage.isEncryptionAvailable() && fs.existsSync(keyFile)) {
-          const enc = fs.readFileSync(keyFile, 'utf8');
-          const keyB64 = safeStorage.decryptString(Buffer.from(enc, 'base64'));
-          vault.unlockWithKey(Buffer.from(keyB64, 'base64'));
-        } else if (fs.existsSync(plainFile)) {
-          const keyB64 = fs.readFileSync(plainFile, 'utf8').trim();
-          vault.unlockWithKey(Buffer.from(keyB64, 'base64'));
-        }
-      } catch { }
-      if (vault.unlocked()) return { ok: true };
-      // Vault exists but can't be unlocked — delete and recreate as device vault
-      try { fs.unlinkSync(file('vault.json')); } catch { }
-    }
-    // Create fresh device vault
-    try {
-      const rawKey = crypto.randomBytes(32);
-      vault.createWithKey(rawKey);
-      if (safeStorage.isEncryptionAvailable()) {
-        const enc = safeStorage.encryptString(rawKey.toString('base64'));
-        fs.writeFileSync(keyFile, enc.toString('base64'), { mode: 0o600 });
-      } else {
-        fs.writeFileSync(plainFile, rawKey.toString('base64'), { mode: 0o600 });
-      }
-      rawKey.fill(0);
-      return { ok: true };
-    } catch (err) { return { error: err.message }; }
+  // open the vault if this computer holds its key. Never creates or deletes anything.
+  handle('vault:open', () => {
+    autoUnlockVault();
+    if (!vault.exists()) return { state: 'none' };
+    if (vault.unlocked()) return { state: 'unlocked' };
+    return { state: vault.isDevice() ? 'needkey' : 'locked' };
   }, PAGE_ONLY);
   handle('vault:list', () => { if (!vault.unlocked()) return null; touchVault(); return vault.list(); }, PAGE_ONLY);
   handle('vault:reveal', (_e, id) => { locked(); return vault.reveal(id); }, PAGE_ONLY);
@@ -1988,6 +2070,7 @@ function setupIpc() {
     locked();
     if (!newPw) return { error: 'Enter a new password.' };
     if (!vault.changeMaster(String(oldPw), String(newPw))) { await sleep(500); return { error: 'The current master password is wrong.' }; }
+    afterUnlock();
     syncSoon();
     return { ok: true };
   }, PAGE_ONLY);
@@ -2906,9 +2989,12 @@ function showWizard() {
 // ----- wizard IPC (only answered for the wizard window) -----
 const isWizard = (e) => e.sender.id === wizardWcId;
 
-ipcMain.handle('wizard:status', (e) => {
+ipcMain.handle('wizard:status', async (e) => {
   if (!isWizard(e)) return null;
+  let serverVault = null;
+  if (syncReady()) { try { const r = await call('GET', '/api/vault'); serverVault = { exists: !!r.exists, device: !!(r.blob && r.blob.device) }; } catch { /* unknown */ } }
   return {
+    serverVault,
     profileId,
     profileName: profiles.get(profileId)?.name || 'Default',
     profiles: profiles.list(),
@@ -2918,6 +3004,7 @@ ipcMain.handle('wizard:status', (e) => {
     syncAccount: S().sync.account || {},
     vaultExists: vault.exists(),
     vaultDeviceMode: vault.isDevice(),
+    remember: !!S().passwords.remember,
     safeStorageAvailable: safeStorage.isEncryptionAvailable(),
   };
 });
@@ -2978,19 +3065,34 @@ ipcMain.handle('wizard:set-open-last', (e, v) => {
   return { ok: true };
 });
 
-ipcMain.handle('wizard:vault-device', (e) => {
+// { mode: 'master' | 'device' | 'join', master, confirm, remember, key }
+ipcMain.handle('wizard:vault-setup', async (e, o) => {
   if (!isWizard(e)) return null;
-  if (vault.exists()) return { ok: true, already: true };
+  o = o || {};
+  if (typeof o.remember === 'boolean') applySetting('passwords.remember', o.remember);
   try {
-    const rawKey = crypto.randomBytes(32);
-    vault.createWithKey(rawKey);
-    if (safeStorage.isEncryptionAvailable()) {
-      const enc = safeStorage.encryptString(rawKey.toString('base64'));
-      fs.writeFileSync(file('vault-device.key'), enc.toString('base64'), { mode: 0o600 });
-    } else {
-      fs.writeFileSync(file('vault-device.key.plain'), rawKey.toString('base64'), { mode: 0o600 });
+    if (o.mode === 'join') {
+      if (vault.exists()) return { ok: true, already: true };
+      const r = await call('GET', '/api/vault');
+      if (!r.exists) return { error: 'The server has no vault.' };
+      vault.adopt(r.blob);
+      syncState.vaultVer = r.version; syncState.vaultHash = crypto.createHash('sha256').update(vault.blobText()).digest('hex'); save('syncstate.json', syncState);
+      if (r.blob.device) {
+        const k = String(o.key || '').trim();
+        if (!k || !vault.unlockWithKey(Buffer.from(k, 'base64'))) return { error: 'That key does not open the vault.' };
+        writeKey(KEYFILES.device, k);
+      } else {
+        if (!vault.unlock(String(o.master || ''))) { await sleep(500); return { error: 'Wrong master password.' }; }
+        afterUnlock();
+      }
+      return { ok: true };
     }
-    rawKey.fill(0);
+    if (vault.exists()) return { ok: true, already: true };
+    if (o.mode === 'device') { createDeviceVault(); return { ok: true }; }
+    if (!o.master) return { error: 'Enter a master password.' };
+    if (o.master !== o.confirm) return { error: 'The two passwords do not match.' };
+    vault.create(String(o.master));
+    afterUnlock();
     return { ok: true };
   } catch (err) { return { error: err.message }; }
 });
@@ -3037,21 +3139,7 @@ app.whenReady().then(async () => {
   bookmarkFolders = load('bookmark-folders.json', []);
   vault = createVault(file('vault.json'));
 
-  // Auto-unlock vault in device mode
-  if (vault.isDevice()) {
-    try {
-      const keyFile = file('vault-device.key');
-      const plainFile = file('vault-device.key.plain');
-      if (safeStorage.isEncryptionAvailable() && fs.existsSync(keyFile)) {
-        const enc = fs.readFileSync(keyFile, 'utf8');
-        const keyB64 = safeStorage.decryptString(Buffer.from(enc, 'base64'));
-        vault.unlockWithKey(Buffer.from(keyB64, 'base64'));
-      } else if (fs.existsSync(plainFile)) {
-        const keyB64 = fs.readFileSync(plainFile, 'utf8').trim();
-        vault.unlockWithKey(Buffer.from(keyB64, 'base64'));
-      }
-    } catch { /* key unavailable — vault stays locked */ }
-  }
+  autoUnlockVault();
 
   syncState = { ...syncState, ...load('syncstate.json', {}) };
   syncStatus = syncReady() ? 'Waiting for first sync…' : 'Sync not configured (Settings → Sync)';

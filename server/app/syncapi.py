@@ -114,6 +114,8 @@ def vault_put(c, body):
     if base != cur:
         raise ApiError(409, 'vault changed on the server')
     clean = {'v': _num(blob.get('v'), 1), 'kdf': blob['kdf'], **{k: blob[k] for k in need}}
+    if blob.get('device') is True:
+        clean['device'] = True  # a vault locked with a per-computer key, not a master password
     c.execute('INSERT INTO vault(id, version, blob, updated) VALUES(1,?,?,?) ON CONFLICT(id) DO UPDATE SET version=excluded.version, blob=excluded.blob, updated=excluded.updated',
               (cur + 1, json.dumps(clean), now_ms()))
     return {'version': cur + 1}
