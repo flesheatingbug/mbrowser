@@ -2755,13 +2755,19 @@ function setupSession(ses) {
       ['Sec-CH-UA', 'sec-ch-ua', 'Sec-CH-UA-Mobile', 'sec-ch-ua-mobile',
        'Sec-CH-UA-Platform', 'sec-ch-ua-platform', 'Sec-CH-UA-Platform-Version',
        'sec-ch-ua-platform-version', 'Sec-CH-UA-Full-Version-List',
-       'sec-ch-ua-full-version-list', 'User-Agent', 'user-agent'].forEach((k) => delete h[k]);
+       'sec-ch-ua-full-version-list', 'Sec-CH-UA-Arch', 'sec-ch-ua-arch',
+       'Sec-CH-UA-Bitness', 'sec-ch-ua-bitness', 'Sec-CH-UA-WoW64', 'sec-ch-ua-wow64',
+       'Sec-CH-UA-Model', 'sec-ch-ua-model', 'User-Agent', 'user-agent'].forEach((k) => delete h[k]);
       h['user-agent'] = chromeUA;
       h['sec-ch-ua'] = `"Chromium";v="${CHROME_MAJOR}", "Google Chrome";v="${CHROME_MAJOR}", "Not?A_Brand";v="8"`;
       h['sec-ch-ua-mobile'] = '?0';
       h['sec-ch-ua-platform'] = uaPlatHint;
       h['sec-ch-ua-platform-version'] = uaPlatVerHint;
       h['sec-ch-ua-full-version-list'] = `"Chromium";v="${CHROME_VER}", "Google Chrome";v="${CHROME_VER}", "Not?A_Brand";v="8.0.0.0"`;
+      h['sec-ch-ua-arch'] = '"x86"';
+      h['sec-ch-ua-bitness'] = '"64"';
+      h['sec-ch-ua-model'] = '""';
+      if (process.platform === 'win32') h['sec-ch-ua-wow64'] = '?0';
     }
     callback({ requestHeaders: h });
   });

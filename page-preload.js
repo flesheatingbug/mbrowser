@@ -123,6 +123,71 @@ window.addEventListener('wheel', (e) => {
   ipcRenderer.send('zoom:ctrl-wheel', e.deltaY > 0 ? -1 : 1);
 }, { passive: false, capture: true });
 
+// ---- Google sign-in: belt-and-suspenders userAgentData fix ----
+// CDP (Emulation.setUserAgentOverride) is the primary mechanism; this JS
+// injection is a fallback in case CDP doesn't fire for sandboxed renderers.
+// Uses require('os') so the platformVersion matches the actual kernel version
+// that the HTTP header sec-ch-ua-platform-version also sends.
+if (/^https?:$/.test(location.protocol)) {
+  const { webFrame } = require('electron');
+  const isWin = process.platform === 'win32';
+  const platStr = isWin ? 'Windows' : 'Linux';
+  const platVer = require('os').release();
+  const chromeVer = process.versions.chrome || '130.0.6723.117';
+  const chromeMajor = chromeVer.split('.')[0];
+  webFrame.executeJavaScript(`(function(){
+    var brands = [
+      {brand:'Not?A_Brand',version:'8'},
+      {brand:'Chromium',version:'${chromeMajor}'},
+      {brand:'Google Chrome',version:'${chromeMajor}'}
+    ];
+    var full = [
+      {brand:'Not?A_Brand',version:'8.0.0.0'},
+      {brand:'Chromium',version:'${chromeVer}'},
+      {brand:'Google Chrome',version:'${chromeVer}'}
+    ];
+    var platVer = ${JSON.stringify(platVer)};
+    // Only override if the brands still contain 'Electron' (CDP hasn't fixed it)
+    var existing = navigator.userAgentData;
+    if (existing && existing.brands && !existing.brands.some(function(b){return b.brand==='Electron';})) return;
+    var uad = {
+      brands:brands, mobile:false, platform:'${platStr}',
+      getHighEntropyValues:function(h){
+        var r={};
+        if(h.includes('brands')) r.brands=brands;
+        if(h.includes('mobile')) r.mobile=false;
+        if(h.includes('platform')) r.platform='${platStr}';
+        if(h.includes('platformVersion')) r.platformVersion=platVer;
+        if(h.includes('architecture')) r.architecture='x86';
+        if(h.includes('bitness')) r.bitness='64';
+        if(h.includes('model')) r.model='';
+        if(h.includes('uaFullVersion')) r.uaFullVersion='${chromeVer}';
+        if(h.includes('fullVersionList')) r.fullVersionList=full;
+        if(h.includes('wow64')) r.wow64=false;
+        return Promise.resolve(r);
+      },
+      toJSON:function(){return {brands:brands,mobile:false,platform:'${platStr}'};}
+    };
+    try { Object.defineProperty(navigator,'userAgentData',{get:function(){return uad;},configurable:true}); } catch(e){}
+    // Ensure window.chrome looks like a real Chrome tab
+    var c = window.chrome || (window.chrome = {});
+    if (!c.runtime) c.runtime = {
+      id:undefined,
+      connect:function(){return {};},
+      sendMessage:function(){},
+      onMessage:{addListener:function(){},removeListener:function(){},hasListener:function(){return false;}},
+      onConnect:{addListener:function(){},removeListener:function(){}},
+    };
+    if (!c.csi) c.csi = function(){ return {startE:Date.now(),onloadT:0,pageT:performance.now(),tran:15}; };
+    if (!c.loadTimes) c.loadTimes = function(){ return {
+      requestTime:Date.now()/1000,startLoadTime:Date.now()/1000,commitLoadTime:0,
+      finishDocumentLoadTime:0,finishLoadTime:0,firstPaintTime:0,firstPaintAfterLoadTime:0,
+      navigationType:'Other',wasFetchedViaSpdy:false,wasNpnNegotiated:true,
+      npnNegotiatedProtocol:'h2',wasAlternateProtocolAvailable:false,connectionInfo:'h2'
+    }; };
+  })()`);
+}
+
 // ---- page language detection (for translate bar) ----
 if (/^https?:$/.test(location.protocol)) {
   const sendLang = () => {
