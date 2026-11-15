@@ -480,6 +480,22 @@ function scheduleSessionSave() {
   }, 1500);
 }
 
+// ---------- auth-popup allowlist ----------
+// For sign-in popups from these domains: skip our preload + CDP debugger.
+// A foreign preload and an attached debugger are detectable signals; the
+// session-level Chrome UA (set in setupSession) is enough for clean auth.
+const AUTH_POPUP_HOSTS = new Set([
+  'accounts.google.com', 'accounts.youtube.com', 'myaccount.google.com',
+  'login.microsoftonline.com', 'login.live.com', 'login.microsoft.com',
+  'appleid.apple.com',
+  'github.com', 'gitlab.com',
+  'auth.openai.com', 'chat.openai.com',
+  'accounts.firefox.com',
+]);
+function isAuthHost(url) {
+  try { return AUTH_POPUP_HOSTS.has(new URL(url).hostname); } catch { return false; }
+}
+
 // ---------- tabs ----------
 function maskUserAgentData(wc) {
   // Override navigator.userAgentData via CDP so Google sign-in doesn't see "Electron" in the brand list.
@@ -675,22 +691,35 @@ function wire(tab) {
       wc.setZoomFactor(S().pages.defaultZoom / 100);
     }
   });
+  // Track whether the most-recently allowed popup is an auth domain.
+  // setWindowOpenHandler and did-create-window fire synchronously in sequence
+  // for the same popup, so a simple flag is reliable here.
+  let lastPopupIsAuth = false;
   wc.setWindowOpenHandler(({ url, disposition, features }) => {
     use(tab.owner);
     // Sign-in flows (Google, etc.) open a real popup that talks back to the page that opened it.
     // That only works as an actual window with an opener, so allow those; links become tabs.
     if (disposition === 'new-window' && features) {
+      lastPopupIsAuth = isAuthHost(url);
       return { action: 'allow', overrideBrowserWindowOptions: {
         autoHideMenuBar: true, title: 'Sign in',
-        webPreferences: { sandbox: true, contextIsolation: true, preload: path.join(__dirname, 'page-preload.js') },
+        // Auth-domain popups get no preload and no CDP (both are detectable by
+        // Google's trusted-platform check). Session UA is already Chrome.
+        webPreferences: lastPopupIsAuth
+          ? { sandbox: true, contextIsolation: true }
+          : { sandbox: true, contextIsolation: true, preload: path.join(__dirname, 'page-preload.js') },
       } };
     }
     newTab(url, { after: tab.id, private: tab.private, background: disposition === 'background-tab' });
     return { action: 'deny' };
   });
-  // Mask UA data on any popup window created from this tab (e.g. Google sign-in flow).
-  // The popup's webContents is fresh and has not been through maskUserAgentData yet.
-  wc.on('did-create-window', (newWin) => { maskUserAgentData(newWin.webContents); });
+  wc.on('did-create-window', (newWin) => {
+    const isAuth = lastPopupIsAuth;
+    lastPopupIsAuth = false;
+    // Auth popups: session UA is already Chrome — no CDP needed, and attaching a
+    // debugger is itself a detectable signal. Mask everything else as before.
+    if (!isAuth) maskUserAgentData(newWin.webContents);
+  });
   wc.on('context-menu', h((_e, params) => {
     // Store the params so the ctxmenu IPC handler can use them without
     // having to re-synthesise the event via sendInputEvent (unreliable on Wayland).
