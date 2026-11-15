@@ -106,6 +106,9 @@ class Prefs(ctx: Context) {
     var showThumbs: Boolean
         get() = bool("showThumbs", true)
         set(v) = putB("showThumbs", v)
+    var pullRefresh: Boolean
+        get() = bool("pullRefresh", true)
+        set(v) = putB("pullRefresh", v)
     var showAdd: Boolean
         get() = bool("showAdd", true)
         set(v) = putB("showAdd", v)

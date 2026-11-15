@@ -18,6 +18,8 @@ import android.os.Environment
 import android.os.Handler
 import android.os.Looper
 import android.view.KeyEvent
+import android.view.MotionEvent
+import android.webkit.JavascriptInterface
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -66,6 +68,18 @@ class MainActivity : AppCompatActivity() {
         var isolated = false            // private tab with its own separate cookies and storage
     }
 
+    // Tells the app when a touch starts on a video, player, slider or scrolled inner list, so pulling down there does not refresh the page.
+    private val DRAG_GUARD_JS = """(function(){if(window.__mbRef)return;window.__mbRef=1;
+      function bad(e){for(var n=e;n&&n.nodeType===1;n=n.parentElement){var t=n.tagName;
+        if(t==='VIDEO'||t==='AUDIO'||t==='CANVAS'||n.draggable)return true;
+        var c=(typeof n.className==='string'?n.className:'')+' '+(n.id||'');
+        if(/player|drag|slider|carousel|swipe|map|sheet|drawer/i.test(c))return true;
+        var cs=getComputedStyle(n);if(cs.touchAction==='none')return true;
+        if((cs.overflowY==='auto'||cs.overflowY==='scroll')&&n.scrollHeight>n.clientHeight&&n.scrollTop>0)return true;}
+        return false;}
+      document.addEventListener('touchstart',function(e){try{mbNative.blockRefresh(bad(e.target));}catch(x){}},{passive:true,capture:true});
+      document.addEventListener('touchend',function(){try{mbNative.blockRefresh(false);}catch(x){}},{passive:true,capture:true});
+    })();"""
     private val PRIVATE_PROFILE = "private"
     private val ACTION_CLOSE_PRIVATE = "app.mbrowser.CLOSE_PRIVATE"
     private val NOTICE_ID = 42
@@ -87,6 +101,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tabCount: TextView
     private lateinit var btnReload: ImageButton
 
+    @Volatile private var refreshBlocked = false   // the finger went down on something the page wants to drag itself
     private var engineOverride: Engine? = null
     private var switcherMode = 0          // 0 tabs, 1 private, 2 other devices, 3 recently closed
     private var switcherQuery = ""
@@ -111,7 +126,7 @@ class MainActivity : AppCompatActivity() {
         swipe.setColorSchemeResources(R.color.accent)
         swipe.setProgressBackgroundColorSchemeResource(R.color.card)
         // only a web page that is scrolled to its top can be pulled down; the speed dial never refreshes
-        swipe.setOnChildScrollUpCallback { _, _ -> val t = cur(); t == null || t.home || t.web.scrollY > 0 }
+        swipe.setOnChildScrollUpCallback { _, _ -> val t = cur(); t == null || t.home || t.web.scrollY > 0 || refreshBlocked }
         swipe.setOnRefreshListener {
             val t = cur()
             if (t != null && !t.home) t.web.reload() else swipe.isRefreshing = false
@@ -463,6 +478,7 @@ class MainActivity : AppCompatActivity() {
     private fun cur(): Tab? = tabs.getOrNull(current)
 
     private fun applyWebSettings() {
+        swipe.isEnabled = prefs.pullRefresh
         for (t in tabs) {
             t.web.settings.textZoom = prefs.textZoom
         }
@@ -533,6 +549,7 @@ class MainActivity : AppCompatActivity() {
             override fun onPageFinished(view: WebView, url: String) {
                 if (url.startsWith("about:")) return
                 if (tab.fresh) { tab.fresh = false; view.clearHistory() }
+                view.evaluateJavascript(DRAG_GUARD_JS, null)
                 tab.url = url
                 tab.title = view.title ?: ""
                 if (!tab.priv) Store.addVisit(url, tab.title)
@@ -540,6 +557,8 @@ class MainActivity : AppCompatActivity() {
                 ui.postDelayed({ afterLoad(tab, url) }, 1500)
             }
         }
+        w.addJavascriptInterface(object { @JavascriptInterface fun blockRefresh(b: Boolean) { refreshBlocked = b } }, "mbNative")
+        w.setOnTouchListener { _, ev -> if (ev.actionMasked == MotionEvent.ACTION_DOWN) refreshBlocked = false; false }
         w.webChromeClient = object : WebChromeClient() {
             override fun onProgressChanged(view: WebView, newProgress: Int) {
                 if (tab === cur()) progress.progress = newProgress

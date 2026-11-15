@@ -89,6 +89,7 @@ class SettingsActivity : AppCompatActivity() {
         choiceRow("Text size", listOf("Small (80%)", "Normal (100%)", "Large (120%)", "Extra large (150%)"),
             { listOf(80, 100, 120, 150).indexOf(prefs.textZoom).coerceAtLeast(1) },
             { prefs.textZoom = listOf(80, 100, 120, 150)[it] })
+        switchRow("Pull down to refresh", "Off if it gets in the way of pages with their own drag gestures", { prefs.pullRefresh }, { prefs.pullRefresh = it })
         switchRow("Block trackers and ads", "Drops requests to a built-in list of tracker domains", { prefs.blockTrackers }, { prefs.blockTrackers = it })
 
         header("Privacy and data")
