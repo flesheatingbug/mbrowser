@@ -96,13 +96,12 @@ jobs:
           if [ -n "$BEFORE" ] && [ "$BEFORE" != "0000000000000000000000000000000000000000" ] && git cat-file -e "$BEFORE" 2>/dev/null; then RANGE="$BEFORE..HEAD"; else RANGE="-n 10"; fi
           CHANGES=$(git log $RANGE --pretty='format:- %s (%h)')
 
-          NOTES="**Download mbrowser** — Build ${{ github.run_number }}
+          NOTES="**Download mbrowser Desktop** — Build ${{ github.run_number }}
 
           | Platform | File |
           |----------|------|
           | 🐧 Linux | [mbrowser-linux.AppImage](https://github.com/${{ github.repository }}/releases/download/${TAG}/mbrowser-linux.AppImage) |
           | 🪟 Windows | [mbrowser-windows-setup.exe](https://github.com/${{ github.repository }}/releases/download/${TAG}/mbrowser-windows-setup.exe) |
-          | 🤖 Android | [mbrowser.apk](https://github.com/${{ github.repository }}/releases/download/latest-apk/mbrowser.apk) |
 
           Build ${{ github.run_number }} from commit \`${GITHUB_SHA::7}\`.
 
@@ -121,6 +120,6 @@ jobs:
 
           gh release delete "$TAG" --yes --cleanup-tag 2>/dev/null || true
           gh release create "$TAG" release-assets/* \
-            --title "mbrowser Build ${{ github.run_number }}" \
+            --title "mbrowser Desktop Build ${{ github.run_number }}" \
             --notes "$NOTES" \
             --latest
