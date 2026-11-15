@@ -22,6 +22,8 @@
     "files": [
       "**/*",
       "!server/**",
+      "!android/**",
+      "!tools/**",
       "!.github/**",
       "!dist/**",
       "!node_modules/.cache/**",

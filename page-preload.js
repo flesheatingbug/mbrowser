@@ -57,6 +57,7 @@ if (location.protocol === 'my:') {
     onPanelChanged: (cb) => ipcRenderer.on('panel:changed', () => cb()),
     onBookmarksChanged: (cb) => ipcRenderer.on('bookmarks:changed', () => cb()),
     vaultStatus: invoke('vault:status'),
+    wallpaperPick: invoke('wallpaper:pick'),
     vaultOpen: invoke('vault:open'),
     vaultSetup: invoke('vault:setup'),
     vaultRemoteInfo: invoke('vault:remoteInfo'),

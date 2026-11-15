@@ -2392,6 +2392,20 @@ function setupIpc() {
   handle('data:clear', (_e, what) => (['history', 'cookies', 'cache', 'all'].includes(what) ? clearData(what) : false), BOTH);
   handle('downloads:list', () => downloads.map((d) => ({ ...d })), BOTH);
   handle('downloads:action', (_e, id, action) => downloadAction(id, action), BOTH);
+  handle('wallpaper:pick', async () => {
+    const r = await dialog.showOpenDialog({ title: 'Choose a wallpaper', properties: ['openFile'], filters: [{ name: 'Pictures', extensions: ['jpg', 'jpeg', 'png', 'webp'] }] });
+    if (r.canceled || !r.filePaths[0]) return { canceled: true };
+    try {
+      const src = r.filePaths[0];
+      if (fs.statSync(src).size > 30 * 1024 * 1024) return { error: 'That picture is larger than 30 MB.' };
+      const b = fs.readFileSync(src);
+      if (!sniffMime(b)) return { error: 'That is not a JPEG, PNG or WebP picture.' };
+      fs.copyFileSync(src, file('wallpaper-custom'));
+      applySetting('startPage.wallpaper', 'custom');
+      applySetting('startPage.wallpaperRev', Date.now());
+      return { ok: true };
+    } catch (e) { return { error: e.message }; }
+  }, PAGE_ONLY);
   handle('thumb:refresh', (_e, urls) => {
     if (!Array.isArray(urls)) return false;
     const valid = urls.filter((u) => typeof u === 'string' && isWeb(u)).slice(0, 15);
@@ -2509,8 +2523,94 @@ const PAGES = { bookmarks: 'bookmarks.html', profiles: 'profiles.html', import: 
 
 const CORS = { 'access-control-allow-origin': '*' };
 
+// ---------- start page wallpapers and site icons ----------
+const WALLPAPER_IDS = ['aurora', 'dusk', 'ocean', 'dunes', 'mist', 'forest', 'ember', 'orchid', 'slate', 'nebula', 'peaks', 'paper'];
+const sniffMime = (b) => {
+  if (b.length > 4 && b[0] === 0xff && b[1] === 0xd8) return 'image/jpeg';
+  if (b.length > 4 && b[0] === 0x89 && b[1] === 0x50) return 'image/png';
+  if (b.length > 12 && b.toString('latin1', 0, 4) === 'RIFF' && b.toString('latin1', 8, 12) === 'WEBP') return 'image/webp';
+  if (b.length > 4 && b[0] === 0 && b[1] === 0 && b[2] === 1 && b[3] === 0) return 'image/x-icon';
+  if (b.length > 3 && b.toString('latin1', 0, 3) === 'GIF') return 'image/gif';
+  return null;
+};
+
+// the hosts of the user's own speed dials: the only ones the icon fetcher may contact
+function dialHosts() {
+  const hosts = new Set();
+  const walk = (items) => { for (const d of items || []) { if (d.type === 'folder') walk(d.items); else { try { hosts.add(new URL(d.url).host); } catch { /* skip */ } } } };
+  for (const g of S().startPage.groups || []) walk(g.dials);
+  return hosts;
+}
+
+const iconJobs = new Map();
+async function fetchDialIcon(pageUrl) {
+  const u = new URL(pageUrl);
+  const dir = file('dialicons'); fs.mkdirSync(dir, { recursive: true });
+  const cache = path.join(dir, u.host.replace(/[^a-z0-9.-]/gi, '_') + '.bin');
+  if (fs.existsSync(cache)) return fs.readFileSync(cache);
+  if (fs.existsSync(cache + '.none') && Date.now() - fs.statSync(cache + '.none').mtimeMs < 7 * 864e5) return null;
+  const get = async (url, max) => {
+    try {
+      const r = await fetch(url, { headers: { 'user-agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36' }, signal: AbortSignal.timeout(7000), redirect: 'follow' });
+      if (!r.ok) return null;
+      return Buffer.from(await r.arrayBuffer()).subarray(0, max);
+    } catch { return null; }
+  };
+  const origin = u.origin;
+  const cands = [];
+  const html = await get(origin + '/', 300000);
+  if (html) {
+    for (const m of html.toString('utf8').matchAll(/<link\s[^>]*>/gi)) {
+      const tag = m[0];
+      const rel = (/rel\s*=\s*["']([^"']+)["']/i.exec(tag) || [])[1];
+      const href = (/href\s*=\s*["']([^"']+)["']/i.exec(tag) || [])[1];
+      if (!rel || !href || !/icon/i.test(rel)) continue;
+      const size = +((/sizes\s*=\s*["'](\d+)x/i.exec(tag) || [])[1] || 0);
+      let abs; try { abs = new URL(href, origin + '/').href; } catch { continue; }
+      if (/\.svg(\?|$)/i.test(abs)) continue;
+      cands.push([abs, /apple-touch/i.test(rel) ? 1000 + size : size]);
+    }
+  }
+  cands.push([origin + '/apple-touch-icon.png', 900], [origin + '/apple-touch-icon-precomposed.png', 890], [origin + '/favicon.ico', 1]);
+  const seen = new Set();
+  let best = null, bestW = 0;
+  for (const [url] of cands.sort((a, b) => b[1] - a[1])) {
+    if (seen.has(url) || seen.size >= 5) continue;
+    seen.add(url);
+    const buf = await get(url, 600000);
+    if (!buf || !sniffMime(buf)) continue;
+    let w = 0;
+    try { w = nativeImage.createFromBuffer(buf).getSize().width; } catch { /* unknown size */ }
+    if (!w) w = 32;
+    if (w > bestW) { best = buf; bestW = w; }
+    if (bestW >= 120) break;
+  }
+  if (best) { fs.writeFileSync(cache, best); return best; }
+  fs.writeFileSync(cache + '.none', '');
+  return null;
+}
+
 function handleMy(req) {
   const u = new URL(req.url);
+  if (u.host === 'wallpaper') {
+    const id = u.pathname.replace(/^\//, '');
+    const p = id === 'custom' ? file('wallpaper-custom') : (WALLPAPER_IDS.includes(id) ? path.join(ASSETS, 'wallpapers', id + '.jpg') : null);
+    if (p && fs.existsSync(p)) {
+      const b = fs.readFileSync(p);
+      return new Response(b, { headers: { 'content-type': sniffMime(b) || 'image/jpeg', 'cache-control': 'no-cache', ...CORS } });
+    }
+    return new Response('', { status: 404 });
+  }
+  if (u.host === 'dialicon') {
+    const target = u.searchParams.get('u') || '';
+    let host = '';
+    try { host = new URL(target).host; } catch { /* bad address */ }
+    if (!host || !dialHosts().has(host)) return new Response('', { status: 404 });
+    if (!iconJobs.has(host)) iconJobs.set(host, fetchDialIcon(target).catch(() => null).finally(() => setTimeout(() => iconJobs.delete(host), 5000)));
+    return iconJobs.get(host).then((b) => b
+      ? new Response(b, { headers: { 'content-type': sniffMime(b) || 'image/png', 'cache-control': 'max-age=3600', ...CORS } })
+      : new Response('', { status: 404 }));
+  }
   if (u.host === 'assets') {
     if (u.pathname === '/theme.css') {
       return new Response(themeCss(), { headers: { 'content-type': 'text/css', ...CORS } });
