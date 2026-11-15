@@ -442,7 +442,7 @@ function scheduleSessionSave() {
   clearTimeout(sessionTimer);
   sessionTimer = setTimeout(() => {
     const list = [...windows].flatMap((w) => w.order.map((id) => w.tabs.get(id)))
-      .filter((t) => t && !t.private && t.wc.getURL() && t.wc.getURL() !== 'about:blank')
+      .filter((t) => t && !t.private && /^https?:\/\//i.test(t.wc.getURL()))
       .map((t) => ({ url: t.wc.getURL(), pinned: t.pinned }));
     try { save('session.json', { tabs: list }); } catch { /* ignore */ }
   }, 1500);
@@ -3374,6 +3374,14 @@ app.on('certificate-error', (event, _wc, url, _error, _cert, callback) => {
 
 let quitCleared = false;
 app.on('before-quit', (e) => {
+  // Always flush the session synchronously so tabs survive the quit.
+  // The debounced timer may not have fired yet if the user closes quickly.
+  clearTimeout(sessionTimer);
+  sessionTimer = null;
+  const list = [...windows].flatMap((w) => w.order.map((id) => w.tabs.get(id)))
+    .filter((t) => t && !t.private && /^https?:\/\//i.test(t.wc.getURL()))
+    .map((t) => ({ url: t.wc.getURL(), pinned: t.pinned }));
+  try { save('session.json', { tabs: list }); } catch { /* ignore */ }
   if (quitCleared || !store) return;
   const c = S().privacy.clearOnExit;
   const what = c.history && c.cookies && c.cache ? 'all' : null;
