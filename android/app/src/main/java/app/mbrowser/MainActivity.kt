@@ -1014,6 +1014,19 @@ class MainActivity : BaseActivity() {
     private fun navigate(input: String) {
         val url = toUrl(input)
         if (url.isEmpty()) return
+        // typed while the tab switcher is open: leave it and show the page. In Private it is browsed privately,
+        // in the other sections normally
+        if (switcher.visibility == View.VISIBLE) {
+            val wantPriv = switcherMode == 1
+            val here = cur()
+            hideSwitcher()
+            if (here == null || here.priv != wantPriv) {
+                newTab(url, wantPriv)
+                urlBar.clearFocus()
+                (getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager).hideSoftInputFromWindow(urlBar.windowToken, 0)
+                return
+            }
+        }
         val t = cur() ?: return
         if (t.home) t.fresh = true
         t.home = false
