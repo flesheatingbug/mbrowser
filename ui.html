@@ -61,7 +61,8 @@
   #bar button.nav { min-width:40px; height:38px; border-radius:10px; display:grid; place-items:center; }
   #bar button.nav svg { width:22px; height:22px; display:block; }
   #urlwrap { flex:1; display:flex; align-items:center; height:36px; border:1px solid transparent; border-radius:18px;
-    background:var(--bg); min-width:0; }
+    background:var(--bg); min-width:0; position:relative; overflow:hidden; }
+  #urlprog { position:absolute; left:0; top:0; bottom:0; width:0; background:color-mix(in srgb, var(--accent) 28%, transparent); pointer-events:none; opacity:0; transition:width .25s ease-out, opacity .3s ease; }
   #urlwrap:focus-within { border-color:var(--accent); }
   #url { flex:1; min-width:0; height:34px; border:0; padding:0 14px 0 4px; background:transparent; color:var(--fg);
     font:inherit; outline:none; }
@@ -215,6 +216,7 @@
     <button id="reload" class="nav" title="Reload"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 0-2.4 5.7"/><path d="M20 4v8h-8"/></svg></button>
     <span id="priv">Private</span>
     <div id="urlwrap">
+      <div id="urlprog"></div>
       <button id="sec" class="internal" title="Connection and site information"><span id="secicon" class="ic"></span><span class="lbl" id="seclbl"></span></button>
       <input id="url" placeholder="Search or enter address" spellcheck="false">
       <button id="key" class="ic" title="Saved logins for this site"><span id="keyic"></span><span class="n" id="keyn"></span></button>
@@ -384,6 +386,24 @@
     if (d) api.showDlCtxMenu(d.id);
   };
   // --- download whoosh animation ---
+  // The address bar fills while the active tab loads. Electron has no real progress events, so it eases towards 90% and completes when loading stops.
+  let progVal = 0, progTimer = null, progTab = null, progHide = null;
+  function urlProgress(loading, tabId) {
+    const el = $('urlprog');
+    if (!el) return;
+    if (tabId !== progTab) { progTab = tabId; clearInterval(progTimer); progTimer = null; clearTimeout(progHide); progVal = 0; el.style.transition = 'none'; el.style.opacity = '0'; el.style.width = '0'; void el.offsetWidth; el.style.transition = ''; }
+    if (loading) {
+      if (progTimer) return;
+      clearTimeout(progHide);
+      el.style.transition = 'none'; el.style.width = '0'; void el.offsetWidth; el.style.transition = '';
+      progVal = 8; el.style.opacity = '1'; el.style.width = progVal + '%';
+      progTimer = setInterval(() => { progVal += (90 - progVal) * 0.07; el.style.width = progVal.toFixed(1) + '%'; }, 200);
+    } else if (progTimer) {
+      clearInterval(progTimer); progTimer = null;
+      el.style.width = '100%';
+      progHide = setTimeout(() => { el.style.opacity = '0'; }, 250);
+    }
+  }
   function triggerDownloadWhoosh() {
     const btn = $('dlbtn');
     if (!btn) return;
@@ -564,6 +584,7 @@
     }
 
     lastState = s;
+    urlProgress(!!s.loading, s.activeId);
     const dls = s.downloads || [];
     const activeDl = dls.find((d) => d.state === 'progressing' || d.state === 'paused');
     const startedDl = !!activeDl && !_prevDlActive;

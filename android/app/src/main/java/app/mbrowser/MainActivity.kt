@@ -103,6 +103,7 @@ class MainActivity : BaseActivity() {
     private lateinit var prefs: Prefs
     private lateinit var urlBar: EditText
     private lateinit var progress: ProgressBar
+    private lateinit var pillFill: PillProgress
     private lateinit var container: FrameLayout
     private lateinit var swipe: SwipeRefreshLayout
     private lateinit var switcher: View
@@ -157,6 +158,7 @@ class MainActivity : BaseActivity() {
 
         urlBar = findViewById(R.id.urlBar)
         progress = findViewById(R.id.progress)
+        pillFill = PillProgress(dp(26).toFloat()).also { it.setColor(tc(R.attr.mbAccent)); findViewById<View>(R.id.addressPill).foreground = it }
         container = findViewById(R.id.container)
         swipe = findViewById(R.id.swipe)
         swipe.setColorSchemeColors(tc(R.attr.mbAccent))
@@ -606,7 +608,7 @@ class MainActivity : BaseActivity() {
             override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
                 if (url.startsWith("about:")) return
                 tab.url = url; tab.home = false; tab.icon = favicon ?: tab.icon
-                if (tab === cur()) { urlBar.setText(url); progress.visibility = View.VISIBLE; updateChrome() }
+                if (tab === cur()) { urlBar.setText(url); progress.visibility = View.VISIBLE; pillFill.setColor(tc(R.attr.mbAccent)); pillFill.set(5); updateChrome() }
             }
 
             override fun onPageCommitVisible(view: WebView, url: String) {
@@ -621,7 +623,7 @@ class MainActivity : BaseActivity() {
                 tab.url = url
                 tab.title = view.title ?: ""
                 if (!tab.priv) Store.addVisit(url, tab.title)
-                if (tab === cur()) { progress.visibility = View.INVISIBLE; swipe.isRefreshing = false; updateChrome() }
+                if (tab === cur()) { progress.visibility = View.INVISIBLE; pillFill.set(100); swipe.isRefreshing = false; updateChrome() }
                 ui.postDelayed({ afterLoad(tab, url) }, 1500)
             }
         }
@@ -638,7 +640,7 @@ class MainActivity : BaseActivity() {
         w.setOnTouchListener { _, ev -> if (ev.actionMasked == MotionEvent.ACTION_DOWN) refreshBlocked = false; false }
         w.webChromeClient = object : WebChromeClient() {
             override fun onProgressChanged(view: WebView, newProgress: Int) {
-                if (tab === cur()) progress.progress = newProgress
+                if (tab === cur()) { progress.progress = newProgress; pillFill.set(newProgress) }
             }
             override fun onReceivedTitle(view: WebView, title: String?) { tab.title = title ?: "" }
             override fun onReceivedTouchIconUrl(view: WebView, url: String, precomposed: Boolean) {
@@ -812,12 +814,12 @@ class MainActivity : BaseActivity() {
                 else "This phone's browser engine can't keep private cookies separate, so sites you sign in to here share cookies with your normal tabs.")
             container.addView(privateInfo, FrameLayout.LayoutParams(-1, -1))
             urlBar.setText("")
-            progress.visibility = View.INVISIBLE
+            progress.visibility = View.INVISIBLE; pillFill.set(0)
         } else if (t.home) {
             (startPage.root.parent as? ViewGroup)?.removeView(startPage.root)
             container.addView(startPage.root, FrameLayout.LayoutParams(-1, -1))
             urlBar.setText("")
-            progress.visibility = View.INVISIBLE
+            progress.visibility = View.INVISIBLE; pillFill.set(0)
             startPage.refresh()
             ui.postDelayed({ if (cur()?.home == true) fetchMissingThumbs() }, 1500)
         } else {
