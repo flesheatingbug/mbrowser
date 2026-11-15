@@ -351,49 +351,85 @@ class StartPage(
     }
 
     private fun tuneMenu() {
+        val dlg = android.app.Dialog(act)
+        dlg.requestWindowFeature(android.view.Window.FEATURE_NO_TITLE)
+        val card = LinearLayout(act); card.orientation = LinearLayout.VERTICAL
+        val bg = GradientDrawable(); bg.cornerRadius = act.dp(24).toFloat(); bg.setColor(act.tc(R.attr.mbCard)); bg.setStroke(act.dp(1), act.tc(R.attr.mbLine))
+        card.background = bg
+        card.setPadding(act.dp(8), act.dp(16), act.dp(8), act.dp(8))
+        val scroll = android.widget.ScrollView(act); scroll.addView(card)
+
+        fun title(t: String) {
+            val tv = TextView(act); tv.text = t; tv.textSize = 20f; tv.setTypeface(null, android.graphics.Typeface.BOLD); tv.setTextColor(act.tc(R.attr.mbText))
+            tv.setPadding(act.dp(16), 0, act.dp(16), act.dp(8)); card.addView(tv)
+        }
+        fun section(t: String) {
+            val tv = TextView(act); tv.text = t.uppercase(); tv.textSize = 12f; tv.letterSpacing = 0.08f; tv.setTextColor(act.tc(R.attr.mbMuted))
+            tv.setPadding(act.dp(16), act.dp(14), act.dp(16), act.dp(4)); card.addView(tv)
+        }
+        /** One row: icon, label, and optionally a value or a switch on the right. */
+        fun row(icon: Int, label: String, value: String? = null, sw: Boolean? = null, danger: Boolean = false, action: (Boolean) -> Unit) {
+            val r = LinearLayout(act); r.orientation = LinearLayout.HORIZONTAL; r.gravity = Gravity.CENTER_VERTICAL
+            r.setPadding(act.dp(16), 0, act.dp(12), 0); r.foreground = TypedValueHolder.selectable(act)
+            val ic = ImageView(act); ic.setImageResource(icon); ic.imageTintList = android.content.res.ColorStateList.valueOf(if (danger) Color.parseColor("#ef5350") else act.tc(R.attr.mbMuted))
+            r.addView(ic, LinearLayout.LayoutParams(act.dp(22), act.dp(22)))
+            val tv = TextView(act); tv.text = label; tv.textSize = 16f; tv.setTextColor(if (danger) Color.parseColor("#ef5350") else act.tc(R.attr.mbText)); tv.setPadding(act.dp(16), 0, 0, 0)
+            r.addView(tv, LinearLayout.LayoutParams(0, -2, 1f))
+            if (value != null) { val v = TextView(act); v.text = value; v.textSize = 15f; v.setTextColor(act.tc(R.attr.mbMuted)); r.addView(v) }
+            var swv: androidx.appcompat.widget.SwitchCompat? = null
+            if (sw != null) {
+                swv = androidx.appcompat.widget.SwitchCompat(act); swv.isChecked = sw; swv.isClickable = false
+                r.addView(swv)
+            }
+            r.setOnClickListener { if (swv != null) { swv.isChecked = !swv.isChecked; action(swv.isChecked) } else { dlg.dismiss(); action(true) } }
+            card.addView(r, LinearLayout.LayoutParams(-1, act.dp(48)))
+        }
+
         val sp = Settings.value("startPage")
         val cur = currentId(sp)
         val curName = group(sp, cur)?.optString("name") ?: "Speed Dial"
         val onlyOne = groupsOf(sp).length() <= 1
         val thumbs = sp.optBoolean("thumbnails", true)
-        val opts = arrayOf(
-            "New folder here", "Add speed dial", "Rename “$curName”",
-            if (onlyOne) "Delete dial (needs at least two)" else "Delete “$curName”",
-            "Columns: ${prefs.dialCols}",
-            (if (prefs.showTitles) "✓ " else "") + "Show titles",
-            (if (thumbs) "✓ " else "") + "Show thumbnails",
-            (if (prefs.showAdd) "✓ " else "") + "Show Add button",
-            "More settings…",
-            "Rearrange speed dial",
-        )
-        AlertDialog.Builder(act).setTitle("Speed dial").setItems(opts) { _, i ->
-            when (i) {
-                0 -> addFolder(cur)
-                1 -> newDial()
-                2 -> promptFields(act, "Rename dial", listOf("Name"), listOf(curName), "Rename") { v ->
-                    if (v[0].isNotEmpty()) { edit { s -> group(s, cur)?.put("name", v[0]) }; refresh() }
-                }
-                3 -> if (!onlyOne) AlertDialog.Builder(act).setMessage("Delete “$curName” and everything in it?")
-                    .setPositiveButton("Delete") { _, _ ->
-                        edit { s -> val g = groupsOf(s); val n = JSONArray()
-                            for (k in 0 until g.length()) if (g.getJSONObject(k).optString("id") != cur) n.put(g.get(k))
-                            s.put("groups", n) }
-                        prefs.currentDial = ""; path.clear(); refresh()
-                    }.setNegativeButton("Cancel", null).show()
-                4 -> {
-                    val c = arrayOf("2", "3", "4", "5")
-                    AlertDialog.Builder(act).setTitle("Columns")
-                        .setSingleChoiceItems(c, (prefs.dialCols - 2).coerceIn(0, 3)) { d, k ->
-                            prefs.dialCols = k + 2; d.dismiss(); refresh()
-                        }.show()
-                }
-                5 -> { prefs.showTitles = !prefs.showTitles; refresh() }
-                6 -> { Settings.setThumbnails(!thumbs); refresh() }
-                7 -> { prefs.showAdd = !prefs.showAdd; refresh() }
-                8 -> openSettings()
-                9 -> startReorder()
+
+        title(curName)
+        section("Add")
+        row(R.drawable.ic_folder, "New folder here") { addFolder(cur) }
+        row(R.drawable.ic_add, "New dial page") { newDial() }
+
+        section("This dial")
+        row(R.drawable.ic_settings, "Rename") {
+            promptFields(act, "Rename dial", listOf("Name"), listOf(curName), "Rename") { v ->
+                if (v[0].isNotEmpty()) { edit { s -> group(s, cur)?.put("name", v[0]) }; refresh() }
             }
-        }.show()
+        }
+        row(R.drawable.ic_tune, "Rearrange") { startReorder() }
+        if (!onlyOne) row(R.drawable.ic_trash, "Delete this dial", danger = true) {
+            AlertDialog.Builder(act).setMessage("Delete “$curName” and everything in it?")
+                .setPositiveButton("Delete") { _, _ ->
+                    edit { s -> val g = groupsOf(s); val n = JSONArray()
+                        for (k in 0 until g.length()) if (g.getJSONObject(k).optString("id") != cur) n.put(g.get(k))
+                        s.put("groups", n) }
+                    prefs.currentDial = ""; path.clear(); refresh()
+                }.setNegativeButton("Cancel", null).show()
+        }
+
+        section("Look")
+        row(R.drawable.ic_tabs, "Columns", value = prefs.dialCols.toString()) {
+            val c = arrayOf("2", "3", "4", "5")
+            AlertDialog.Builder(act).setTitle("Columns")
+                .setSingleChoiceItems(c, (prefs.dialCols - 2).coerceIn(0, 3)) { d, k -> prefs.dialCols = k + 2; d.dismiss(); refresh() }.show()
+        }
+        row(R.drawable.ic_menu, "Show titles", sw = prefs.showTitles) { prefs.showTitles = it; refresh() }
+        row(R.drawable.ic_globe, "Show thumbnails", sw = thumbs) { Settings.setThumbnails(it); refresh() }
+        row(R.drawable.ic_add, "Show add button", sw = prefs.showAdd) { prefs.showAdd = it; refresh() }
+
+        section("More")
+        row(R.drawable.ic_settings, "All settings…") { openSettings() }
+
+        dlg.setContentView(scroll)
+        dlg.window?.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
+        dlg.window?.setLayout((act.resources.displayMetrics.widthPixels * 0.9f).toInt(), android.view.ViewGroup.LayoutParams.WRAP_CONTENT)
+        dlg.show()
     }
 
     // ---------- grid ----------
