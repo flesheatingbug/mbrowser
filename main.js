@@ -2991,9 +2991,28 @@ const FIREFOX_UA = process.platform === 'win32'
   ? 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0'
   : 'Mozilla/5.0 (X11; Linux x86_64; rv:140.0) Gecko/20100101 Firefox/140.0';
 
-// "Automatic" is the genuine Firefox identity everywhere (the one Google's sign-in accepts). Switching identity per page was unreliable
-// (redirects, popups and workers kept the wrong one), so there is nothing to apply per page.
-function applyAutoIdentity() {}
+// "Automatic": the whole browser (every frame, worker and request) says Firefox, which is what Google's sign-in accepts. Pages that are
+// not Google's get a Chrome identity on top of that, set per page. A page that moves between the two is loaded again with the right one,
+// because the identity a page sees is fixed when its navigation starts.
+function applyAutoIdentity(wc) {
+  if (S().general.browserId !== 'auto') return;
+  const chromeUA = uaForMode('chrome');
+  let last = FIREFOX_UA;   // what the process says by default
+  const set = (url) => { const ua = isGoogleUrl(url) ? FIREFOX_UA : chromeUA; if (ua !== last) { last = ua; try { wc.setUserAgent(ua); } catch { /* closed */ } return true; } return false; };
+  const orig = wc.loadURL.bind(wc);
+  let reloading = false;
+  wc.loadURL = (url, opts) => { set(url); return orig(url, opts); };   // the address bar loads pages this way
+  const cross = (e, url) => {
+    if (reloading || !/^https?:/i.test(url)) return;
+    if (set(url)) {   // the identity changes: stop this navigation and start it again under the new one
+      e.preventDefault(); reloading = true;
+      setImmediate(() => { reloading = false; });
+      orig(url).catch(() => {});
+    }
+  };
+  wc.on('will-navigate', cross);
+  wc.on('will-redirect', cross);
+}
 
 function uaForMode(mode) {
   const win = process.platform === 'win32';
