@@ -360,6 +360,16 @@ def settings_delete(ctx, req, pid):
     return 200, {'ok': True}
 
 
+def vault_restore(ctx, req, pid):
+    """Puts a backed-up vault back (still encrypted). It replaces the vault on the server; browsers merge it in at their next sync."""
+    _own(ctx, req, pid)
+    blob = req.json().get('blob')
+    with ctx.store.pdb(int(pid)) as c:
+        cur = syncapi.vault_get(c)
+        res = syncapi.vault_put(c, {'blob': blob, 'base': cur['version']})
+    return 200, {'ok': True, 'version': res['version']}
+
+
 def vault_delete(ctx, req, pid):
     _own(ctx, req, pid)
     with ctx.store.pdb(int(pid)) as c:

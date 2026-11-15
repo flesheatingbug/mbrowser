@@ -391,9 +391,33 @@
   }
   function csvCell(v) { v = String(v == null ? '' : v); return /[",\n\r]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; }
 
+  /** Restore a downloaded backup: checked against its own password first, so a wrong file never replaces anything. */
+  function restoreCard(p, hasVault, done) {
+    const file = h('input', { type: 'file', accept: '.json,application/json' });
+    const secret = h('input', { type: 'password', autocomplete: 'off', placeholder: 'Password or key of that backup', style: 'min-width:260px' });
+    const status = h('div', { class: 'muted small', style: 'margin-top:8px' });
+    const btn = h('button', { class: 'btn', onclick: async () => {
+      if (!file.files[0] || !secret.value) { status.className = 'bad small'; status.textContent = 'Choose the backup file and enter its password.'; return; }
+      let blob;
+      try { blob = JSON.parse(await file.files[0].text()); } catch { status.className = 'bad small'; status.textContent = 'That is not a vault backup.'; return; }
+      if (!blob || typeof blob !== 'object' || !['salt', 'iv', 'tag', 'data'].every((k) => typeof blob[k] === 'string') || (!blob.device && typeof blob.kdf !== 'object')) { status.className = 'bad small'; status.textContent = 'That is not a vault backup.'; return; }
+      if (!window.crypto || !crypto.subtle) { status.className = 'bad small'; status.textContent = 'Open the server through its https:// address to restore.'; return; }
+      status.className = 'muted small'; status.textContent = 'Checking the backup…'; btn.disabled = true;
+      try {
+        const v = await MBVault.open(blob, secret.value, (f) => { status.textContent = 'Checking the backup… ' + Math.round(f * 100) + '%'; });
+        if (!confirm('Restore ' + v.entries.length + ' saved logins' + (hasVault ? ', replacing the vault now on the server' : '') + '? Browsers merge it in at their next sync.')) { btn.disabled = false; status.textContent = ''; return; }
+        await api('PUT', '/profiles/' + p.id + '/vault', { blob });
+        secret.value = ''; status.className = 'ok small'; status.textContent = 'Restored.'; done();
+      } catch (e) { btn.disabled = false; status.className = 'bad small'; status.textContent = e.message || String(e); }
+    } }, 'Restore');
+    return h('div', { class: 'card' }, h('h2', null, 'Restore from a backup'),
+      h('p', { class: 'muted' }, 'Choose a backup file you downloaded here. It is opened in your browser with its own master password (or device key) to make sure it is the right one before anything is replaced.'),
+      h('div', { class: 'row' }, file, secret, btn), status);
+  }
+
   async function tPasswords(body, p) {
     const info = await api('GET', '/profiles/' + p.id + '/vault');
-    if (!info.exists) { body.append(h('div', { class: 'card empty' }, 'No vault has been synced to this profile yet. Turn on password sync in a browser and it will appear here.')); return; }
+    if (!info.exists) { body.append(h('div', { class: 'card empty' }, 'No vault has been synced to this profile yet. Turn on password sync in a browser and it will appear here, or restore a backup below.'), restoreCard(p, false, () => route())); return; }
     const blob = info.blob, dev = !!blob.device;
     const secret = h('input', { type: 'password', autocomplete: 'off', placeholder: dev ? 'Device key (base64)' : 'Master password', style: 'min-width:260px' });
     const status = h('div', { class: 'muted small', style: 'margin-top:8px' });
@@ -413,6 +437,8 @@
     body.append(h('div', { class: 'card' }, h('h2', null, 'Password vault'),
       h('p', { class: 'muted' }, 'The vault is decrypted here in your browser. Your ' + (dev ? 'device key' : 'master password') + ' is never sent to the server, and nothing is stored on this page: reload and it locks again.'),
       h('div', { class: 'row' }, secret, btn, h('button', { class: 'btn', title: 'Still encrypted: only your master password (or device key) opens it', onclick: () => download('mbrowser-vault-backup-' + new Date().toISOString().slice(0, 10) + '.json', JSON.stringify(blob), 'application/json') }, 'Download encrypted backup')), status), out);
+
+    body.append(restoreCard(p, true, () => route()));
 
     function show_(v) {
       const pws = v.entries.filter((e) => !e.type || e.type === 'password');
