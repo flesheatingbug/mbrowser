@@ -2545,19 +2545,21 @@ function handleMy(req) {
 
 // What the browser tells websites it is (some sites show "unsupported browser" banners to anything but Chrome, Firefox or Safari).
 const uaSessions = new Set();
+const CHROME_VER = process.versions.chrome || '130.0.0.0';
+const CHROME_MAJOR = CHROME_VER.split('.')[0];
 function uaForMode(mode) {
   const win = process.platform === 'win32';
   if (mode === 'firefox') return win ? 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:132.0) Gecko/20100101 Firefox/132.0' : 'Mozilla/5.0 (X11; Linux x86_64; rv:132.0) Gecko/20100101 Firefox/132.0';
   if (mode === 'safari') return 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.6 Safari/605.1.15';
   if (mode === 'none') return app.userAgentFallback;
-  return `Mozilla/5.0 ${win ? '(Windows NT 10.0; Win64; x64)' : '(X11; Linux x86_64)'} AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36`;
+  return `Mozilla/5.0 ${win ? '(Windows NT 10.0; Win64; x64)' : '(X11; Linux x86_64)'} AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${CHROME_MAJOR}.0.0.0 Safari/537.36`;
 }
 
 function setupSession(ses) {
   // Set a plain Chrome UA for this session — strips Electron/mbrowser from navigator.userAgent
   // and from navigator.userAgentData so Google sign-in does not refuse the browser.
   const uaPlat = process.platform === 'win32' ? '(Windows NT 10.0; Win64; x64)' : '(X11; Linux x86_64)';
-  const chromeUA = `Mozilla/5.0 ${uaPlat} AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36`;
+  const chromeUA = `Mozilla/5.0 ${uaPlat} AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${CHROME_MAJOR}.0.0.0 Safari/537.36`;
   uaSessions.add(ses);
   ses.setUserAgent(uaForMode(S().general.browserId));
 
@@ -2583,10 +2585,10 @@ function setupSession(ses) {
       if (S().general.browserId !== 'chrome') return callback({ requestHeaders: details.requestHeaders });
       const h = details.requestHeaders;
       h['user-agent'] = chromeUA;
-      h['sec-ch-ua'] = '"Chromium";v="130", "Google Chrome";v="130", "Not?A_Brand";v="99"';
+      h['sec-ch-ua'] = `"Chromium";v="${CHROME_MAJOR}", "Google Chrome";v="${CHROME_MAJOR}", "Not?A_Brand";v="99"`;
       h['sec-ch-ua-mobile'] = '?0';
       h['sec-ch-ua-platform'] = uaPlatHint;
-      h['sec-ch-ua-full-version-list'] = '"Chromium";v="130.0.6723.117", "Google Chrome";v="130.0.6723.117", "Not?A_Brand";v="99.0.0.0"';
+      h['sec-ch-ua-full-version-list'] = `"Chromium";v="${CHROME_VER}", "Google Chrome";v="${CHROME_VER}", "Not?A_Brand";v="99.0.0.0"`;
       callback({ requestHeaders: h });
     }
   );
