@@ -99,6 +99,7 @@ if (location.protocol === 'my:') {
     profilesResetData: invoke('profiles:resetData'),
     appResetAll: invoke('app:resetAll'),
     appRerunWizard: invoke('app:rerunWizard'),
+    appNewProfileWizard: invoke('app:newProfileWizard'),
     wizardStatus: invoke('wizard:status'),
     wizardTestServer: invoke('wizard:test-server'),
     wizardConnect: invoke('wizard:connect'),

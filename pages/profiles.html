@@ -224,16 +224,7 @@
     }
   }
 
-  $('new').onclick = async () => {
-    const r = await ask('New profile', [
-      { key: 'name', label: 'Name', value: '' },
-      { key: 'pw', label: 'Password (optional, any length)', type: 'password' },
-    ], 'Create', {
-      color: COLORS[S.profiles.length % COLORS.length], avatar: '',
-      validate: async (v) => { const x = await browser.profilesCreate({ name: v.name, color: v.color, avatar: v.avatar, password: v.pw }); return x.error || null; },
-    });
-    if (r) load();
-  };
+  $('new').onclick = () => browser.appNewProfileWizard();
   $('ask').onchange = () => browser.profilesAskAtStart($('ask').checked);
   $('open-last').onchange = () => browser.profilesSetOpenLast($('open-last').checked);
 

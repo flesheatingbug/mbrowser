@@ -83,6 +83,17 @@
   .frow2 .d2 { font-size:11px; color:var(--muted); }
   .frow2.hdr2 { cursor:default; height:34px; border-bottom:1px solid var(--line); padding-bottom:4px; }
   .frow2.hdr2 .l2 { font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; font-weight:600; }
+  #bm-popup { font-size:13px; }
+  #bm-popup .bm-title { font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-bottom:10px; font-size:14px; }
+  #bm-popup label { display:block; font-size:11px; color:var(--muted); margin-bottom:4px; margin-top:10px; }
+  #bm-popup select, #bm-popup input[type=text] { width:100%; background:var(--tab); border:1px solid var(--line); border-radius:7px; color:var(--fg); padding:6px 10px; font-size:13px; outline:none; font-family:inherit; }
+  #bm-popup select:focus, #bm-popup input:focus { border-color:var(--accent); }
+  #bm-popup .bm-row { display:flex; gap:6px; margin-top:12px; }
+  #bm-popup .bm-row button { flex:1; padding:7px 10px; font-size:12px; border-radius:7px; border:none; cursor:pointer; font-family:inherit; background:var(--tab); color:var(--fg); border:1px solid var(--line); }
+  #bm-popup .bm-row button:hover { border-color:var(--muted); }
+  #bm-popup .bm-row button.primary { background:var(--accent); color:var(--onaccent); border-color:transparent; }
+  #bm-popup .bm-row button.danger { color:#ff6b6b; }
+  #bm-popup .bm-added { font-size:12px; color:var(--muted); margin-top:8px; }
 </style>
 </head>
 <body>
@@ -107,6 +118,7 @@
   </div>
   <div id="card-fill"></div>
   <div id="addr-fill"></div>
+  <div id="bm-popup" style="display:none;padding:14px 16px"></div>
 </div>
 <script>
   const $ = (id) => document.getElementById(id);
@@ -127,11 +139,13 @@
     $('pw').style.display = m === 'pw' ? 'block' : 'none';
     $('card-fill').style.display = m === 'card' ? 'block' : 'none';
     $('addr-fill').style.display = m === 'addr' ? 'block' : 'none';
+    $('bm-popup').style.display = m === 'bookmark' ? 'block' : 'none';
     if (m === 'card') renderFillList('card-fill', data || {}, '💳', (id) => api.invoke('card:pick', id));
     if (m === 'addr') renderFillList('addr-fill', data || {}, '🏠', (id) => api.invoke('addr:pick', id));
     if (m === 'pw') renderPw(data || {});
     if (m === 'tablist') { TL = data || { open: [], closed: [] }; $('tlq').value = ''; renderTabList(); setTimeout(() => $('tlq').focus(), 0); }
     if (m === 'security') renderSecurity(data || {});
+    else if (m === 'bookmark') renderBookmark(data || {});
     else if (m === 'palette') { $('q').value = ''; refresh(); setTimeout(() => $('q').focus(), 0); }
     else { $('count').textContent = ''; lastText = ''; setTimeout(() => { $('f').focus(); $('f').select(); if ($('f').value) doFind(true, false); }, 0); }
   });
@@ -380,8 +394,63 @@
   $('close').onclick = () => api.closeOverlay();
   api.onFindResult((r) => { $('count').textContent = r.matches ? r.activeMatchOrdinal + '/' + r.matches : '0/0'; });
 
+  // ---- bookmark popup ----
+  function renderBookmark(d) {
+    const box = $('bm-popup');
+    box.innerHTML = '';
+    const mk = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
+
+    const title = mk('div', 'bm-title', d.title || d.url || '');
+    box.append(title);
+
+    const lFolder = mk('label', null, 'Bookmark folder');
+    // Datalist for autocomplete + free-form input
+    const dl = mk('datalist'); dl.id = 'bm-dl';
+    const noFolder = mk('option'); noFolder.value = ''; noFolder.textContent = '(no folder)'; dl.append(noFolder);
+    for (const f of (d.folders || [])) { const o = mk('option'); o.value = f; dl.append(o); }
+    const folderInput = mk('input'); folderInput.type = 'text'; folderInput.setAttribute('list', 'bm-dl');
+    folderInput.placeholder = 'No folder'; folderInput.value = d.folder || '';
+    box.append(lFolder, dl, folderInput);
+
+    const sdNote = mk('div', 'bm-added');
+    sdNote.textContent = d.inSpeedDial ? '✓ Already in Speed Dial' : '';
+    box.append(sdNote);
+
+    const row = mk('div', 'bm-row');
+    if (!d.inSpeedDial) {
+      const sdBtn = mk('button', '', '+ Speed Dial');
+      sdBtn.onclick = async () => {
+        const r = await api.invoke('bookmark:popup-speeddial', d.url, d.title);
+        if (r && r.added) { sdNote.textContent = '✓ Added to Speed Dial'; sdBtn.remove(); }
+      };
+      row.append(sdBtn);
+    }
+    if (d.bookmarked) {
+      const removeBtn = mk('button', 'danger', 'Remove');
+      removeBtn.onclick = async () => {
+        await api.invoke('bookmark:remove', d.url);
+        api.closeOverlay();
+      };
+      row.append(removeBtn);
+    }
+    const saveBtn = mk('button', 'primary', d.bookmarked ? 'Done' : 'Bookmark');
+    saveBtn.onclick = async () => {
+      await api.invoke('bookmark:popup-save', d.url, d.title, folderInput.value);
+      api.closeOverlay();
+    };
+    row.append(saveBtn);
+    box.append(row);
+
+    // Enter saves, Escape closes
+    folderInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); saveBtn.click(); }
+      else if (e.key === 'Escape') { e.preventDefault(); api.closeOverlay(); }
+    });
+    setTimeout(() => folderInput.focus(), 0);
+  }
+
   // palette closes when it loses focus; the find bar stays
-  window.addEventListener('blur', () => { if (mode === 'palette' || mode === 'security' || mode === 'tablist') api.closeOverlay(); });
+  window.addEventListener('blur', () => { if (mode === 'palette' || mode === 'security' || mode === 'tablist' || mode === 'bookmark') api.closeOverlay(); });
 </script>
 </body>
 </html>

@@ -782,15 +782,20 @@ function toggleBookmark() {
   if (!wc) return;
   const url = wc.getURL();
   if (!isWeb(url)) return;
-  const now = Date.now();
-  const b = bookmarks.find((x) => x.url === url);
-  if (b && b.recycleBin) { delete b.recycleBin; delete b.binTime; b.deleted = false; b.updated = now; b.title = wc.getTitle() || b.title; }
-  else if (b && !b.deleted) { b.recycleBin = true; b.binTime = now; }
-  else if (b) { b.deleted = false; b.updated = now; b.title = wc.getTitle() || b.title; }
-  else bookmarks.push({ url, title: wc.getTitle(), folder: '', added: now, updated: now, deleted: false });
-  save('bookmarks.json', bookmarks);
-  pushState();
-  syncSoon();
+  // Toggle: close the popup if already open, otherwise open it
+  if (cur.overlayMode === 'bookmark') { hideOverlay(); return; }
+  const b = bookmarks.find((x) => x.url === url && !x.deleted && !x.recycleBin);
+  const allFolders = [...new Set([
+    ...bookmarks.filter((x) => !x.deleted && !x.recycleBin && x.folder).map((x) => x.folder),
+    ...bookmarkFolders,
+  ])].sort();
+  const key = thumbKey(url);
+  const inSpeedDial = (S().startPage.groups || []).some((g) => g.dials.some((d) => thumbKey(d.url) === key));
+  showOverlay('bookmark', {
+    url, title: wc.getTitle(),
+    bookmarked: !!b, folder: b ? (b.folder || '') : '',
+    folders: allFolders, inSpeedDial,
+  });
 }
 
 // ---------- translate ----------
@@ -978,6 +983,9 @@ function overlayBounds(mode) {
   }
   if (mode === 'security') {
     return { x: 70, y: cur.contentRect.y, width: Math.min(400, width - 90), height: 380 };
+  }
+  if (mode === 'bookmark') {
+    return { x: Math.max(0, width - 332), y: cur.contentRect.y, width: 320, height: 220 };
   }
   const w = Math.min(680, width - 40);
   return { x: Math.round((width - w) / 2), y: 60, width: w, height: Math.min(470, Math.max(120, height - 90)) };
@@ -2487,6 +2495,24 @@ function setupIpc() {
     if (b) { b.recycleBin = true; b.binTime = Date.now(); save('bookmarks.json', bookmarks); pushState(); syncSoon(); }
     return true;
   }, BOTH);
+  // bookmark popup: save (add or update folder) and add to speed dial
+  handle('bookmark:popup-save', (_e, url, title, folder) => {
+    const now = Date.now();
+    const f = typeof folder === 'string' ? folder.trim() : '';
+    let b = bookmarks.find((x) => x.url === url);
+    if (b && b.recycleBin) { delete b.recycleBin; delete b.binTime; b.deleted = false; b.updated = now; b.title = title || b.title; b.folder = f; }
+    else if (b && !b.deleted) { b.folder = f; b.updated = now; b.title = title || b.title; }
+    else if (b) { b.deleted = false; b.updated = now; b.title = title || b.title; b.folder = f; }
+    else bookmarks.push({ url, title: String(title || url).slice(0, 300), folder: f, added: now, updated: now, deleted: false });
+    if (f && !bookmarkFolders.includes(f)) { bookmarkFolders.push(f); saveFolders(); }
+    save('bookmarks.json', bookmarks); pushState(); syncSoon();
+    return { ok: true };
+  }, BOTH);
+  handle('bookmark:popup-speeddial', (_e, url, title) => {
+    const added = addSpeedDial(String(url), String(title || ''));
+    if (added) { const t = activeTab(); if (t) maybeThumb(t, true); }
+    return { ok: true, added };
+  }, BOTH);
   handle('data:clear', (_e, what) => (['history', 'cookies', 'cache', 'all'].includes(what) ? clearData(what) : false), BOTH);
   handle('downloads:list', () => downloads.map((d) => ({ ...d })), BOTH);
   handle('downloads:action', (_e, id, action) => downloadAction(id, action), BOTH);
@@ -2662,6 +2688,16 @@ function setupIpc() {
     if (defaultAfter !== defaultBefore && profiles.get(defaultAfter)) {
       launchProfile(defaultAfter, false);
     }
+    return { ok: true };
+  }, PAGE_ONLY);
+  handle('app:newProfileWizard', async () => {
+    if (wizardActive) return { error: 'Setup wizard is already running.' };
+    wizardNewProfile = true;
+    profiles.clearSetupDone();
+    await showWizard();
+    wizardNewProfile = false;
+    const defId = profiles.getDefaultProfile();
+    if (defId !== profileId && profiles.get(defId)) launchProfile(defId, false);
     return { ok: true };
   }, PAGE_ONLY);
 
@@ -3224,6 +3260,7 @@ let gateResolve = null;
 let wizardWcId = null;
 let wizardResolve = null;
 let wizardActive = false;
+let wizardNewProfile = false; // true when wizard is launched to create an additional profile
 
 function showGate(mode) {
   return new Promise((resolve) => {
@@ -3360,9 +3397,10 @@ ipcMain.handle('wizard:rename-profile', (e, name) => {
 ipcMain.handle('wizard:create-profile', (e, name) => {
   if (!isWizard(e)) return null;
   const all = profiles.list();
-  // After a factory reset there is only the bare "Default" profile; rename it
-  // instead of creating a second redundant profile.
-  if (all.length === 1 && all[0].id === 'default') {
+  // After a factory reset (or any other path where only the bare "Default" exists)
+  // rename it instead of creating a second redundant profile —
+  // unless the wizard was launched explicitly to add a new profile.
+  if (!wizardNewProfile && all.length === 1 && all[0].id === 'default') {
     const r = profiles.update('default', { name: String(name || '').trim() });
     if (r.ok) profiles.setDefaultProfile('default');
     return r;
