@@ -18,7 +18,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.SwitchCompat
 import java.util.concurrent.Executors
 
-class SettingsActivity : AppCompatActivity() {
+class SettingsActivity : BaseActivity() {
     private lateinit var prefs: Prefs
     private lateinit var box: LinearLayout
     private val ui = Handler(Looper.getMainLooper())
@@ -28,7 +28,7 @@ class SettingsActivity : AppCompatActivity() {
         prefs = Prefs(this)
         Store.init(this)
         val scroll = ScrollView(this)
-        scroll.setBackgroundColor(getColor(R.color.bg))
+        scroll.setBackgroundColor(tc(R.attr.mbBg))
         scroll.fitsSystemWindows = true
         box = LinearLayout(this)
         box.orientation = LinearLayout.VERTICAL
@@ -44,8 +44,8 @@ class SettingsActivity : AppCompatActivity() {
         top.text = "Settings"
         top.textSize = 22f
         top.typeface = Typeface.DEFAULT_BOLD
-        top.setTextColor(getColor(R.color.text))
-        top.setBackgroundColor(getColor(R.color.bar))
+        top.setTextColor(tc(R.attr.mbText))
+        top.setBackgroundColor(tc(R.attr.mbBar))
         top.setPadding(dp(16), dp(18), dp(16), dp(18))
         box.addView(top)
 
@@ -76,7 +76,12 @@ class SettingsActivity : AppCompatActivity() {
         searchRows()
 
         header("Appearance")
-        choiceRow("Theme", listOf("Follow system", "Light", "Dark"), { prefs.themeMode }, { prefs.themeMode = it; App.applyTheme(it) })
+        choiceRow("Colour theme", Themes.LIST.map { it.second }, { Themes.LIST.indexOfFirst { it.first == prefs.themeId }.coerceAtLeast(0) },
+            { prefs.themeId = Themes.LIST[it].first; recreate() })
+        if (prefs.themeId == "system")
+            choiceRow("Light or dark", listOf("Follow system", "Light", "Dark"), { prefs.themeMode }, { prefs.themeMode = it; App.applyTheme(it) })
+        choiceRow("Logo", AppIcon.LIST.map { it.label }, { AppIcon.LIST.indexOfFirst { it.id == prefs.appIcon }.coerceAtLeast(0) },
+            { prefs.appIcon = AppIcon.LIST[it].id; AppIcon.applyLauncher(this); toast("Address bar logo changed. The home screen icon may take a moment to follow.") })
 
         header("Speed dial")
         choiceRow("Columns", listOf("2", "3", "4", "5"), { (prefs.dialCols - 2).coerceIn(0, 3) }, { prefs.dialCols = it + 2 })
@@ -170,7 +175,7 @@ class SettingsActivity : AppCompatActivity() {
         v.text = t
         v.textSize = 13f
         v.typeface = Typeface.DEFAULT_BOLD
-        v.setTextColor(getColor(R.color.accent))
+        v.setTextColor(tc(R.attr.mbAccent))
         v.setPadding(dp(16), dp(22), dp(16), dp(6))
         box.addView(v)
     }
@@ -179,12 +184,12 @@ class SettingsActivity : AppCompatActivity() {
         val r = LinearLayout(this)
         r.orientation = LinearLayout.VERTICAL
         r.setPadding(dp(16), dp(12), dp(16), dp(12))
-        r.setBackgroundColor(getColor(R.color.card))
+        r.setBackgroundColor(tc(R.attr.mbCard))
         val t = TextView(this)
-        t.text = title; t.textSize = 16f; t.setTextColor(getColor(R.color.text))
+        t.text = title; t.textSize = 16f; t.setTextColor(tc(R.attr.mbText))
         r.addView(t)
         val s = TextView(this)
-        s.textSize = 13f; s.setTextColor(getColor(R.color.muted))
+        s.textSize = 13f; s.setTextColor(tc(R.attr.mbMuted))
         s.text = sub ?: ""
         s.visibility = if (sub.isNullOrEmpty()) View.GONE else View.VISIBLE
         r.addView(s)

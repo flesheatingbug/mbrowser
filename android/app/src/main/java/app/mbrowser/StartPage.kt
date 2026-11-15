@@ -158,8 +158,8 @@ class StartPage(
             tv.textSize = 16f
             tv.setPadding(act.dp(14), act.dp(14), act.dp(14), act.dp(12))
             if (id == cur) {
-                tv.setTextColor(act.getColor(R.color.accent)); tv.setBackgroundResource(R.drawable.bg_tab_selected)
-            } else tv.setTextColor(act.getColor(R.color.muted))
+                tv.setTextColor(act.tc(R.attr.mbAccent)); tv.setBackgroundResource(R.drawable.bg_tab_selected)
+            } else tv.setTextColor(act.tc(R.attr.mbMuted))
             tv.setOnClickListener { prefs.currentDial = id; path.clear(); refresh() }
             tabsRow.addView(tv)
         }
@@ -389,12 +389,12 @@ class StartPage(
                 h.thumb.scaleType = ImageView.ScaleType.CENTER_INSIDE
                 h.thumb.setPadding(act.dp(28), act.dp(18), act.dp(28), act.dp(18))
                 h.thumb.setImageResource(R.drawable.ic_folder)
-                h.thumb.imageTintList = act.getColorStateList(R.color.accent)
+                h.thumb.imageTintList = act.tcl(R.attr.mbAccent)
                 val g = GradientDrawable()
                 g.cornerRadius = act.dp(12).toFloat()
-                g.setColor(act.getColor(R.color.pill))
+                g.setColor(act.tc(R.attr.mbPill))
                 h.thumb.background = g
-                h.icon.setImageResource(R.drawable.ic_folder); h.icon.imageTintList = act.getColorStateList(R.color.accent)
+                h.icon.setImageResource(R.drawable.ic_folder); h.icon.imageTintList = act.tcl(R.attr.mbAccent)
                 h.title.text = if (d.count > 0) "$label (${d.count})" else label
                 h.row.visibility = View.VISIBLE   // folders always show their name
                 h.itemView.setOnClickListener { path.add(d.index); refresh() }
@@ -421,7 +421,7 @@ class StartPage(
             }
             val ic = Thumbs.icon(act, host)
             if (ic != null) { h.icon.setImageBitmap(ic); h.icon.imageTintList = null }
-            else { h.icon.setImageResource(R.drawable.ic_globe); h.icon.imageTintList = act.getColorStateList(R.color.muted) }
+            else { h.icon.setImageResource(R.drawable.ic_globe); h.icon.imageTintList = act.tcl(R.attr.mbMuted) }
             h.title.text = label
             h.row.visibility = if (prefs.showTitles) View.VISIBLE else View.GONE
 

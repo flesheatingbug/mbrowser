@@ -30,10 +30,6 @@
             android:windowSoftInputMode="adjustResize"
             android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden|keyboard">
             <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-            <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
@@ -41,6 +37,78 @@
                 <data android:scheme="https" />
             </intent-filter>
         </activity>
+        <activity-alias
+            android:name=".LauncherClassic"
+            android:enabled="true"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher"
+            android:label="mbrowser"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".LauncherColor"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_color"
+            android:label="mbrowser"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".LauncherBlue"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_blue"
+            android:label="mbrowser"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".LauncherWhite"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_white"
+            android:label="mbrowser"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".LauncherBlueM"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_blue_m"
+            android:label="mbrowser"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".LauncherWhiteM"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_white_m"
+            android:label="mbrowser"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
         <activity android:name=".SettingsActivity" android:exported="false" />
         <activity android:name=".WelcomeActivity" android:exported="false" />
         <activity android:name=".ServerLoginActivity" android:exported="false" />

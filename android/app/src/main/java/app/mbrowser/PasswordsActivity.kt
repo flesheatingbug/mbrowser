@@ -23,7 +23,7 @@ import androidx.recyclerview.widget.RecyclerView
 import org.json.JSONObject
 
 /** The saved logins, cards and addresses: unlock, view, copy, add, edit, sync. */
-class PasswordsActivity : AppCompatActivity() {
+class PasswordsActivity : BaseActivity() {
     private lateinit var prefs: Prefs
     private lateinit var status: TextView
     private lateinit var main: Button
@@ -67,7 +67,7 @@ class PasswordsActivity : AppCompatActivity() {
 
     private fun selectTab(t: Int) {
         tab = t
-        val accent = getColorStateList(R.color.accent); val muted = getColorStateList(R.color.muted)
+        val accent = tcl(R.attr.mbAccent); val muted = tcl(R.attr.mbMuted)
         tabLogins.setTextColor(if (t == 0) accent else muted); tabLogins.setTypeface(null, if (t == 0) android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL)
         tabCards.setTextColor(if (t == 1) accent else muted); tabCards.setTypeface(null, if (t == 1) android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL)
         tabAddresses.setTextColor(if (t == 2) accent else muted); tabAddresses.setTypeface(null, if (t == 2) android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL)
@@ -167,7 +167,7 @@ class PasswordsActivity : AppCompatActivity() {
                 sub.text = e.optString("username").ifBlank { "(no user name)" } + "  ·  " + Vault.hostOf(e.optString("origin"))
                 val ic = Thumbs.icon(this@PasswordsActivity, Thumbs.hostOf(e.optString("origin")))
                 if (ic != null) { icon.setImageBitmap(ic); icon.imageTintList = null }
-                else { icon.setImageResource(R.drawable.ic_globe); icon.imageTintList = getColorStateList(R.color.muted) }
+                else { icon.setImageResource(R.drawable.ic_globe); icon.imageTintList = tcl(R.attr.mbMuted) }
                 v.setOnClickListener { actionsLogin(e) }
             }
         }
@@ -183,7 +183,7 @@ class PasswordsActivity : AppCompatActivity() {
                 val v = h.itemView
                 val title = v.findViewById<TextView>(R.id.title); val sub = v.findViewById<TextView>(R.id.sub)
                 val icon = v.findViewById<ImageView>(R.id.icon)
-                icon.setImageResource(R.drawable.ic_card); icon.imageTintList = getColorStateList(R.color.muted)
+                icon.setImageResource(R.drawable.ic_card); icon.imageTintList = tcl(R.attr.mbMuted)
                 if (all.isEmpty()) { title.text = "No saved cards"; sub.text = ""; v.setOnClickListener(null); return }
                 val e = all[pos]
                 val n = e.optString("number").takeLast(4)
@@ -204,7 +204,7 @@ class PasswordsActivity : AppCompatActivity() {
                 val v = h.itemView
                 val title = v.findViewById<TextView>(R.id.title); val sub = v.findViewById<TextView>(R.id.sub)
                 val icon = v.findViewById<ImageView>(R.id.icon)
-                icon.setImageResource(R.drawable.ic_location); icon.imageTintList = getColorStateList(R.color.muted)
+                icon.setImageResource(R.drawable.ic_location); icon.imageTintList = tcl(R.attr.mbMuted)
                 if (all.isEmpty()) { title.text = "No saved addresses"; sub.text = ""; v.setOnClickListener(null); return }
                 val e = all[pos]
                 title.text = e.optString("name").ifBlank { "Address" }

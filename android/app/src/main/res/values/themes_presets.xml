@@ -1,0 +1,275 @@
+<resources>
+    <style name="MbTheme_mbrowser" parent="Theme.MaterialComponents.NoActionBar">
+        <item name="mbBg">#0a0e1f</item>
+        <item name="mbBar">#131a33</item>
+        <item name="mbPill">#1c2548</item>
+        <item name="mbCard">#131a33</item>
+        <item name="mbText">#eaf0ff</item>
+        <item name="mbMuted">#8f9bc2</item>
+        <item name="mbAccent">#5b8cff</item>
+        <item name="mbLine">#243056</item>
+        <item name="mbPillPrivate">#3A2D5C</item>
+        <item name="colorPrimary">#5b8cff</item>
+        <item name="colorOnPrimary">#FFFFFF</item>
+        <item name="colorSecondary">#5b8cff</item>
+        <item name="android:windowBackground">#0a0e1f</item>
+        <item name="android:statusBarColor">#131a33</item>
+        <item name="android:navigationBarColor">#131a33</item>
+        <item name="android:textColorPrimary">#eaf0ff</item>
+        <item name="android:textColorSecondary">#8f9bc2</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+    </style>
+    <style name="MbTheme_midnight" parent="Theme.MaterialComponents.NoActionBar">
+        <item name="mbBg">#1e1f22</item>
+        <item name="mbBar">#2b2d31</item>
+        <item name="mbPill">#3a3d44</item>
+        <item name="mbCard">#2b2d31</item>
+        <item name="mbText">#e6e6e6</item>
+        <item name="mbMuted">#9aa0a6</item>
+        <item name="mbAccent">#7aa2f7</item>
+        <item name="mbLine">#34363b</item>
+        <item name="mbPillPrivate">#3A2D5C</item>
+        <item name="colorPrimary">#7aa2f7</item>
+        <item name="colorOnPrimary">#000000</item>
+        <item name="colorSecondary">#7aa2f7</item>
+        <item name="android:windowBackground">#1e1f22</item>
+        <item name="android:statusBarColor">#2b2d31</item>
+        <item name="android:navigationBarColor">#2b2d31</item>
+        <item name="android:textColorPrimary">#e6e6e6</item>
+        <item name="android:textColorSecondary">#9aa0a6</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+    </style>
+    <style name="MbTheme_daylight" parent="Theme.MaterialComponents.Light.NoActionBar">
+        <item name="mbBg">#e4e7ec</item>
+        <item name="mbBar">#d3d7de</item>
+        <item name="mbPill">#ffffff</item>
+        <item name="mbCard">#d3d7de</item>
+        <item name="mbText">#1f2328</item>
+        <item name="mbMuted">#656d76</item>
+        <item name="mbAccent">#3b82f6</item>
+        <item name="mbLine">#c4c9d1</item>
+        <item name="mbPillPrivate">#D9CDF0</item>
+        <item name="colorPrimary">#3b82f6</item>
+        <item name="colorOnPrimary">#FFFFFF</item>
+        <item name="colorSecondary">#3b82f6</item>
+        <item name="android:windowBackground">#e4e7ec</item>
+        <item name="android:statusBarColor">#d3d7de</item>
+        <item name="android:navigationBarColor">#d3d7de</item>
+        <item name="android:textColorPrimary">#1f2328</item>
+        <item name="android:textColorSecondary">#656d76</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar">true</item>
+    </style>
+    <style name="MbTheme_nord" parent="Theme.MaterialComponents.NoActionBar">
+        <item name="mbBg">#2e3440</item>
+        <item name="mbBar">#3b4252</item>
+        <item name="mbPill">#434c5e</item>
+        <item name="mbCard">#3b4252</item>
+        <item name="mbText">#eceff4</item>
+        <item name="mbMuted">#a3adc0</item>
+        <item name="mbAccent">#88c0d0</item>
+        <item name="mbLine">#4c566a</item>
+        <item name="mbPillPrivate">#3A2D5C</item>
+        <item name="colorPrimary">#88c0d0</item>
+        <item name="colorOnPrimary">#000000</item>
+        <item name="colorSecondary">#88c0d0</item>
+        <item name="android:windowBackground">#2e3440</item>
+        <item name="android:statusBarColor">#3b4252</item>
+        <item name="android:navigationBarColor">#3b4252</item>
+        <item name="android:textColorPrimary">#eceff4</item>
+        <item name="android:textColorSecondary">#a3adc0</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+    </style>
+    <style name="MbTheme_dracula" parent="Theme.MaterialComponents.NoActionBar">
+        <item name="mbBg">#282a36</item>
+        <item name="mbBar">#343746</item>
+        <item name="mbPill">#44475a</item>
+        <item name="mbCard">#343746</item>
+        <item name="mbText">#f8f8f2</item>
+        <item name="mbMuted">#a0a4c0</item>
+        <item name="mbAccent">#bd93f9</item>
+        <item name="mbLine">#44475a</item>
+        <item name="mbPillPrivate">#3A2D5C</item>
+        <item name="colorPrimary">#bd93f9</item>
+        <item name="colorOnPrimary">#000000</item>
+        <item name="colorSecondary">#bd93f9</item>
+        <item name="android:windowBackground">#282a36</item>
+        <item name="android:statusBarColor">#343746</item>
+        <item name="android:navigationBarColor">#343746</item>
+        <item name="android:textColorPrimary">#f8f8f2</item>
+        <item name="android:textColorSecondary">#a0a4c0</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+    </style>
+    <style name="MbTheme_gruvbox" parent="Theme.MaterialComponents.NoActionBar">
+        <item name="mbBg">#282828</item>
+        <item name="mbBar">#3c3836</item>
+        <item name="mbPill">#504945</item>
+        <item name="mbCard">#3c3836</item>
+        <item name="mbText">#ebdbb2</item>
+        <item name="mbMuted">#a89984</item>
+        <item name="mbAccent">#fabd2f</item>
+        <item name="mbLine">#504945</item>
+        <item name="mbPillPrivate">#3A2D5C</item>
+        <item name="colorPrimary">#fabd2f</item>
+        <item name="colorOnPrimary">#000000</item>
+        <item name="colorSecondary">#fabd2f</item>
+        <item name="android:windowBackground">#282828</item>
+        <item name="android:statusBarColor">#3c3836</item>
+        <item name="android:navigationBarColor">#3c3836</item>
+        <item name="android:textColorPrimary">#ebdbb2</item>
+        <item name="android:textColorSecondary">#a89984</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+    </style>
+    <style name="MbTheme_solarized_dark" parent="Theme.MaterialComponents.NoActionBar">
+        <item name="mbBg">#002b36</item>
+        <item name="mbBar">#073642</item>
+        <item name="mbPill">#0d4452</item>
+        <item name="mbCard">#073642</item>
+        <item name="mbText">#eee8d5</item>
+        <item name="mbMuted">#93a1a1</item>
+        <item name="mbAccent">#2aa1e8</item>
+        <item name="mbLine">#0f4c5c</item>
+        <item name="mbPillPrivate">#3A2D5C</item>
+        <item name="colorPrimary">#2aa1e8</item>
+        <item name="colorOnPrimary">#FFFFFF</item>
+        <item name="colorSecondary">#2aa1e8</item>
+        <item name="android:windowBackground">#002b36</item>
+        <item name="android:statusBarColor">#073642</item>
+        <item name="android:navigationBarColor">#073642</item>
+        <item name="android:textColorPrimary">#eee8d5</item>
+        <item name="android:textColorSecondary">#93a1a1</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+    </style>
+    <style name="MbTheme_solarized_light" parent="Theme.MaterialComponents.Light.NoActionBar">
+        <item name="mbBg">#eee8d5</item>
+        <item name="mbBar">#e3dcc5</item>
+        <item name="mbPill">#fdf6e3</item>
+        <item name="mbCard">#e3dcc5</item>
+        <item name="mbText">#073642</item>
+        <item name="mbMuted">#657b83</item>
+        <item name="mbAccent">#268bd2</item>
+        <item name="mbLine">#d3cbb2</item>
+        <item name="mbPillPrivate">#D9CDF0</item>
+        <item name="colorPrimary">#268bd2</item>
+        <item name="colorOnPrimary">#FFFFFF</item>
+        <item name="colorSecondary">#268bd2</item>
+        <item name="android:windowBackground">#eee8d5</item>
+        <item name="android:statusBarColor">#e3dcc5</item>
+        <item name="android:navigationBarColor">#e3dcc5</item>
+        <item name="android:textColorPrimary">#073642</item>
+        <item name="android:textColorSecondary">#657b83</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar">true</item>
+    </style>
+    <style name="MbTheme_forest" parent="Theme.MaterialComponents.NoActionBar">
+        <item name="mbBg">#1a2421</item>
+        <item name="mbBar">#24332e</item>
+        <item name="mbPill">#2f4139</item>
+        <item name="mbCard">#24332e</item>
+        <item name="mbText">#e3efe8</item>
+        <item name="mbMuted">#92ab9f</item>
+        <item name="mbAccent">#6fcf97</item>
+        <item name="mbLine">#2c3d36</item>
+        <item name="mbPillPrivate">#3A2D5C</item>
+        <item name="colorPrimary">#6fcf97</item>
+        <item name="colorOnPrimary">#000000</item>
+        <item name="colorSecondary">#6fcf97</item>
+        <item name="android:windowBackground">#1a2421</item>
+        <item name="android:statusBarColor">#24332e</item>
+        <item name="android:navigationBarColor">#24332e</item>
+        <item name="android:textColorPrimary">#e3efe8</item>
+        <item name="android:textColorSecondary">#92ab9f</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+    </style>
+    <style name="MbTheme_ocean" parent="Theme.MaterialComponents.NoActionBar">
+        <item name="mbBg">#0d1b2a</item>
+        <item name="mbBar">#14263a</item>
+        <item name="mbPill">#1c3550</item>
+        <item name="mbCard">#14263a</item>
+        <item name="mbText">#e0ecf7</item>
+        <item name="mbMuted">#8aa3bd</item>
+        <item name="mbAccent">#38bdf8</item>
+        <item name="mbLine">#1f3a56</item>
+        <item name="mbPillPrivate">#3A2D5C</item>
+        <item name="colorPrimary">#38bdf8</item>
+        <item name="colorOnPrimary">#000000</item>
+        <item name="colorSecondary">#38bdf8</item>
+        <item name="android:windowBackground">#0d1b2a</item>
+        <item name="android:statusBarColor">#14263a</item>
+        <item name="android:navigationBarColor">#14263a</item>
+        <item name="android:textColorPrimary">#e0ecf7</item>
+        <item name="android:textColorSecondary">#8aa3bd</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+    </style>
+    <style name="MbTheme_rose" parent="Theme.MaterialComponents.NoActionBar">
+        <item name="mbBg">#1f1a1d</item>
+        <item name="mbBar">#2c2328</item>
+        <item name="mbPill">#3a2d34</item>
+        <item name="mbCard">#2c2328</item>
+        <item name="mbText">#f3e6ec</item>
+        <item name="mbMuted">#b496a3</item>
+        <item name="mbAccent">#f472b6</item>
+        <item name="mbLine">#3a2d34</item>
+        <item name="mbPillPrivate">#3A2D5C</item>
+        <item name="colorPrimary">#f472b6</item>
+        <item name="colorOnPrimary">#FFFFFF</item>
+        <item name="colorSecondary">#f472b6</item>
+        <item name="android:windowBackground">#1f1a1d</item>
+        <item name="android:statusBarColor">#2c2328</item>
+        <item name="android:navigationBarColor">#2c2328</item>
+        <item name="android:textColorPrimary">#f3e6ec</item>
+        <item name="android:textColorSecondary">#b496a3</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+    </style>
+    <style name="MbTheme_sand" parent="Theme.MaterialComponents.Light.NoActionBar">
+        <item name="mbBg">#ece5d8</item>
+        <item name="mbBar">#ddd4c3</item>
+        <item name="mbPill">#faf6ee</item>
+        <item name="mbCard">#ddd4c3</item>
+        <item name="mbText">#2b2620</item>
+        <item name="mbMuted">#7a6f5f</item>
+        <item name="mbAccent">#c2410c</item>
+        <item name="mbLine">#cfc5b1</item>
+        <item name="mbPillPrivate">#D9CDF0</item>
+        <item name="colorPrimary">#c2410c</item>
+        <item name="colorOnPrimary">#FFFFFF</item>
+        <item name="colorSecondary">#c2410c</item>
+        <item name="android:windowBackground">#ece5d8</item>
+        <item name="android:statusBarColor">#ddd4c3</item>
+        <item name="android:navigationBarColor">#ddd4c3</item>
+        <item name="android:textColorPrimary">#2b2620</item>
+        <item name="android:textColorSecondary">#7a6f5f</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar">true</item>
+    </style>
+    <style name="MbTheme_contrast" parent="Theme.MaterialComponents.NoActionBar">
+        <item name="mbBg">#000000</item>
+        <item name="mbBar">#111111</item>
+        <item name="mbPill">#222222</item>
+        <item name="mbCard">#111111</item>
+        <item name="mbText">#ffffff</item>
+        <item name="mbMuted">#cccccc</item>
+        <item name="mbAccent">#ffe600</item>
+        <item name="mbLine">#777777</item>
+        <item name="mbPillPrivate">#3A2D5C</item>
+        <item name="colorPrimary">#ffe600</item>
+        <item name="colorOnPrimary">#000000</item>
+        <item name="colorSecondary">#ffe600</item>
+        <item name="android:windowBackground">#000000</item>
+        <item name="android:statusBarColor">#111111</item>
+        <item name="android:navigationBarColor">#111111</item>
+        <item name="android:textColorPrimary">#ffffff</item>
+        <item name="android:textColorSecondary">#cccccc</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+    </style>
+</resources>

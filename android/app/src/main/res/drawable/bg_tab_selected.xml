@@ -1,5 +1,5 @@
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:gravity="bottom" android:height="3dp">
-        <shape><solid android:color="@color/accent"/></shape>
+        <shape><solid android:color="?attr/mbAccent"/></shape>
     </item>
 </layer-list>

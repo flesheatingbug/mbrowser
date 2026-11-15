@@ -20,7 +20,7 @@ import org.json.JSONObject
 import java.util.concurrent.Executors
 
 /** Connects to a sync server with an account (user name, password, optional code, profile) or with an API key. */
-class ServerLoginActivity : AppCompatActivity() {
+class ServerLoginActivity : BaseActivity() {
     private lateinit var prefs: Prefs
     private lateinit var box: LinearLayout
     private val ui = Handler(Looper.getMainLooper())
@@ -42,7 +42,7 @@ class ServerLoginActivity : AppCompatActivity() {
         prefs = Prefs(this)
         accountMode = intent.getStringExtra("mode") != "key"
         val scroll = ScrollView(this)
-        scroll.setBackgroundColor(getColor(R.color.bg))
+        scroll.setBackgroundColor(tc(R.attr.mbBg))
         scroll.fitsSystemWindows = true
         box = LinearLayout(this)
         box.orientation = LinearLayout.VERTICAL
@@ -54,14 +54,14 @@ class ServerLoginActivity : AppCompatActivity() {
 
     // ---------- UI ----------
     private fun text(t: String, size: Float, color: Int, bold: Boolean = false, top: Int = 8) = TextView(this).also {
-        it.text = t; it.textSize = size; it.setTextColor(getColor(color))
+        it.text = t; it.textSize = size; it.setTextColor(tc(color))
         if (bold) it.typeface = Typeface.DEFAULT_BOLD
         box.addView(it, LinearLayout.LayoutParams(-1, -2).also { lp -> lp.topMargin = dp(top) })
     }
 
     private fun field(hint: String, value: String = "", password: Boolean = false, uri: Boolean = false): EditText = EditText(this).also {
         it.hint = hint; it.setText(value); it.setSingleLine()
-        it.setTextColor(getColor(R.color.text)); it.setHintTextColor(getColor(R.color.muted))
+        it.setTextColor(tc(R.attr.mbText)); it.setHintTextColor(tc(R.attr.mbMuted))
         it.importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_NO
         it.inputType = when {
             password -> InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
@@ -72,17 +72,17 @@ class ServerLoginActivity : AppCompatActivity() {
     }
 
     private fun link(label: String, onClick: () -> Unit) = TextView(this).also {
-        it.text = label; it.textSize = 15f; it.setTextColor(getColor(R.color.accent)); it.gravity = Gravity.CENTER
+        it.text = label; it.textSize = 15f; it.setTextColor(tc(R.attr.mbAccent)); it.gravity = Gravity.CENTER
         it.setPadding(0, dp(14), 0, dp(10)); it.setOnClickListener { onClick() }
         box.addView(it, LinearLayout.LayoutParams(-1, -2))
     }
 
     private fun build() {
         box.removeAllViews()
-        text("Connect to your server", 24f, R.color.text, bold = true, top = 0)
+        text("Connect to your server", 24f, R.attr.mbText, bold = true, top = 0)
         text(
             if (accountMode) "Sign in with the account you made on your server's web page. You can pick which profile this phone syncs with."
-            else "Paste an API key from your server's web page (Profiles → API keys). It is tied to one profile.", 15f, R.color.muted
+            else "Paste an API key from your server's web page (Profiles → API keys). It is tied to one profile.", 15f, R.attr.mbMuted
         )
         server = field("Server address, e.g. https://sync.example.com", prefs.server, uri = true)
         if (accountMode) {
@@ -93,7 +93,7 @@ class ServerLoginActivity : AppCompatActivity() {
         } else {
             key = field("API key (starts with mbk_)", password = true)
         }
-        status = text("", 14f, R.color.muted, top = 14)
+        status = text("", 14f, R.attr.mbMuted, top = 14)
         submit = MaterialButton(this).also {
             it.text = if (accountMode) "Sign in" else "Connect"; it.isAllCaps = false
             it.setOnClickListener { if (accountMode) signIn() else connectWithKey() }
@@ -175,9 +175,9 @@ class ServerLoginActivity : AppCompatActivity() {
     // ---------- choose or create a profile ----------
     private fun showProfiles(base: String, username: String, ticket: String, profiles: org.json.JSONArray?) {
         box.removeAllViews()
-        text("Choose a profile", 24f, R.color.text, bold = true, top = 0)
-        text("Signed in as $username. This phone will sync with the profile you pick. Each profile keeps its own bookmarks, history, speed dials and passwords.", 15f, R.color.muted)
-        val msg = text("", 14f, R.color.muted, top = 10)
+        text("Choose a profile", 24f, R.attr.mbText, bold = true, top = 0)
+        text("Signed in as $username. This phone will sync with the profile you pick. Each profile keeps its own bookmarks, history, speed dials and passwords.", 15f, R.attr.mbMuted)
+        val msg = text("", 14f, R.attr.mbMuted, top = 10)
         val n = profiles?.length() ?: 0
         for (i in 0 until n) {
             val o = profiles!!.getJSONObject(i)
@@ -187,7 +187,7 @@ class ServerLoginActivity : AppCompatActivity() {
                 postPick(base, username, ticket, JSONObject().put("profile", id), msg)
             }
         }
-        if (n == 0) text("This account has no profiles yet. Create the first one below.", 14f, R.color.muted, top = 12)
+        if (n == 0) text("This account has no profiles yet. Create the first one below.", 14f, R.attr.mbMuted, top = 12)
         card("＋  Create a new profile", "Starts empty. Your bookmarks here can then be added to it.") {
             promptFields(this, "New profile", listOf("Profile name, e.g. Phone"), listOf(""), "Create") { v ->
                 if (v[0].isNotEmpty()) postPick(base, username, ticket, JSONObject().put("create", v[0]), msg)
@@ -201,8 +201,8 @@ class ServerLoginActivity : AppCompatActivity() {
         c.orientation = LinearLayout.VERTICAL
         c.setBackgroundResource(R.drawable.bg_card)
         c.setPadding(dp(18), dp(16), dp(18), dp(16))
-        val h = TextView(this); h.text = head; h.textSize = 17f; h.typeface = Typeface.DEFAULT_BOLD; h.setTextColor(getColor(R.color.text))
-        val s = TextView(this); s.text = sub; s.textSize = 13f; s.setTextColor(getColor(R.color.muted))
+        val h = TextView(this); h.text = head; h.textSize = 17f; h.typeface = Typeface.DEFAULT_BOLD; h.setTextColor(tc(R.attr.mbText))
+        val s = TextView(this); s.text = sub; s.textSize = 13f; s.setTextColor(tc(R.attr.mbMuted))
         c.addView(h); c.addView(s)
         c.setOnClickListener { onClick() }
         box.addView(c, LinearLayout.LayoutParams(-1, -2).also { it.topMargin = dp(12) })

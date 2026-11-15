@@ -1,0 +1,11 @@
+<resources>
+    <attr name="mbBg" format="color" />
+    <attr name="mbBar" format="color" />
+    <attr name="mbPillPrivate" format="color" />
+    <attr name="mbPill" format="color" />
+    <attr name="mbCard" format="color" />
+    <attr name="mbText" format="color" />
+    <attr name="mbMuted" format="color" />
+    <attr name="mbAccent" format="color" />
+    <attr name="mbLine" format="color" />
+</resources>

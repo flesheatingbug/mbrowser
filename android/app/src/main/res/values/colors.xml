@@ -8,4 +8,5 @@
     <color name="accent">#2F6FEB</color>
     <color name="line">#D8DCE1</color>
     <color name="pill_private">#DCCFF2</color>
+    <color name="ic_bg">#0A0E1F</color>
 </resources>

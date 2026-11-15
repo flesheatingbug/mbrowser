@@ -1,5 +1,14 @@
 <resources>
     <style name="Theme.MBrowser" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="mbBg">@color/bg</item>
+        <item name="mbBar">@color/bar</item>
+        <item name="mbPillPrivate">@color/pill_private</item>
+        <item name="mbPill">@color/pill</item>
+        <item name="mbCard">@color/card</item>
+        <item name="mbText">@color/text</item>
+        <item name="mbMuted">@color/muted</item>
+        <item name="mbAccent">@color/accent</item>
+        <item name="mbLine">@color/line</item>
         <item name="colorPrimary">@color/accent</item>
         <item name="colorOnPrimary">#FFFFFF</item>
         <item name="colorSecondary">@color/accent</item>
@@ -15,6 +24,6 @@
         <item name="android:layout_height">match_parent</item>
         <item name="android:layout_weight">1</item>
         <item name="android:background">?attr/selectableItemBackgroundBorderless</item>
-        <item name="android:tint">@color/text</item>
+        <item name="android:tint">?attr/mbText</item>
     </style>
 </resources>

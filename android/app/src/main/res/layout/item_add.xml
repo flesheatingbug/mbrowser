@@ -11,11 +11,11 @@
         android:background="@drawable/bg_pill"
         android:drawableStart="@drawable/ic_add"
         android:drawablePadding="8dp"
-        android:drawableTint="@color/text"
+        android:drawableTint="?attr/mbText"
         android:gravity="center_vertical"
         android:paddingHorizontal="22dp"
         android:paddingVertical="14dp"
         android:text="Add"
-        android:textColor="@color/text"
+        android:textColor="?attr/mbText"
         android:textSize="16sp" />
 </FrameLayout>

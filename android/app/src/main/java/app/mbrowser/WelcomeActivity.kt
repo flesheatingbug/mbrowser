@@ -16,7 +16,7 @@ import androidx.appcompat.app.AppCompatActivity
 import com.google.android.material.button.MaterialButton
 
 /** First run. Two clear choices: browse on this phone only, or connect to your own server. */
-class WelcomeActivity : AppCompatActivity() {
+class WelcomeActivity : BaseActivity() {
     private lateinit var prefs: Prefs
     private lateinit var box: LinearLayout
     private val ui = Handler(Looper.getMainLooper())
@@ -29,7 +29,7 @@ class WelcomeActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         prefs = Prefs(this)
         val scroll = ScrollView(this)
-        scroll.setBackgroundColor(getColor(R.color.bg))
+        scroll.setBackgroundColor(tc(R.attr.mbBg))
         scroll.fitsSystemWindows = true
         box = LinearLayout(this)
         box.orientation = LinearLayout.VERTICAL
@@ -51,11 +51,11 @@ class WelcomeActivity : AppCompatActivity() {
 
     // ---------- small view builders ----------
     private fun title(t: String) = TextView(this).also {
-        it.text = t; it.textSize = 26f; it.typeface = Typeface.DEFAULT_BOLD; it.setTextColor(getColor(R.color.text)); box.addView(it)
+        it.text = t; it.textSize = 26f; it.typeface = Typeface.DEFAULT_BOLD; it.setTextColor(tc(R.attr.mbText)); box.addView(it)
     }
 
     private fun body(t: String, topMargin: Int = 8) = TextView(this).also {
-        it.text = t; it.textSize = 15f; it.setTextColor(getColor(R.color.muted))
+        it.text = t; it.textSize = 15f; it.setTextColor(tc(R.attr.mbMuted))
         box.addView(it, LinearLayout.LayoutParams(-1, -2).also { lp -> lp.topMargin = dp(topMargin) })
     }
 
@@ -64,8 +64,8 @@ class WelcomeActivity : AppCompatActivity() {
         c.orientation = LinearLayout.VERTICAL
         c.setBackgroundResource(R.drawable.bg_card)
         c.setPadding(dp(18), dp(18), dp(18), dp(18))
-        val h = TextView(this); h.text = head; h.textSize = 18f; h.typeface = Typeface.DEFAULT_BOLD; h.setTextColor(getColor(R.color.text))
-        val s = TextView(this); s.text = sub; s.textSize = 14f; s.setTextColor(getColor(R.color.muted))
+        val h = TextView(this); h.text = head; h.textSize = 18f; h.typeface = Typeface.DEFAULT_BOLD; h.setTextColor(tc(R.attr.mbText))
+        val s = TextView(this); s.text = sub; s.textSize = 14f; s.setTextColor(tc(R.attr.mbMuted))
         c.addView(h); c.addView(s, LinearLayout.LayoutParams(-1, -2).also { it.topMargin = dp(4) })
         c.setOnClickListener { onClick() }
         box.addView(c, LinearLayout.LayoutParams(-1, -2).also { it.topMargin = dp(16) })
@@ -77,13 +77,13 @@ class WelcomeActivity : AppCompatActivity() {
     }
 
     private fun link(label: String, onClick: () -> Unit) = TextView(this).also {
-        it.text = label; it.textSize = 15f; it.setTextColor(getColor(R.color.accent)); it.gravity = Gravity.CENTER
+        it.text = label; it.textSize = 15f; it.setTextColor(tc(R.attr.mbAccent)); it.gravity = Gravity.CENTER
         it.setPadding(0, dp(14), 0, dp(14)); it.setOnClickListener { onClick() }
         box.addView(it, LinearLayout.LayoutParams(-1, -2))
     }
 
     private fun field(hint: String, password: Boolean = false): EditText = EditText(this).also {
-        it.hint = hint; it.setSingleLine(); it.setTextColor(getColor(R.color.text)); it.setHintTextColor(getColor(R.color.muted))
+        it.hint = hint; it.setSingleLine(); it.setTextColor(tc(R.attr.mbText)); it.setHintTextColor(tc(R.attr.mbMuted))
         it.importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_NO
         it.inputType = if (password) android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
         else android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_URI
@@ -116,14 +116,14 @@ class WelcomeActivity : AppCompatActivity() {
             "local" -> {
                 title("Make it yours")
                 body("Pick a search engine and a look. Both can be changed later in Settings.", 10)
-                body("Search engine", 22).also { it.setTextColor(getColor(R.color.text)) }
+                body("Search engine", 22).also { it.setTextColor(tc(R.attr.mbText)) }
                 val engines = Settings.engines().take(4)
                 val current = Settings.defaultEngine().id
                 val chips = LinkedHashMap<String, TextView>()
                 fun paintEngines() {
                     for ((id, tv) in chips) {
                         val on = id == Settings.defaultEngine().id
-                        tv.setTextColor(getColor(if (on) R.color.accent else R.color.text))
+                        tv.setTextColor(tc(if (on) R.attr.mbAccent else R.attr.mbText))
                         tv.text = (if (on) "●  " else "○  ") + engines.first { it.id == id }.name
                     }
                 }
@@ -135,13 +135,13 @@ class WelcomeActivity : AppCompatActivity() {
                 }
                 if (current.isEmpty()) Settings.setDefaultEngine(engines[0].id)
                 paintEngines()
-                body("Theme", 22).also { it.setTextColor(getColor(R.color.text)) }
+                body("Theme", 22).also { it.setTextColor(tc(R.attr.mbText)) }
                 val themes = listOf("Follow system", "Light", "Dark")
                 val tchips = ArrayList<TextView>()
                 fun paintThemes() {
                     tchips.forEachIndexed { i, tv ->
                         val on = prefs.themeMode == i
-                        tv.setTextColor(getColor(if (on) R.color.accent else R.color.text))
+                        tv.setTextColor(tc(if (on) R.attr.mbAccent else R.attr.mbText))
                         tv.text = (if (on) "●  " else "○  ") + themes[i]
                     }
                 }

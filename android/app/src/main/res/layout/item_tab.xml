@@ -18,7 +18,7 @@
             android:layout_width="18dp"
             android:layout_height="18dp"
             android:src="@drawable/ic_globe"
-            android:tint="@color/muted" />
+            android:tint="?attr/mbMuted" />
 
         <TextView
             android:id="@+id/title"
@@ -28,7 +28,7 @@
             android:layout_weight="1"
             android:ellipsize="end"
             android:maxLines="1"
-            android:textColor="@color/text"
+            android:textColor="?attr/mbText"
             android:textSize="13sp" />
 
         <ImageButton
@@ -38,7 +38,7 @@
             android:background="?attr/selectableItemBackgroundBorderless"
             android:contentDescription="Close tab"
             android:src="@drawable/ic_close"
-            android:tint="@color/muted" />
+            android:tint="?attr/mbMuted" />
     </LinearLayout>
 
     <FrameLayout

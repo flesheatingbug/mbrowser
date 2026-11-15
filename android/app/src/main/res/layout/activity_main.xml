@@ -2,14 +2,14 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/bg"
+    android:background="?attr/mbBg"
     android:fitsSystemWindows="true"
     android:orientation="vertical">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:background="@color/bar"
+        android:background="?attr/mbBar"
         android:gravity="center_vertical"
         android:orientation="horizontal"
         android:padding="10dp">
@@ -29,7 +29,7 @@
                 android:layout_height="24dp"
                 android:layout_marginStart="14dp"
                 android:src="@drawable/ic_search"
-                android:tint="@color/muted" />
+                android:tint="?attr/mbMuted" />
 
             <EditText
                 android:id="@+id/urlBar"
@@ -44,8 +44,8 @@
                 android:inputType="textUri"
                 android:maxLines="1"
                 android:selectAllOnFocus="true"
-                android:textColor="@color/text"
-                android:textColorHint="@color/muted"
+                android:textColor="?attr/mbText"
+                android:textColorHint="?attr/mbMuted"
                 android:textSize="16sp" />
 
             <ImageButton
@@ -55,7 +55,7 @@
                 android:background="?attr/selectableItemBackgroundBorderless"
                 android:contentDescription="Bookmark"
                 android:src="@drawable/ic_star"
-                android:tint="@color/muted" />
+                android:tint="?attr/mbMuted" />
 
             <ImageButton
                 android:id="@+id/btnReload"
@@ -64,7 +64,7 @@
                 android:background="?attr/selectableItemBackgroundBorderless"
                 android:contentDescription="Reload"
                 android:src="@drawable/ic_reload"
-                android:tint="@color/muted" />
+                android:tint="?attr/mbMuted" />
         </LinearLayout>
 
         <ImageView
@@ -83,14 +83,14 @@
         android:layout_width="match_parent"
         android:layout_height="3dp"
         android:max="100"
-        android:progressTint="@color/accent"
+        android:progressTint="?attr/mbAccent"
         android:visibility="invisible" />
 
     <HorizontalScrollView
         android:id="@+id/engineStrip"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:background="@color/bar"
+        android:background="?attr/mbBar"
         android:scrollbars="none"
         android:visibility="gone">
         <LinearLayout
@@ -108,7 +108,7 @@
         android:id="@+id/suggestScroll"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:background="@color/bg"
+        android:background="?attr/mbBg"
         android:visibility="gone">
         <LinearLayout
             android:id="@+id/suggestList"
@@ -121,7 +121,7 @@
         android:id="@+id/findBar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:background="@color/bar"
+        android:background="?attr/mbBar"
         android:gravity="center_vertical"
         android:orientation="horizontal"
         android:paddingStart="14dp"
@@ -137,20 +137,20 @@
             android:importantForAutofill="no"
             android:inputType="text"
             android:maxLines="1"
-            android:textColor="@color/text"
-            android:textColorHint="@color/muted" />
+            android:textColor="?attr/mbText"
+            android:textColorHint="?attr/mbMuted" />
         <TextView
             android:id="@+id/findCount"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:padding="6dp"
-            android:textColor="@color/muted" />
+            android:textColor="?attr/mbMuted" />
         <TextView android:id="@+id/findPrev" android:layout_width="44dp" android:layout_height="48dp"
-            android:gravity="center" android:text="▲" android:textColor="@color/text" android:textSize="18sp" />
+            android:gravity="center" android:text="▲" android:textColor="?attr/mbText" android:textSize="18sp" />
         <TextView android:id="@+id/findNext" android:layout_width="44dp" android:layout_height="48dp"
-            android:gravity="center" android:text="▼" android:textColor="@color/text" android:textSize="18sp" />
+            android:gravity="center" android:text="▼" android:textColor="?attr/mbText" android:textSize="18sp" />
         <TextView android:id="@+id/findClose" android:layout_width="44dp" android:layout_height="48dp"
-            android:gravity="center" android:text="✕" android:textColor="@color/text" android:textSize="18sp" />
+            android:gravity="center" android:text="✕" android:textColor="?attr/mbText" android:textSize="18sp" />
     </LinearLayout>
 
     <FrameLayout
@@ -174,7 +174,7 @@
             android:id="@+id/switcher"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:background="@color/bg"
+            android:background="?attr/mbBg"
             android:visibility="gone">
 
             <LinearLayout
@@ -197,18 +197,18 @@
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
-                        android:textColor="@color/text"
+                        android:textColor="?attr/mbText"
                         android:textSize="26sp" />
 
                     <ImageButton android:id="@+id/switcherSearch" android:layout_width="48dp" android:layout_height="48dp"
                         android:background="?attr/selectableItemBackgroundBorderless" android:contentDescription="Search tabs"
-                        android:src="@drawable/ic_search" android:tint="@color/text" />
+                        android:src="@drawable/ic_search" android:tint="?attr/mbText" />
                     <ImageButton android:id="@+id/switcherMore" android:layout_width="48dp" android:layout_height="48dp"
                         android:background="?attr/selectableItemBackgroundBorderless" android:contentDescription="More"
-                        android:src="@drawable/ic_more" android:tint="@color/text" />
+                        android:src="@drawable/ic_more" android:tint="?attr/mbText" />
                     <ImageButton android:id="@+id/switcherClose" android:layout_width="48dp" android:layout_height="48dp"
                         android:background="?attr/selectableItemBackgroundBorderless" android:contentDescription="Close"
-                        android:src="@drawable/ic_close" android:tint="@color/text" />
+                        android:src="@drawable/ic_close" android:tint="?attr/mbText" />
                 </LinearLayout>
 
                 <EditText
@@ -221,8 +221,8 @@
                     android:importantForAutofill="no"
                     android:inputType="text"
                     android:maxLines="1"
-                    android:textColor="@color/text"
-                    android:textColorHint="@color/muted"
+                    android:textColor="?attr/mbText"
+                    android:textColorHint="?attr/mbMuted"
                     android:visibility="gone" />
 
                 <TextView
@@ -230,7 +230,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:padding="24dp"
-                    android:textColor="@color/muted"
+                    android:textColor="?attr/mbMuted"
                     android:textSize="16sp"
                     android:visibility="gone" />
 
@@ -270,16 +270,16 @@
                 android:padding="4dp">
                 <ImageButton android:id="@+id/modeTabs" android:layout_width="56dp" android:layout_height="48dp"
                     android:layout_margin="4dp" android:background="@null" android:contentDescription="Tabs"
-                    android:src="@drawable/ic_tabs" android:tint="@color/text" />
+                    android:src="@drawable/ic_tabs" android:tint="?attr/mbText" />
                 <ImageButton android:id="@+id/modePrivate" android:layout_width="56dp" android:layout_height="48dp"
                     android:layout_margin="4dp" android:background="@null" android:contentDescription="Private tabs"
-                    android:src="@drawable/ic_ghost" android:tint="@color/text" />
+                    android:src="@drawable/ic_ghost" android:tint="?attr/mbText" />
                 <ImageButton android:id="@+id/modeSynced" android:layout_width="56dp" android:layout_height="48dp"
                     android:layout_margin="4dp" android:background="@null" android:contentDescription="Tabs from other devices"
-                    android:src="@drawable/ic_cloud" android:tint="@color/text" />
+                    android:src="@drawable/ic_cloud" android:tint="?attr/mbText" />
                 <ImageButton android:id="@+id/modeClosed" android:layout_width="56dp" android:layout_height="48dp"
                     android:layout_margin="4dp" android:background="@null" android:contentDescription="Recently closed"
-                    android:src="@drawable/ic_trash" android:tint="@color/text" />
+                    android:src="@drawable/ic_trash" android:tint="?attr/mbText" />
             </LinearLayout>
         </FrameLayout>
     </FrameLayout>
@@ -287,7 +287,7 @@
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="56dp"
-        android:background="@color/bar"
+        android:background="?attr/mbBar"
         android:gravity="center"
         android:orientation="horizontal">
 
@@ -313,7 +313,7 @@
                 android:layout_height="26dp"
                 android:layout_gravity="center"
                 android:src="@drawable/ic_tabs"
-                android:tint="@color/text" />
+                android:tint="?attr/mbText" />
 
             <TextView
                 android:id="@+id/tabCount"
@@ -321,7 +321,7 @@
                 android:layout_height="wrap_content"
                 android:layout_gravity="center"
                 android:text="1"
-                android:textColor="@color/text"
+                android:textColor="?attr/mbText"
                 android:textSize="12sp"
                 android:textStyle="bold" />
         </FrameLayout>

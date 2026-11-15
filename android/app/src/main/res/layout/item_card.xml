@@ -42,7 +42,7 @@
             android:layout_width="20dp"
             android:layout_height="20dp"
             android:src="@drawable/ic_globe"
-            android:tint="@color/muted" />
+            android:tint="?attr/mbMuted" />
 
         <TextView
             android:id="@+id/title"
@@ -52,7 +52,7 @@
             android:layout_weight="1"
             android:ellipsize="end"
             android:maxLines="1"
-            android:textColor="@color/text"
+            android:textColor="?attr/mbText"
             android:textSize="14sp" />
     </LinearLayout>
 </LinearLayout>

@@ -106,6 +106,12 @@ class Prefs(ctx: Context) {
     var showThumbs: Boolean
         get() = bool("showThumbs", true)
         set(v) = putB("showThumbs", v)
+    var themeId: String
+        get() = str("themeId", "system")
+        set(v) = put("themeId", v)
+    var appIcon: String
+        get() = str("appIcon", "classic")
+        set(v) = put("appIcon", v)
     var pullRefresh: Boolean
         get() = bool("pullRefresh", true)
         set(v) = putB("pullRefresh", v)

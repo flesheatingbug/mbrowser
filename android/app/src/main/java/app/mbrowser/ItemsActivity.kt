@@ -20,7 +20,7 @@ import java.text.DateFormat
 import java.util.Date
 
 /** One list screen for bookmarks, history and tabs from other devices. Tapping returns the URL. */
-class ItemsActivity : AppCompatActivity() {
+class ItemsActivity : BaseActivity() {
     private class Row(val title: String, val sub: String, val url: String, val dl: Downloads.Item? = null)
 
     private var mode = "bookmarks"
@@ -112,9 +112,9 @@ class ItemsActivity : AppCompatActivity() {
                 title.text = r.title; sub.text = r.sub
                 val ic = Thumbs.icon(this@ItemsActivity, Thumbs.hostOf(r.url))
                 if (ic != null) { icon.setImageBitmap(ic); icon.imageTintList = null }
-                else { icon.setImageResource(R.drawable.ic_globe); icon.imageTintList = getColorStateList(R.color.muted) }
+                else { icon.setImageResource(R.drawable.ic_globe); icon.imageTintList = tcl(R.attr.mbMuted) }
                 if (r.dl != null) {
-                    icon.setImageResource(R.drawable.ic_download); icon.imageTintList = getColorStateList(R.color.accent)
+                    icon.setImageResource(R.drawable.ic_download); icon.imageTintList = tcl(R.attr.mbAccent)
                     v.setOnClickListener { openDownload(r.dl) }
                     v.setOnLongClickListener {
                         AlertDialog.Builder(this@ItemsActivity).setTitle(r.title)

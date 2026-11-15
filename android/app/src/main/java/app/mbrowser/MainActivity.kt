@@ -53,7 +53,7 @@ import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
 import java.io.ByteArrayInputStream
 
-class MainActivity : AppCompatActivity() {
+class MainActivity : BaseActivity() {
 
     private class Tab(val web: WebView) {
         var title = ""
@@ -136,8 +136,8 @@ class MainActivity : AppCompatActivity() {
         progress = findViewById(R.id.progress)
         container = findViewById(R.id.container)
         swipe = findViewById(R.id.swipe)
-        swipe.setColorSchemeResources(R.color.accent)
-        swipe.setProgressBackgroundColorSchemeResource(R.color.card)
+        swipe.setColorSchemeColors(tc(R.attr.mbAccent))
+        swipe.setProgressBackgroundColorSchemeColor(tc(R.attr.mbCard))
         // only a web page that is scrolled to its top can be pulled down; the speed dial never refreshes
         swipe.setOnChildScrollUpCallback { _, _ -> val t = cur(); t == null || t.home || t.web.scrollY > 0 || refreshBlocked }
         swipe.setOnRefreshListener {
@@ -145,6 +145,7 @@ class MainActivity : AppCompatActivity() {
             if (t != null && !t.home) t.web.reload() else swipe.isRefreshing = false
         }
         findViewById<View>(R.id.appLogo).setOnClickListener { showMenu(it) }
+        applyLogo()
         switcher = findViewById(R.id.switcher)
         switcherList = findViewById(R.id.switcherList)
         switcherTitle = findViewById(R.id.switcherTitle)
@@ -304,11 +305,11 @@ class MainActivity : AppCompatActivity() {
             tv.gravity = Gravity.CENTER
             tv.textSize = 18f
             tv.typeface = Typeface.DEFAULT_BOLD
-            tv.setTextColor(getColor(R.color.text))
+            tv.setTextColor(tc(R.attr.mbText))
             val bg = GradientDrawable()
             bg.shape = GradientDrawable.OVAL
-            bg.setColor(getColor(R.color.card))
-            if (e.id == chosen.id) bg.setStroke((3 * d).toInt(), getColor(R.color.accent))
+            bg.setColor(tc(R.attr.mbCard))
+            if (e.id == chosen.id) bg.setStroke((3 * d).toInt(), tc(R.attr.mbAccent))
             tv.background = bg
             tv.contentDescription = "Search with ${e.name}"
             val lp = LinearLayout.LayoutParams((48 * d).toInt(), (48 * d).toInt())
@@ -380,9 +381,9 @@ class MainActivity : AppCompatActivity() {
             row.setPadding((16 * d).toInt(), (10 * d).toInt(), (16 * d).toInt(), (10 * d).toInt())
             row.setBackgroundResource(android.R.drawable.list_selector_background)
             val t1 = TextView(this); t1.text = (if (h.star) "★ " else "") + h.title.ifBlank { bare(h.url) }
-            t1.setTextColor(getColor(R.color.text)); t1.textSize = 16f; t1.maxLines = 1; t1.ellipsize = android.text.TextUtils.TruncateAt.END
+            t1.setTextColor(tc(R.attr.mbText)); t1.textSize = 16f; t1.maxLines = 1; t1.ellipsize = android.text.TextUtils.TruncateAt.END
             val t2 = TextView(this); t2.text = bare(h.url)
-            t2.setTextColor(getColor(R.color.muted)); t2.textSize = 13f; t2.maxLines = 1; t2.ellipsize = android.text.TextUtils.TruncateAt.END
+            t2.setTextColor(tc(R.attr.mbMuted)); t2.textSize = 13f; t2.maxLines = 1; t2.ellipsize = android.text.TextUtils.TruncateAt.END
             row.addView(t1); row.addView(t2)
             row.setOnClickListener { navigate(h.url) }
             list.addView(row, LinearLayout.LayoutParams(-1, -2))
@@ -765,7 +766,7 @@ class MainActivity : AppCompatActivity() {
         TextView(this).also {
             it.gravity = android.view.Gravity.CENTER
             it.setPadding(dp(32), dp(32), dp(32), dp(32))
-            it.setTextColor(getColor(R.color.text))
+            it.setTextColor(tc(R.attr.mbText))
             it.textSize = 15f
         }
     }
@@ -807,13 +808,13 @@ class MainActivity : AppCompatActivity() {
         urlBar.hint = if (isPriv) "Private: search or type URL" else "Search or type URL"
         val starred = t != null && !t.home && Store.isBookmarked(t.url)
         btnStar.setImageResource(if (starred) R.drawable.ic_star_filled else R.drawable.ic_star)
-        btnStar.imageTintList = getColorStateList(if (starred) R.color.accent else R.color.text)
+        btnStar.imageTintList = tcl(if (starred) R.attr.mbAccent else R.attr.mbText)
         if (t == null || t.home) {
-            siteIcon.setImageResource(R.drawable.ic_search); siteIcon.imageTintList = getColorStateList(R.color.muted)
+            siteIcon.setImageResource(R.drawable.ic_search); siteIcon.imageTintList = tcl(R.attr.mbMuted)
         } else {
             val ic = t.icon ?: Thumbs.icon(this, Thumbs.hostOf(t.url))
             if (ic != null) { siteIcon.setImageBitmap(ic); siteIcon.imageTintList = null }
-            else { siteIcon.setImageResource(R.drawable.ic_globe); siteIcon.imageTintList = getColorStateList(R.color.muted) }
+            else { siteIcon.setImageResource(R.drawable.ic_globe); siteIcon.imageTintList = tcl(R.attr.mbMuted) }
         }
     }
 
@@ -887,7 +888,7 @@ class MainActivity : AppCompatActivity() {
                     }
                     val ic = t.icon
                     if (ic != null) { icon.setImageBitmap(ic); icon.imageTintList = null }
-                    else { icon.setImageResource(R.drawable.ic_globe); icon.imageTintList = getColorStateList(R.color.muted) }
+                    else { icon.setImageResource(R.drawable.ic_globe); icon.imageTintList = tcl(R.attr.mbMuted) }
                     v.setOnClickListener { hideSwitcher(); switchTo(real) }
                     v.findViewById<View>(R.id.close).setOnClickListener {
                         val wasLast = tabs.size <= 1
@@ -939,7 +940,7 @@ class MainActivity : AppCompatActivity() {
                 val icon = v.findViewById<ImageView>(R.id.icon)
                 val ic = Thumbs.icon(this@MainActivity, Thumbs.hostOf(r.url))
                 if (ic != null) { icon.setImageBitmap(ic); icon.imageTintList = null }
-                else { icon.setImageResource(R.drawable.ic_globe); icon.imageTintList = getColorStateList(R.color.muted) }
+                else { icon.setImageResource(R.drawable.ic_globe); icon.imageTintList = tcl(R.attr.mbMuted) }
                 v.setOnClickListener { r.onOpen() }
             }
         }
@@ -1135,4 +1136,15 @@ object WebSettingsDefault {
     private var ua: String? = null
     fun mobile(ctx: android.content.Context): String =
         ua ?: android.webkit.WebSettings.getDefaultUserAgent(ctx).also { ua = it }
+
+    private fun applyLogo() {
+        val v = findViewById<ImageView>(R.id.appLogo)
+        val r = AppIcon.current(this).logo
+        if (r != null) v.setImageResource(r) else v.setImageResource(R.mipmap.ic_launcher)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        applyLogo()
+    }
 }

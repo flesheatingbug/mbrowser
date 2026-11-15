@@ -32,3 +32,11 @@ fun promptFields(
         .setPositiveButton(okLabel) { _, _ -> onOk(fields.map { it.text.toString().trim() }) }
         .setNegativeButton("Cancel", null).show()
 }
+
+/** A colour of the current theme (see the mb… attributes). */
+fun android.content.Context.tc(attr: Int): Int {
+    val tv = android.util.TypedValue()
+    theme.resolveAttribute(attr, tv, true)
+    return tv.data
+}
+fun android.content.Context.tcl(attr: Int): android.content.res.ColorStateList = android.content.res.ColorStateList.valueOf(tc(attr))
