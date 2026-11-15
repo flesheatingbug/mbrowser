@@ -53,7 +53,7 @@ class SettingsActivity : BaseActivity() {
         super.onCreate(savedInstanceState)
         prefs = Prefs(this)
         Store.init(this)
-        page = savedInstanceState?.getString("page") ?: "main"
+        page = savedInstanceState?.getString("page") ?: intent.getStringExtra("page") ?: "main"
         val root = LinearLayout(this)
         root.orientation = LinearLayout.VERTICAL
         root.setBackgroundColor(tc(R.attr.mbBg))

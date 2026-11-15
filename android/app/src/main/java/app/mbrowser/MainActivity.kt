@@ -144,6 +144,7 @@ class MainActivity : BaseActivity() {
 
     private fun startQr() {
         qrScan.launch(com.journeyapps.barcodescanner.ScanOptions().setBeepEnabled(false).setOrientationLocked(false)
+            .setCaptureActivity(PortraitCapture::class.java)
             .setPrompt("Scan a QR code").setDesiredBarcodeFormats(com.journeyapps.barcodescanner.ScanOptions.QR_CODE))
     }
 
@@ -1302,7 +1303,10 @@ class MainActivity : BaseActivity() {
             Toast.makeText(this, "Added to speed dial", Toast.LENGTH_SHORT).show()
         })
         divider()
-        row(R.drawable.ic_sync, "Sync now", go { syncNow(true) })
+        row(R.drawable.ic_sync, "Sync now", go {
+            // not signed in to a server yet: go to where that's set up
+            if (prefs.syncConfigured) syncNow(true) else startActivity(Intent(this, SettingsActivity::class.java).putExtra("page", "data"))
+        })
         row(R.drawable.ic_settings, "Settings", go { startActivity(Intent(this, SettingsActivity::class.java)) })
 
         val top = findViewById<View>(R.id.topBar)
@@ -1376,3 +1380,6 @@ object TypedValueHolder {
         return androidx.core.content.ContextCompat.getDrawable(ctx, tv.resourceId)
     }
 }
+
+/** The QR scanner screen, kept upright (the library's own screen forces landscape). */
+class PortraitCapture : com.journeyapps.barcodescanner.CaptureActivity()
