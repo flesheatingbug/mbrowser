@@ -481,16 +481,45 @@
     }
   }
 
+  // long values (a profile picture is a whole image) are shortened for reading; the export keeps everything
+  function shorten(v) {
+    return JSON.parse(JSON.stringify(v, (k, x) => (typeof x === 'string' && x.length > 200 ? x.slice(0, 40) + '… (' + Math.round(x.length / 1024) + ' KB)' : x)));
+  }
+
+  function settingsCard(p, s) {
+    const card = h('div', { class: 'card' }, h('h2', null, 'Synced settings'));
+    const importBtn = h('button', { class: 'btn', onclick: () => pick.click() }, 'Import settings…');
+    const pick = h('input', { type: 'file', accept: '.json,application/json', style: 'display:none', onchange: async () => {
+      const f = pick.files[0]; pick.value = ''; if (!f) return;
+      let doc; try { doc = JSON.parse(await f.text()); } catch { toast('That is not a settings export', 'bad'); return; }
+      const n = doc && doc.groups && typeof doc.groups === 'object' ? Object.keys(doc.groups).length : 0;
+      if (!n) { toast('That is not a settings export', 'bad'); return; }
+      if (!confirm('Import ' + n + ' settings group(s)? They replace the synced settings on the server, and browsers take them at their next sync.')) return;
+      try { await api('PUT', '/profiles/' + p.id + '/settings', { doc }); toast('Settings imported', 'good'); route(); } catch (e) { fail(e); }
+    } });
+    const actions = h('div', { class: 'row' }, importBtn, pick);
+    if (!s.settings) { card.append(h('p', { class: 'muted' }, 'No settings have been synced yet. You can import an export to start with.'), actions); return card; }
+    const list = h('div', { class: 'tablewrap' }, h('div', { class: 'muted small' }, 'Loading…'));
+    card.append(h('p', { class: 'muted' }, 'Version ' + s.settings.version + ' · changed ' + ago(s.settings.updated)), list, actions);
+    api('GET', '/profiles/' + p.id + '/settings').then((d) => {
+      const groups = (d.doc && d.doc.groups) || {};
+      const names = Object.keys(groups).sort();
+      list.replaceChildren(h('table', null, h('thead', null, h('tr', null, ['Group', 'Changed', ''].map((t) => h('th', null, t)))),
+        h('tbody', null, names.map((k) => {
+          const pre = h('pre', { style: 'display:none;max-height:40vh;overflow:auto;font-size:12px;margin:8px 0 0' }, JSON.stringify(shorten(groups[k].value), null, 2));
+          const btn = h('button', { class: 'btn sm', onclick: () => { const on = pre.style.display === 'none'; pre.style.display = on ? 'block' : 'none'; btn.textContent = on ? 'Hide' : 'Show'; } }, 'Show');
+          return h('tr', null, h('td', null, h('b', null, k), pre), h('td', { class: 'muted' }, groups[k].updated ? ago(groups[k].updated) : 'never'), h('td', null, btn));
+        }))));
+      actions.prepend(h('button', { class: 'btn', onclick: () => download('mbrowser-settings-' + new Date().toISOString().slice(0, 10) + '.json', JSON.stringify(d.doc, null, 2), 'application/json') }, 'Export settings'),
+        h('button', { class: 'btn danger', onclick: async () => { if (!confirm('Delete the synced settings? Browsers will upload theirs again at the next sync.')) return; try { await api('DELETE', '/profiles/' + p.id + '/settings'); route(); } catch (e) { fail(e); } } }, 'Delete'));
+    }).catch((e) => { list.replaceChildren(h('p', { class: 'bad' }, 'Could not load the settings: ' + (e.message || e))); });
+    return card;
+  }
+
   async function tData(body, p) {
     const s = p.stats;
     body.append(
-      h('div', { class: 'card' }, h('h2', null, 'Synced settings'),
-        s.settings ? h('div', null,
-          h('p', { class: 'muted' }, 'Groups: ' + (s.settings.groups.join(', ') || 'none') + ' · version ' + s.settings.version + ' · changed ' + ago(s.settings.updated)),
-          h('div', { class: 'row' },
-            h('button', { class: 'btn', onclick: async () => { const d = await api('GET', '/profiles/' + p.id + '/settings'); modal('Settings document', h('pre', { style: 'max-height:50vh;overflow:auto;font-size:12px' }, JSON.stringify(d.doc, null, 2)), [{ text: 'Close' }]); } }, 'View'),
-            h('button', { class: 'btn danger', onclick: async () => { if (!confirm('Delete the synced settings? Browsers will upload theirs again at the next sync.')) return; try { await api('DELETE', '/profiles/' + p.id + '/settings'); route(); } catch (e) { fail(e); } } }, 'Delete')))
-          : h('p', { class: 'muted' }, 'No settings have been synced yet.')),
+      settingsCard(p, s),
       h('div', { class: 'card' }, h('h2', null, 'Password vault'),
         s.vault ? h('div', null,
           h('p', { class: 'muted' }, 'An encrypted vault is stored (' + bytes(s.vault.bytes) + ', version ' + s.vault.version + ', changed ' + ago(s.vault.updated) + '). It is encrypted by your browser; the server cannot read it. Open the Passwords tab to unlock and view it here.'),

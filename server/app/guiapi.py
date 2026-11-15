@@ -1,4 +1,5 @@
 """Endpoints used by the web interface (cookie session + CSRF header) and by the browser's account sign-in."""
+import time
 import html
 import json
 import re
@@ -351,6 +352,27 @@ def settings_view(ctx, req, pid):
     _own(ctx, req, pid)
     with ctx.store.pdb(int(pid)) as c:
         return 200, syncapi.settings_get(c)
+
+
+def settings_import(ctx, req, pid):
+    """Replaces the synced settings with an exported file. Every group counts as changed now, so the browsers take it at their next sync."""
+    _own(ctx, req, pid)
+    doc = req.json().get('doc')
+    groups = doc.get('groups') if isinstance(doc, dict) else None
+    if not isinstance(groups, dict) or not groups:
+        raise ApiError(400, 'That is not a settings export.')
+    stamp = int(time.time() * 1000)
+    clean = {}
+    for k, v in groups.items():
+        val = v.get('value') if isinstance(v, dict) else None
+        if isinstance(k, str) and 0 < len(k) <= 40 and isinstance(val, dict):
+            clean[k] = {'updated': stamp, 'value': val}
+    if not clean:
+        raise ApiError(400, 'That is not a settings export.')
+    with ctx.store.pdb(int(pid)) as c:
+        cur = syncapi.settings_get(c)
+        res = syncapi.settings_put(c, {'doc': {'groups': clean}, 'base': cur['version']})
+    return 200, {'ok': True, 'groups': sorted(clean), 'version': res.get('version')}
 
 
 def settings_delete(ctx, req, pid):
