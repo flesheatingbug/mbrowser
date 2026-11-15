@@ -206,12 +206,14 @@ object DeviceKey {
         prefs(ctx).edit().putString("k", Base64.encodeToString(c.iv, Base64.NO_WRAP) + ":" + Base64.encodeToString(ct, Base64.NO_WRAP)).apply()
     }
 
-    fun load(ctx: Context): ByteArray? = try {
-        val v = prefs(ctx).getString("k", null)?.split(":") ?: return null
-        val c = Cipher.getInstance("AES/GCM/NoPadding")
-        c.init(Cipher.DECRYPT_MODE, wrapKey(), GCMParameterSpec(128, Base64.decode(v[0], Base64.DEFAULT)))
-        c.doFinal(Base64.decode(v[1], Base64.DEFAULT))
-    } catch (_: Exception) { null }
+    fun load(ctx: Context): ByteArray? {
+        return try {
+            val v = prefs(ctx).getString("k", null)?.split(":") ?: return null
+            val c = Cipher.getInstance("AES/GCM/NoPadding")
+            c.init(Cipher.DECRYPT_MODE, wrapKey(), GCMParameterSpec(128, Base64.decode(v[0], Base64.DEFAULT)))
+            c.doFinal(Base64.decode(v[1], Base64.DEFAULT))
+        } catch (_: Exception) { null }
+    }
 
     fun clear(ctx: Context) { prefs(ctx).edit().clear().apply() }
 }
