@@ -68,6 +68,11 @@
     font:inherit; outline:none; }
   #bar #sec { height:24px; min-width:0; margin-left:6px; padding:0 8px; border-radius:12px; font-size:13px; display:flex; align-items:center; gap:4px; }
   #sec .lbl { font-size:12px; }
+  #bar #eng { display:none; position:relative; width:26px; height:26px; min-width:26px; margin-left:6px; padding:0; border-radius:50%; place-items:center; overflow:hidden; }
+  #urlwrap:focus-within #eng, body.eng-always #eng { display:grid; }
+  #eng img { width:18px; height:18px; border-radius:4px; display:none; }
+  #eng.pic img { display:block; } #eng.pic #engl { display:none; }
+  #engl { width:20px; height:20px; border-radius:50%; background:var(--accent); color:var(--onaccent); font-size:11px; font-weight:700; display:grid; place-items:center; }
   #sec.secure { color:#4cc38a; }
   #sec.insecure { color:#e8a33d; }
   #sec.warning { color:#e5534b; }
@@ -218,6 +223,7 @@
     <span id="priv">Private</span>
     <div id="urlwrap">
       <div id="urlprog"></div>
+      <button id="eng" title="Search engine (click to change)"><img id="engimg" alt=""><span id="engl"></span></button>
       <button id="sec" class="internal" title="Connection and site information"><span id="secicon" class="ic"></span><span class="lbl" id="seclbl"></span></button>
       <input id="url" placeholder="Search or enter address" spellcheck="false">
       <button id="key" class="ic" title="Saved logins for this site"><span id="keyic"></span><span class="n" id="keyn"></span></button>
@@ -298,6 +304,10 @@
     $('st-zoom-pct').textContent = $('st-zoom-range').value + '%';
   });
   $('key').onclick = () => api.showLogins();
+  $('eng').onmousedown = (e) => e.preventDefault();
+  $('eng').onclick = () => api.engineMenu();
+  $('engimg').onerror = () => $('eng').classList.remove('pic');
+  $('engimg').onload = () => $('eng').classList.add('pic');
   $('tl').onclick = () => api.tabList();
   $('wmin').onclick = () => api.winMin();
   $('wmax').onclick = () => api.winMax();
@@ -511,6 +521,11 @@
     document.body.classList.toggle('is-private', !!s.private);
     document.body.classList.toggle('frameless', !!s.frameless);
 
+    if (s.engine) {
+      $('eng').title = 'Searching with ' + s.engine.name + ' (click to change)';
+      $('engl').textContent = (s.engine.name || '?').charAt(0).toUpperCase();
+      if (s.engine.origin && $('engimg').dataset.o !== s.engine.origin) { $('engimg').dataset.o = s.engine.origin; $('eng').classList.remove('pic'); $('engimg').src = s.engine.origin + '/favicon.ico'; }
+    }
     // toolbar button visibility
     const tb = s.toolbarButtons || {};
     $('back').classList.toggle('tb-hidden', tb.back === false);

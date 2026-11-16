@@ -435,6 +435,7 @@ function stateFor() {
     wheelScrollTabs: S().tabs.wheelScrolls !== false,
     clickTabScrollsTop: S().tabs.clickTabScrollsTop !== false,
     toolbarButtons: S().appearance.toolbar || {},
+    engine: (() => { const e = engineById(S().search.default) || {}; let host = ''; try { host = new URL(e.url.replace('%s', 'x')).origin; } catch { /* none */ } return { name: e.name || '', origin: host }; })(),
     detectedLang: (t && t.detectedLang) || '',
     systemLang: app.getLocale().split('-')[0].toLowerCase(),
     translateBarVisible: !!(t && t.detectedLang && t.detectedLang !== app.getLocale().split('-')[0].toLowerCase() && !cur.translateDismissed),
@@ -2063,6 +2064,17 @@ function setupIpc() {
   on('tab:switch', (_e, id) => switchTab(id));
   on('tab:close', (_e, id) => closeTab(id));
   on('tab:menu', (_e, id) => tabMenu(id));
+  on('engine:menu', () => {
+    const m = new Menu(); const def = engineById(S().search.default);
+    m.append(new MenuItem({ label: 'Search with…', enabled: false }));
+    for (const e of S().search.engines) {
+      m.append(new MenuItem({ label: e.name + (e.nick ? '   (' + e.nick + ')' : ''), type: 'radio', checked: e.id === def.id,
+        click: () => { store.set('search.default', e.id); pushState(); } }));
+    }
+    m.append(new MenuItem({ type: 'separator' }));
+    m.append(new MenuItem({ label: 'Manage search engines…', click: () => newTab('my://settings#search') }));
+    m.popup({ window: cur.win });
+  });
   on('tab:newtab-menu', () => {
     const m = new Menu();
     m.append(new MenuItem({ label: 'New tab', click: () => newTab() }));
