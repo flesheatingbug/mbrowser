@@ -124,6 +124,18 @@
   body.dragging-tiles .tile:hover { transform: none; }
   .tbtn.drop { background: color-mix(in srgb, var(--accent) 35%, transparent); outline: 2px dashed var(--accent); }
 
+  #modal.bar { align-items: flex-end; padding-bottom: 12vh; }
+  #modal.bar #mbox { width: min(690px, 92vw); padding: 14px 16px; border-radius: 8px; }
+  .addbar { display: flex; gap: 10px; }
+  .addbar input { flex: 1; min-width: 0; padding: 9px 12px; border-radius: 6px; }
+  .addbar button { padding: 0 18px; border-radius: 6px; }
+  .addbar button:disabled { opacity: .5; cursor: default; }
+  #fsearch { width: 170px; padding: 6px 10px 6px 30px; border-radius: 16px; font-size: 13px;
+    background: var(--bg) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23999' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='M20 20l-4-4'/%3E%3C/svg%3E") 9px center / 15px no-repeat; }
+  #fpop { align-items: flex-end; padding-bottom: 14vh; }
+  #fbox { width: min(1010px, 94vw); border-radius: 6px; padding: 16px 20px 22px; }
+  #ftitle { text-align: left; font-weight: 500; font-size: 15px; }
+
   /* context menu */
   #ctx { position: fixed; background: var(--active); border: 1px solid var(--line); border-radius: 10px;
     padding: 4px 0; z-index: 500; min-width: 190px; box-shadow: 0 4px 20px rgba(0,0,0,.4); display: none; }
@@ -204,7 +216,7 @@
   <div class="grid" id="grid"></div>
 </div>
 <div id="fpop"><div id="fbox">
-  <div id="fhead"><button id="fback" title="Back">‹</button><div id="ftitle" title="Double-click to rename"></div><button id="fclose" title="Close">✕</button></div>
+  <div id="fhead"><button id="fback" title="Back">‹</button><div id="ftitle" title="Double-click to rename"></div><input id="fsearch" placeholder="Search" autocomplete="off" spellcheck="false"><button id="fclose" title="Close">✕</button></div>
   <div class="grid" id="fgrid"></div>
 </div></div>
 <div id="panel"></div>
@@ -358,6 +370,26 @@ function showModal(kind, data) {
   cancel.onclick = hideModal;
   btns.append(ok, cancel);
 
+  if (kind === 'dial' && !data.d) {
+    // compact Opera-style bar: just an address
+    modal.classList.add('bar');
+    const row = document.createElement('div'); row.className = 'addbar';
+    const fu = inp('text', '', 'Type address to add to your Speed Dial'); fu.spellcheck = false;
+    const go = document.createElement('button'); go.type = 'submit'; go.textContent = 'Add'; go.disabled = true;
+    fu.oninput = () => { go.disabled = !fu.value.trim(); };
+    row.append(fu, go); form.append(row);
+    form.onsubmit = async (e) => {
+      e.preventDefault();
+      let url = fu.value.trim(); if (!url) return;
+      if (!isWeb(url)) url = 'https://' + url;
+      let title = url; try { title = new URL(url).hostname.replace(/^www\./, ''); } catch { /* keep */ }
+      currentItems().push({ title, url });
+      hideModal(); await save(); render();
+    };
+    mbox.append(form); modal.classList.add('on');
+    setTimeout(() => fu.focus(), 30);
+    return;
+  }
   if (kind === 'dial') {
     h3.textContent = data.d ? 'Edit speed dial' : 'Add speed dial';
     const ftitle = mr('Title', inp('text', data.d ? data.d.title : '', 'Title'));
@@ -420,7 +452,7 @@ function showModal(kind, data) {
   mbox.append(h3, form);
   modal.classList.add('on');
 }
-function hideModal() { modal.classList.remove('on'); }
+function hideModal() { modal.classList.remove('on', 'bar'); }
 modal.addEventListener('click', (e) => { if (e.target === modal) hideModal(); });
 
 // --- folder navigation ---
@@ -649,14 +681,22 @@ function renderFolderPopup() {
   const pop = $('fpop');
   if (!folderPath.length) { pop.classList.remove('on'); $('fgrid').textContent = ''; return; }
   const cur = folderPath[folderPath.length - 1];
+  const popWasOpen = pop.classList.contains('on');
   pop.classList.add('on');
   const back = $('fback');
-  back.style.visibility = folderPath.length > 1 ? 'visible' : 'hidden';
+  back.style.display = folderPath.length > 1 ? '' : 'none'; if (!popWasOpen) $('fsearch').value = '';
   $('ftitle').textContent = folderPath.map((f) => f.title || 'Folder').join(' › ');
   cur.items = cur.items || [];
   fillGrid($('fgrid'), cur.items, true);
 }
 $('fpop').addEventListener('pointerdown', (e) => { if (e.target === $('fpop') && !dragSess) { folderPath = []; render(); } });
+$('fsearch').oninput = () => {
+  const q = $('fsearch').value.trim().toLowerCase();
+  [...$('fgrid').children].forEach((t) => {
+    if (t.classList.contains('add')) { t.style.display = q ? 'none' : ''; return; }
+    const d = t._d || {}; t.style.display = !q || ((d.title || '') + ' ' + (d.url || '')).toLowerCase().includes(q) ? '' : 'none';
+  });
+};
 $('fclose').onclick = () => { folderPath = []; render(); };
 $('fback').onclick = () => { folderPath = folderPath.slice(0, -1); render(); };
 $('ftitle').ondblclick = () => { const cur = folderPath[folderPath.length - 1]; if (cur) showModal('folder', { d: cur, self: true }); };
