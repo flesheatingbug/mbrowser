@@ -1727,9 +1727,13 @@ async function syncAll() {
   try {
     const device = S().sync.device || os.hostname();
 
+    // bin items from before the bin counted as a delete: stamp them once so the server accepts the change
+    let stamped = false;
+    for (const b of bookmarks) if (b.recycleBin && !b.deleted && !b.binSent) { b.updated = Date.now(); b.binSent = true; stamped = true; }
+    if (stamped) save('bookmarks.json', bookmarks);
     const cleanB = bookmarks
       .filter((b) => isWeb(b.url) && b.url.length <= 8000)
-      .map((b) => ({ url: b.url, title: String(b.title || '').slice(0, 900), folder: String(b.folder || '').slice(0, 300), added: Math.round(b.added || 0), updated: Math.round(b.updated || 0), deleted: !!b.deleted }));
+      .map((b) => ({ url: b.url, title: String(b.title || '').slice(0, 900), folder: String(b.folder || '').slice(0, 300), added: Math.round(b.added || 0), updated: Math.round(b.updated || 0), deleted: !!b.deleted || !!b.recycleBin }));   // the recycle bin is a delete as far as the other devices are concerned
     let r = await call('POST', '/api/bookmarks', { since: syncState.bRev, items: cleanB });
     mergeBookmarks(r.items);
     syncState.bRev = r.rev;
@@ -2845,7 +2849,7 @@ function setupIpc() {
   }, BOTH);
   handle('bookmarks:remove', (_e, urls) => {
     const set = new Set(Array.isArray(urls) ? urls : []), now = Date.now();
-    for (const b of bookmarks) if (!b.deleted && !b.recycleBin && set.has(b.url)) { b.recycleBin = true; b.binTime = now; }
+    for (const b of bookmarks) if (!b.deleted && !b.recycleBin && set.has(b.url)) { b.recycleBin = true; b.binTime = now; b.updated = now; }
     touchBookmarks();
     return { ok: true };
   }, BOTH);
@@ -2854,7 +2858,7 @@ function setupIpc() {
   }), BOTH);
   handle('bookmarks:restoreFromBin', (_e, urls) => {
     const set = new Set(Array.isArray(urls) ? urls : []);
-    for (const b of bookmarks) if (b.recycleBin && set.has(b.url)) { delete b.recycleBin; delete b.binTime; }
+    for (const b of bookmarks) if (b.recycleBin && set.has(b.url)) { delete b.recycleBin; delete b.binTime; b.updated = Date.now(); }
     touchBookmarks();
     return { ok: true };
   }, BOTH);
@@ -2894,7 +2898,7 @@ function setupIpc() {
     const parent = path.includes(SEP) ? path.slice(0, path.lastIndexOf(SEP)) : '';
     for (const b of bookmarks) {
       if (b.deleted || !b.folder || !inFolder(b.folder, path)) continue;
-      if (mode === 'delete') { b.recycleBin = true; b.binTime = now; }
+      if (mode === 'delete') { b.recycleBin = true; b.binTime = now; b.updated = now; }
       else {
         const rel = b.folder === path ? '' : b.folder.slice(path.length + SEP.length);
         b.folder = [parent, rel].filter(Boolean).join(SEP);
@@ -2908,7 +2912,7 @@ function setupIpc() {
   }, BOTH);
   handle('bookmark:remove', (_e, url) => {
     const b = bookmarks.find((x) => x.url === url);
-    if (b) { b.recycleBin = true; b.binTime = Date.now(); save('bookmarks.json', bookmarks); pushState(); syncSoon(); }
+    if (b) { b.recycleBin = true; b.binTime = Date.now(); b.updated = b.binTime; save('bookmarks.json', bookmarks); pushState(); syncSoon(); }
     return true;
   }, BOTH);
   // bookmark popup: save (add or update folder) and add to speed dial
