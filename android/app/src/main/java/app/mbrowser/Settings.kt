@@ -49,8 +49,8 @@ object Settings {
 
     @Synchronized fun updated(key: String): Long = groups.optJSONObject(key)?.optLong("updated") ?: 0L
 
-    /** A copy of the group's value, with any missing top-level keys filled in from the defaults. */
-    @Synchronized fun value(key: String): JSONObject {
+    /** The group as stored and synced (the speed dial tiles are bookmarks, so "startPage" has no tiles in it). */
+    @Synchronized fun raw(key: String): JSONObject {
         val d = defaults(key)
         val v = groups.optJSONObject(key)?.optJSONObject("value") ?: return d
         val out = JSONObject(v.toString())
@@ -58,13 +58,23 @@ object Settings {
         return out
     }
 
+    /** A copy of the group's value, with any missing top-level keys filled in from the defaults. "startPage" also carries the tiles. */
+    @Synchronized fun value(key: String): JSONObject {
+        val out = raw(key)
+        if (key == "startPage") Dials.attach(out)
+        return out
+    }
+
     @Synchronized fun set(key: String, value: JSONObject) {
-        groups.put(key, JSONObject().put("updated", System.currentTimeMillis()).put("value", value))
+        val v = if (key == "startPage") Dials.detach(value) else value
+        groups.put(key, JSONObject().put("updated", System.currentTimeMillis()).put("value", v))
         save()
     }
 
     @Synchronized fun applyRemote(key: String, value: JSONObject, updated: Long) {
-        groups.put(key, JSONObject().put("updated", updated).put("value", JSONObject(value.toString())))
+        val v = JSONObject(value.toString())
+        val keep = if (key == "startPage") Dials.mergeLegacy(v) else v
+        groups.put(key, JSONObject().put("updated", updated).put("value", keep))
         save()
     }
 
@@ -108,8 +118,8 @@ object Settings {
         defaultEngine().url.replace("%s", java.net.URLEncoder.encode(query, "UTF-8"))
 
     // ---- speed dial ----
-    fun thumbnails(): Boolean = value("startPage").optBoolean("thumbnails", true)
-    fun setThumbnails(on: Boolean) { set("startPage", value("startPage").put("thumbnails", on)) }
+    fun thumbnails(): Boolean = raw("startPage").optBoolean("thumbnails", true)
+    fun setThumbnails(on: Boolean) { set("startPage", raw("startPage").put("thumbnails", on)) }
 
     fun dialHosts(): Set<String> {
         val out = HashSet<String>()

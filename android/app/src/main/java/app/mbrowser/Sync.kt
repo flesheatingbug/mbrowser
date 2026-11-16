@@ -126,7 +126,7 @@ object Sync {
             for (k in rgroups.keys()) if (k !in Settings.MANAGED) merged.put(k, rgroups.get(k))
             for (key in Settings.MANAGED) {
                 val lu = Settings.updated(key)
-                val local = JSONObject().put("updated", lu).put("value", Settings.value(key))
+                val local = JSONObject().put("updated", lu).put("value", Settings.raw(key))
                 val r = rgroups.optJSONObject(key)
                 val valid = r != null && r.has("updated") && r.optJSONObject("value") != null
                 if (!valid) { merged.put(key, local); push = true; continue }

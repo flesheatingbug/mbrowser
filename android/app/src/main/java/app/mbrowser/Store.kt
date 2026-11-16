@@ -225,6 +225,8 @@ object Store {
     // ---- bookmark manager helpers ----
     fun cleanPath(p: String): String = p.split('/').map { it.trim() }.filter { it.isNotEmpty() }.joinToString("/")
 
+    fun ready(): Boolean = loaded
+
     @Synchronized fun liveBookmarks(): List<Bookmark> = bookmarks.values.filter { !it.deleted }.map { it.copy() }
 
     /** Deleted bookmarks stay restorable for 30 days. */
@@ -289,7 +291,7 @@ object Store {
             val upd = o.optLong("updated")
             val cur = bookmarks[url]
             if (cur == null || upd > cur.updated) {
-                bookmarks[url] = Bookmark(url, o.optString("title"), o.optString("folder"),
+                bookmarks[url] = Bookmark(url, o.optString("title"), cleanPath(o.optString("folder")),
                     o.optLong("added"), upd, o.optBoolean("deleted"), false)
             }
         }

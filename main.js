@@ -1690,6 +1690,7 @@ async function call(method, p, body, opts = {}) {
 function mergeBookmarks(remote) {
   for (const r of remote) {
     if (!isWeb(r.url)) continue;
+    r.folder = normFolder(r.folder);   // the phone writes "A/B", the desktop keeps "A / B"
     const i = bookmarks.findIndex((b) => b.url === r.url);
     if (i < 0) bookmarks.push(r);
     else if (r.updated > bookmarks[i].updated) bookmarks[i] = r;
