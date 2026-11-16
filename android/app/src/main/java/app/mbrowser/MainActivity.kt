@@ -962,6 +962,19 @@ class MainActivity : BaseActivity() {
                     if (ic != null) { icon.setImageBitmap(ic); icon.imageTintList = null }
                     else { icon.setImageResource(R.drawable.ic_globe); icon.imageTintList = tcl(R.attr.mbMuted) }
                     v.setOnClickListener { hideSwitcher(); switchTo(real) }
+                    v.setOnLongClickListener {
+                        val pm = android.widget.PopupMenu(this@MainActivity, v)
+                        if (!t.home && t.url.isNotEmpty()) pm.menu.add(0, 1, 0, "Duplicate tab")
+                        pm.menu.add(0, 2, 1, "Close tab")
+                        pm.setOnMenuItemClickListener { mi ->
+                            when (mi.itemId) {
+                                1 -> { val u = t.url; val pv = t.priv; hideSwitcher(); newTab(u, pv) }
+                                2 -> { val wasLast = tabs.size <= 1; closeTab(real); if (wasLast) hideSwitcher() else refreshSwitcher() }
+                            }
+                            true
+                        }
+                        pm.show(); true
+                    }
                     v.findViewById<View>(R.id.close).setOnClickListener {
                         val wasLast = tabs.size <= 1
                         closeTab(real)
