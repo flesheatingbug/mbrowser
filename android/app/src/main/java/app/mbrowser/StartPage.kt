@@ -57,7 +57,7 @@ class StartPage(
     private fun scheduleRefresh() {
         if (refreshPending) return
         refreshPending = true
-        root.postDelayed({ refreshPending = false; if (!reorder) grid.adapter?.notifyDataSetChanged() }, 400)
+        root.postDelayed({ refreshPending = false; if (!reorder) { grid.adapter?.notifyDataSetChanged(); popupGrid?.adapter?.notifyDataSetChanged() } }, 400)
     }
 
     /** Swipe left: next speed dial (on the last one, offers a new one). Swipe right: back to the previous one. */
@@ -107,36 +107,37 @@ class StartPage(
         root.findViewById<View>(R.id.dialBar).setBackgroundColor(Color.TRANSPARENT)
         root.findViewById<ImageButton>(R.id.btnTune).setOnClickListener { tuneMenu() }
         crumb.setOnClickListener { up() }
-        val helper = ItemTouchHelper(object : ItemTouchHelper.Callback() {
-            override fun isLongPressDragEnabled() = reorder
-            override fun isItemViewSwipeEnabled() = false
-            override fun getMovementFlags(rv: RecyclerView, vh: RecyclerView.ViewHolder): Int =
-                if (reorder && vh is Adapter.CardVH) makeMovementFlags(
-                    ItemTouchHelper.UP or ItemTouchHelper.DOWN or ItemTouchHelper.LEFT or ItemTouchHelper.RIGHT, 0) else 0
-            override fun canDropOver(rv: RecyclerView, cur: RecyclerView.ViewHolder, target: RecyclerView.ViewHolder) = target is Adapter.CardVH
-            override fun onMove(rv: RecyclerView, vh: RecyclerView.ViewHolder, target: RecyclerView.ViewHolder): Boolean {
-                if (target !is Adapter.CardVH) return false
-                (rv.adapter as? Adapter)?.move(vh.bindingAdapterPosition, target.bindingAdapterPosition); return true
-            }
-            override fun onSwiped(vh: RecyclerView.ViewHolder, direction: Int) {}
-            override fun onSelectedChanged(vh: RecyclerView.ViewHolder?, state: Int) {
-                super.onSelectedChanged(vh, state)
-                if (state == ItemTouchHelper.ACTION_STATE_DRAG) vh?.itemView?.alpha = 0.7f
-            }
-            override fun clearView(rv: RecyclerView, vh: RecyclerView.ViewHolder) {
-                super.clearView(rv, vh)
-                vh.itemView.alpha = 1f
-                (rv.adapter as? Adapter)?.let { saveOrder(it) }
-            }
-        })
-        helper.attachToRecyclerView(grid)
+        makeHelper().attachToRecyclerView(grid)
     }
+
+    private fun makeHelper(): ItemTouchHelper = ItemTouchHelper(object : ItemTouchHelper.Callback() {
+        override fun isLongPressDragEnabled() = reorder
+        override fun isItemViewSwipeEnabled() = false
+        override fun getMovementFlags(rv: RecyclerView, vh: RecyclerView.ViewHolder): Int =
+            if (reorder && vh is Adapter.CardVH) makeMovementFlags(
+                ItemTouchHelper.UP or ItemTouchHelper.DOWN or ItemTouchHelper.LEFT or ItemTouchHelper.RIGHT, 0) else 0
+        override fun canDropOver(rv: RecyclerView, cur: RecyclerView.ViewHolder, target: RecyclerView.ViewHolder) = target is Adapter.CardVH
+        override fun onMove(rv: RecyclerView, vh: RecyclerView.ViewHolder, target: RecyclerView.ViewHolder): Boolean {
+            if (target !is Adapter.CardVH) return false
+            (rv.adapter as? Adapter)?.move(vh.bindingAdapterPosition, target.bindingAdapterPosition); return true
+        }
+        override fun onSwiped(vh: RecyclerView.ViewHolder, direction: Int) {}
+        override fun onSelectedChanged(vh: RecyclerView.ViewHolder?, state: Int) {
+            super.onSelectedChanged(vh, state)
+            if (state == ItemTouchHelper.ACTION_STATE_DRAG) vh?.itemView?.alpha = 0.7f
+        }
+        override fun clearView(rv: RecyclerView, vh: RecyclerView.ViewHolder) {
+            super.clearView(rv, vh)
+            vh.itemView.alpha = 1f
+            (rv.adapter as? Adapter)?.let { saveOrder(it) }
+        }
+    })
 
     /** Writes the tiles' new order back to the dial list (the indexes change, so the grid is rebuilt afterwards). */
     private fun saveOrder(a: Adapter) {
         val order = a.items.filterIsInstance<Dial>().map { it.index }
         if (order == order.sorted()) return
-        val p = ArrayList(path)
+        val p = ArrayList(a.p)
         edit { sp ->
             val arr = listAt(sp, a.groupId, p) ?: return@edit
             val objs = (0 until arr.length()).map { arr.get(it) }
@@ -147,7 +148,7 @@ class StartPage(
         grid.post { refresh() }
     }
 
-    fun resetPath() { path.clear() }
+    fun resetPath() { path.clear(); popup?.let { it.setOnDismissListener(null); it.dismiss() }; popup = null; popupGrid = null }
 
     /** Goes up one folder. Returns false when already at the top. */
     fun up(): Boolean {
@@ -234,37 +235,24 @@ class StartPage(
             tabsRow.addView(tv)
         }
 
-        if (path.isEmpty()) crumb.visibility = View.GONE
-        else {
-            val names = ArrayList<String>()
-            names.add(group(sp, cur)?.optString("name") ?: "Speed Dial")
-            var arr = listAt(sp, cur, emptyList())
-            for (i in path) {
-                val o = arr?.optJSONObject(i)
-                names.add(o?.optString("title") ?: "")
-                arr = o?.optJSONArray("dials")
-            }
-            crumb.setTextColor(if (wp) Color.WHITE else act.tc(R.attr.mbAccent))
-            crumb.text = "‹  " + names.joinToString("  ›  ")
-            crumb.visibility = View.VISIBLE
-        }
+        crumb.visibility = View.GONE
 
-        val items = ArrayList<Any>(itemsOf(sp, cur, path))
+        val items = ArrayList<Any>(itemsOf(sp, cur, emptyList()))
         if (prefs.showAdd || reorder) items.add(ADD)
         val cols = prefs.dialCols.coerceIn(2, 5)
         grid.layoutManager = GridLayoutManager(act, cols)
-        grid.adapter = Adapter(items, cols, cur, sp.optBoolean("thumbnails", true))
+        grid.adapter = Adapter(items, cols, cur, sp.optBoolean("thumbnails", true), emptyList())
+        updatePopup(sp, cur)
     }
 
     // ---------- actions ----------
-    private fun addMenu(groupId: String) {
+    private fun addMenu(groupId: String, p: List<Int>) {
         AlertDialog.Builder(act).setItems(arrayOf("Add a site", "Add a folder")) { _, i ->
-            if (i == 0) addItem(groupId) else addFolder(groupId)
+            if (i == 0) addItem(groupId, p) else addFolder(groupId, p)
         }.show()
     }
 
-    private fun addItem(groupId: String) {
-        val p = ArrayList(path)
+    private fun addItem(groupId: String, p: List<Int>) {
         promptFields(act, "Add to speed dial", listOf("Address", "Title (optional)"), listOf("https://", ""), "Add") { v ->
             var url = v[0]
             if (url.isEmpty() || url == "https://") return@promptFields
@@ -274,8 +262,7 @@ class StartPage(
         }
     }
 
-    private fun addFolder(groupId: String) {
-        val p = ArrayList(path)
+    private fun addFolder(groupId: String, p: List<Int>) {
         promptFields(act, "New folder", listOf("Folder name"), listOf(""), "Create") { v ->
             if (v[0].isEmpty()) return@promptFields
             edit { sp -> listAt(sp, groupId, p)?.put(JSONObject().put("title", v[0]).put("folder", true).put("dials", JSONArray())) }
@@ -288,13 +275,12 @@ class StartPage(
         android.widget.Toast.makeText(act, "Touch and hold a tile, then drag it. Tap Done when finished.", android.widget.Toast.LENGTH_LONG).show()
     }
 
-    private fun itemMenu(d: Dial, groupId: String) {
-        val p = ArrayList(path)
+    private fun itemMenu(d: Dial, groupId: String, p: List<Int>) {
         val opts = if (d.folder) arrayOf("Open", "Rename", "Move to…", "Delete folder", "Rearrange")
         else arrayOf("Open in new tab", "Edit", "Move to…", "Remove", "Rearrange")
         AlertDialog.Builder(act).setTitle(d.title.ifBlank { d.url }).setItems(opts) { _, i ->
             when (i) {
-                0 -> if (d.folder) { path.add(d.index); refresh() } else open(d.url, true)
+                0 -> if (d.folder) openFolder(p + d.index) else open(d.url, true)
                 1 -> if (d.folder) promptFields(act, "Rename folder", listOf("Folder name"), listOf(d.title), "Rename") { v ->
                     if (v[0].isNotEmpty()) { edit { sp -> listAt(sp, groupId, p)?.optJSONObject(d.index)?.put("title", v[0]) }; refresh() }
                 } else promptFields(act, "Edit", listOf("Address", "Title"), listOf(d.url, d.title)) { v ->
@@ -393,7 +379,7 @@ class StartPage(
 
         title(curName)
         section("Add")
-        row(R.drawable.ic_folder, "New folder here") { addFolder(cur) }
+        row(R.drawable.ic_folder, "New folder here") { addFolder(cur, emptyList()) }
         row(R.drawable.ic_add, "New dial page") { newDial() }
 
         section("This dial")
@@ -432,8 +418,63 @@ class StartPage(
         dlg.show()
     }
 
+
+    // ---------- folder popup ----------
+    private var popup: android.app.Dialog? = null
+    private var popupGrid: RecyclerView? = null
+    private var popupTitle: TextView? = null
+    private var popupBack: TextView? = null
+
+    private fun openFolder(p: List<Int>) { path.clear(); path.addAll(p); refresh() }
+
+    private fun buildPopup() {
+        val dlg = android.app.Dialog(act)
+        dlg.requestWindowFeature(android.view.Window.FEATURE_NO_TITLE)
+        val card = LinearLayout(act); card.orientation = LinearLayout.VERTICAL
+        val bg = GradientDrawable(); bg.cornerRadius = act.dp(24).toFloat(); bg.setColor(act.tc(R.attr.mbCard)); bg.setStroke(act.dp(1), act.tc(R.attr.mbLine))
+        card.background = bg
+        card.setPadding(act.dp(8), act.dp(8), act.dp(8), act.dp(12))
+        val head = LinearLayout(act); head.orientation = LinearLayout.HORIZONTAL; head.gravity = Gravity.CENTER_VERTICAL
+        val back = TextView(act); back.text = "‹"; back.textSize = 26f; back.setTextColor(act.tc(R.attr.mbText)); back.setPadding(act.dp(12), 0, act.dp(8), act.dp(4))
+        back.setOnClickListener { up() }
+        val title = TextView(act); title.textSize = 18f; title.setTypeface(null, android.graphics.Typeface.BOLD); title.setTextColor(act.tc(R.attr.mbText))
+        title.setPadding(act.dp(8), act.dp(10), act.dp(8), act.dp(10)); title.maxLines = 1; title.ellipsize = android.text.TextUtils.TruncateAt.END
+        val close = TextView(act); close.text = "✕"; close.textSize = 18f; close.setTextColor(act.tc(R.attr.mbMuted)); close.setPadding(act.dp(12), act.dp(6), act.dp(12), act.dp(6))
+        close.setOnClickListener { dlg.dismiss() }
+        head.addView(back); head.addView(title, LinearLayout.LayoutParams(0, -2, 1f)); head.addView(close)
+        val rv = RecyclerView(act)
+        rv.overScrollMode = View.OVER_SCROLL_NEVER
+        makeHelper().attachToRecyclerView(rv)
+        card.addView(head, LinearLayout.LayoutParams(-1, -2))
+        card.addView(rv, LinearLayout.LayoutParams(-1, -2))
+        dlg.setContentView(card)
+        dlg.window?.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
+        dlg.window?.setLayout((act.resources.displayMetrics.widthPixels * 0.94f).toInt(), android.view.ViewGroup.LayoutParams.WRAP_CONTENT)
+        dlg.window?.setGravity(Gravity.CENTER)
+        dlg.setOnDismissListener { popup = null; popupGrid = null; if (path.isNotEmpty()) { path.clear(); refresh() } }
+        popup = dlg; popupGrid = rv; popupTitle = title; popupBack = back
+        dlg.show()
+    }
+
+    private fun updatePopup(sp: JSONObject, cur: String) {
+        if (path.isEmpty()) {
+            popup?.let { it.setOnDismissListener(null); it.dismiss() }
+            popup = null; popupGrid = null
+            return
+        }
+        if (popup == null) buildPopup()
+        val folder = listAt(sp, cur, path.dropLast(1))?.optJSONObject(path.last())
+        popupTitle?.text = folder?.optString("title")?.ifBlank { "Folder" } ?: "Folder"
+        popupBack?.visibility = if (path.size > 1) View.VISIBLE else View.GONE
+        val items = ArrayList<Any>(itemsOf(sp, cur, path))
+        if (prefs.showAdd || reorder) items.add(ADD)
+        val cols = prefs.dialCols.coerceIn(2, 5)
+        popupGrid?.layoutManager = GridLayoutManager(act, cols)
+        popupGrid?.adapter = Adapter(items, cols, cur, sp.optBoolean("thumbnails", true), ArrayList(path))
+    }
+
     // ---------- grid ----------
-    private inner class Adapter(val items: MutableList<Any>, val cols: Int, val groupId: String, val thumbsOn: Boolean) :
+    private inner class Adapter(val items: MutableList<Any>, val cols: Int, val groupId: String, val thumbsOn: Boolean, val p: List<Int>) :
         RecyclerView.Adapter<RecyclerView.ViewHolder>() {
         private val inflater = LayoutInflater.from(act)
 
@@ -527,7 +568,7 @@ class StartPage(
                     pill.setPadding(act.dp(22), act.dp(14), act.dp(22), act.dp(14))
                 }
                 if (reorder) { pill.text = "Done"; pill.setOnClickListener { reorder = false; refresh() } }
-                else { if (!plus) pill.text = "Add"; pill.setOnClickListener { addMenu(groupId) } }
+                else { if (!plus) pill.text = "Add"; pill.setOnClickListener { addMenu(groupId, p) } }
                 return
             }
             h as CardVH
@@ -542,17 +583,17 @@ class StartPage(
             look(h, icons, size, th)
 
             if (d.folder && icons) {
-                val kids = itemsOf(Settings.value("startPage"), groupId, path + d.index).filter { !it.folder }.map { it.url }
+                val kids = itemsOf(Settings.value("startPage"), groupId, p + d.index).filter { !it.folder }.map { it.url }
                 kids.take(4).forEach { DialIcons.ensure(act, it) { scheduleRefresh() } }
                 h.letter.visibility = View.GONE
                 h.thumb.visibility = View.VISIBLE
                 h.thumb.scaleType = ImageView.ScaleType.FIT_XY
                 h.thumb.setPadding(0, 0, 0, 0); h.thumb.background = null; h.thumb.imageTintList = null
                 h.thumb.setImageBitmap(DialIcons.folder(act, kids, size, if (wp) Color.argb(0x73, 0, 0, 0) else act.tc(R.attr.mbPill)))
-                h.title.text = if (d.count > 0) "$label (${d.count})" else label
+                h.title.text = label
                 h.row.visibility = View.VISIBLE
-                h.itemView.setOnClickListener { path.add(d.index); refresh() }
-                h.itemView.setOnLongClickListener { itemMenu(d, groupId); true }
+                h.itemView.setOnClickListener { openFolder(p + d.index) }
+                h.itemView.setOnLongClickListener { itemMenu(d, groupId, p); true }
                 return
             }
             if (d.folder) {
@@ -567,10 +608,10 @@ class StartPage(
                 g.setColor(act.tc(R.attr.mbPill))
                 h.thumb.background = g
                 h.icon.setImageResource(R.drawable.ic_folder); h.icon.imageTintList = act.tcl(R.attr.mbAccent)
-                h.title.text = if (d.count > 0) "$label (${d.count})" else label
+                h.title.text = label
                 h.row.visibility = View.VISIBLE   // folders always show their name
-                h.itemView.setOnClickListener { path.add(d.index); refresh() }
-                h.itemView.setOnLongClickListener { itemMenu(d, groupId); true }
+                h.itemView.setOnClickListener { openFolder(p + d.index) }
+                h.itemView.setOnLongClickListener { itemMenu(d, groupId, p); true }
                 return
             }
 
@@ -597,7 +638,7 @@ class StartPage(
                 h.title.text = label
                 h.row.visibility = if (prefs.showTitles) View.VISIBLE else View.GONE
                 h.itemView.setOnClickListener { open(d.url, false) }
-                h.itemView.setOnLongClickListener { itemMenu(d, groupId); true }
+                h.itemView.setOnLongClickListener { itemMenu(d, groupId, p); true }
                 return
             }
 
@@ -619,7 +660,7 @@ class StartPage(
             h.row.visibility = if (prefs.showTitles) View.VISIBLE else View.GONE
 
             h.itemView.setOnClickListener { open(d.url, false) }
-            h.itemView.setOnLongClickListener { itemMenu(d, groupId); true }
+            h.itemView.setOnLongClickListener { itemMenu(d, groupId, p); true }
         }
     }
 }
