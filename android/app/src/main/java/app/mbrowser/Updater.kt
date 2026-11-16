@@ -43,7 +43,7 @@ object Updater {
         val repo = prefs.updateRepo.trim()
         if (!Regex("^[\\w.-]+/[\\w.-]+$").matches(repo)) return Info(0, "", "", "", "The update source must look like owner/repository.")
         return try {
-            val c = open("https://api.github.com/repos/$repo/releases/tags/latest-apk", prefs.updateToken, "application/vnd.github+json")
+            val c = open("https://api.github.com/repos/$repo/releases/tags/${ctx.getString(R.string.update_tag)}", prefs.updateToken, "application/vnd.github+json")
             val code = c.responseCode
             if (code == 404 || code == 401 || code == 403) {
                 return Info(0, "", "", "", if (prefs.updateToken.isEmpty())

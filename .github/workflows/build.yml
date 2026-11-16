@@ -50,11 +50,11 @@ jobs:
 
       - name: Build (Linux)
         if: matrix.platform == 'linux'
-        run: npm run dist:linux
+        run: npm run dist:linux -- ${{ github.ref_name == 'next' && '-c.appId=local.mbrowser.pre "-c.productName=mbrowser Pre" -c.extraMetadata.mbChannel=pre -c.publish.url=https://github.com/flesheatingbug/mbrowser/releases/download/pre-desktop/' || '' }}
 
       - name: Build (Windows)
         if: matrix.platform == 'windows'
-        run: npm run dist:win
+        run: npm run dist:win -- ${{ github.ref_name == 'next' && '-c.appId=local.mbrowser.pre "-c.productName=mbrowser Pre" -c.extraMetadata.mbChannel=pre -c.publish.url=https://github.com/flesheatingbug/mbrowser/releases/download/pre-desktop/' || '' }}
         env:
           # prevents winCodeSign from requiring Developer Mode on the CI runner
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
