@@ -16,7 +16,7 @@
     "electron-updater": "^6.3.0"
   },
   "devDependencies": {
-    "electron": "^33.0.0",
+    "electron": "44.11.2",
     "electron-builder": "^25.0.0"
   },
   "build": {
@@ -68,6 +68,6 @@
     ]
   },
   "allowScripts": {
-    "electron@33.4.11": true
+    "electron@44.11.2": true
   }
 }
