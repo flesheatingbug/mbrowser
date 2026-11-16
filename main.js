@@ -1344,10 +1344,47 @@ function showContextMenu(tab, params) {
     add('Add Link to Speed Dial', () => { const ok = addSpeedDial(params.linkURL, params.linkText); flashStatus(tab, ok ? 'Added to Speed Dial ✓' : 'Already in Speed Dial'); });
     sep();
   }
+  const mediaEl = (fn) => wc.executeJavaScript(`(()=>{const e=document.elementFromPoint(${params.x|0},${params.y|0});const v=e&&(e.closest&&e.closest('video,audio')||e);if(!v)return null;${fn}})()`, true).catch(() => null);
   if (params.mediaType === 'image' && params.srcURL) {
-    add('Open Image in New Tab', () => newTab(params.srcURL, { after: tab.id, private: tab.private }));
+    const src = params.srcURL;
+    add('Open Image in New Tab', () => newTab(src, { after: tab.id, private: tab.private }));
+    m.push({ label: 'Open Image in', submenu: [
+      { label: 'New Background Tab', click: () => newTab(src, { after: tab.id, private: tab.private, background: true }) },
+      { label: 'New Private Tab', click: () => newTab(src, { private: true }) },
+    ] });
+    sep();
+    add('Copy Image Address', () => clipboard.writeText(src));
     add('Copy Image', () => wc.copyImageAt(params.x, params.y));
-    add('Copy Image Address', () => clipboard.writeText(params.srcURL));
+    sep();
+    add('Save Image As…', () => { forceSaveAs = true; wc.downloadURL(src); });
+    sep();
+    add('Image Properties…', async () => {
+      const dim = await mediaEl('return {w:v.naturalWidth||v.width,h:v.naturalHeight||v.height,alt:v.alt||""}');
+      dialog.showMessageBox({ type: 'info', title: 'Image properties', message: 'Image properties',
+        detail: 'Address:\n' + (src.startsWith('data:') ? src.slice(0, 120) + '…' : src) + (dim ? '\n\nSize: ' + dim.w + ' × ' + dim.h + ' px' + (dim.alt ? '\nDescription: ' + dim.alt : '') : ''),
+        buttons: ['OK', 'Copy address'] }).then((r) => { if (r.response === 1) clipboard.writeText(src); });
+    });
+    sep();
+    if (/^https?:/i.test(src)) add('Search for Image', () => newTab('https://lens.google.com/uploadbyurl?url=' + encodeURIComponent(src), { after: tab.id, private: tab.private }));
+    sep();
+  }
+  if (params.mediaType === 'video' || params.mediaType === 'audio') {
+    const kind = params.mediaType === 'video' ? 'Video' : 'Audio';
+    const src = params.srcURL;
+    const f = params.mediaFlags || {};
+    add(f.isPaused ? 'Play' : 'Pause', () => mediaEl(f.isPaused ? 'v.play();return 1' : 'v.pause();return 1'));
+    add(f.isMuted ? 'Unmute' : 'Mute', () => mediaEl('v.muted=' + (!f.isMuted) + ';return 1'));
+    m.push({ label: 'Loop', type: 'checkbox', checked: !!f.isLooping, click: () => mediaEl('v.loop=' + (!f.isLooping) + ';return 1') });
+    if (f.canToggleControls) m.push({ label: 'Show Controls', type: 'checkbox', checked: !!f.isControlsVisible, click: () => mediaEl('v.controls=' + (!f.isControlsVisible) + ';return 1') });
+    if (params.mediaType === 'video') add('Picture in Picture', () => mediaEl('if(document.pictureInPictureElement){document.exitPictureInPicture()}else{v.requestPictureInPicture()}return 1'));
+    sep();
+    if (src && /^(https?|data):/i.test(src)) {
+      add('Open ' + kind + ' in New Tab', () => newTab(src, { after: tab.id, private: tab.private }));
+      add('Copy ' + kind + ' Address', () => clipboard.writeText(src));
+      add('Save ' + kind + ' As…', () => { forceSaveAs = true; wc.downloadURL(src); });
+    } else {
+      add('Copy Page Address', () => clipboard.writeText(wc.getURL()));
+    }
     sep();
   }
   if (params.isEditable) {
@@ -1508,7 +1545,9 @@ function uniquePath(dir, name) {
   return p;
 }
 
+let forceSaveAs = false; // set by the "Save … As" menu items: ask where to save this one download
 function onWillDownload(_e, item) {
+  const askThis = forceSaveAs; forceSaveAs = false;
   const ownerTab = _e.sender ? tabByWc.get(_e.sender.id) : null;
   const rec = {
     id: ++dlCounter, name: item.getFilename(), url: item.getURL(),
@@ -1517,7 +1556,7 @@ function onWillDownload(_e, item) {
   };
   downloads.unshift(rec);
   dlItems.set(rec.id, item);
-  if (!S().downloads.askWhere) {
+  if (!S().downloads.askWhere && !askThis) {
     const dir = downloadDir();
     fs.mkdirSync(dir, { recursive: true });
     rec.path = uniquePath(dir, rec.name);
