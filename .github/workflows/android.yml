@@ -2,7 +2,7 @@ name: Android APK
 
 on:
   push:
-    branches: [master]
+    branches: [master, next]
     paths: ['android/**', '.github/workflows/android.yml']
   workflow_dispatch:
 
@@ -53,6 +53,18 @@ jobs:
           NL=$'\n'
           CHANGES=$(git log $RANGE --pretty='format:- %s (%h)')
           retry() { for n in 1 2 3 4; do "$@" && return 0; echo "attempt $n failed, retrying"; sleep $((n*15)); done; return 1; }
+          # Branch "next" publishes a pre-release only; latest-apk and the numbered builds are not touched.
+          if [ "${GITHUB_REF_NAME}" = "next" ]; then
+            PRE_NOTES="Pre-release build ${GITHUB_RUN_NUMBER} from branch next, commit ${GITHUB_SHA::7}. Not used for in-app updates.${NL}${NL}**Changes**${NL}${CHANGES}"
+            if gh release view pre-apk >/dev/null 2>&1; then
+              retry gh release upload pre-apk mbrowser.apk --clobber
+              gh release edit pre-apk --notes "$PRE_NOTES" --title "mbrowser Android PRE-RELEASE (build ${GITHUB_RUN_NUMBER})" --prerelease --latest=false || true
+              git tag -f pre-apk "$GITHUB_SHA" && git push -f origin pre-apk || true
+            else
+              retry gh release create pre-apk mbrowser.apk --prerelease --latest=false --title "mbrowser Android PRE-RELEASE (build ${GITHUB_RUN_NUMBER})" --notes "$PRE_NOTES" --target "$GITHUB_SHA"
+            fi
+            exit 0
+          fi
           # update latest-apk in place so it never disappears while a build is publishing
           NOTES_TEXT="Build ${GITHUB_RUN_NUMBER}, commit ${GITHUB_SHA::7}. Install the .apk on your phone.${NL}${NL}**Changes in this build**${NL}${CHANGES}"
           if gh release view latest-apk >/dev/null 2>&1; then

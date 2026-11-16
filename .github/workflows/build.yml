@@ -7,7 +7,7 @@ name: Build mbrowser
 on:
   workflow_dispatch:
   push:
-    branches: [master, main]
+    branches: [master, main, next]
     tags: ['v*']
     paths:
       - '*.js'
@@ -95,6 +95,7 @@ jobs:
           BEFORE="${{ github.event.before }}"
           if [ -n "$BEFORE" ] && [ "$BEFORE" != "0000000000000000000000000000000000000000" ] && git cat-file -e "$BEFORE" 2>/dev/null; then RANGE="$BEFORE..HEAD"; else RANGE="-n 10"; fi
           CHANGES=$(git log $RANGE --pretty='format:- %s (%h)')
+          NL=$'\n'
 
           NOTES="**Download mbrowser Desktop** — Build ${{ github.run_number }}
 
@@ -107,6 +108,16 @@ jobs:
 
           **Changes in this build**
           ${CHANGES}"
+
+          # Branch "next" publishes a pre-release only; the latest-desktop release and its backups are not touched.
+          if [ "${{ github.ref_name }}" = "next" ]; then
+            gh release delete pre-desktop --yes --cleanup-tag 2>/dev/null || true
+            gh release create pre-desktop release-assets/mbrowser-linux.AppImage release-assets/mbrowser-windows-setup.exe \
+              --prerelease --latest=false --target "$GITHUB_SHA" \
+              --title "mbrowser Desktop PRE-RELEASE (build ${{ github.run_number }})" \
+              --notes "Pre-release build ${{ github.run_number }} from branch next, commit \`${GITHUB_SHA::7}\`. Not used for automatic updates.${NL}${NL}**Changes**${NL}${CHANGES}"
+            exit 0
+          fi
 
           # Inject releaseNotes into the electron-updater metadata YMLs so the
           # in-app update notification can show the changelog.
