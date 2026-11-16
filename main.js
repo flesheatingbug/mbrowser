@@ -1848,20 +1848,25 @@ function touchBookmarks() {
 const SD_ROOT = 'Speed Dials';
 const cleanName = (s, fb) => String(s || fb || '').replace(/\s*\/\s*/g, '-').trim().slice(0, 60) || fb;
 function dialGroups() { return (S().startPage.groups || []); }
-function groupPath(groups, gi) { return gi === 0 ? SD_ROOT : SD_ROOT + SEP + cleanName(groups[gi].name, 'Group ' + (gi + 1)); }
+function groupPath(groups, gi) { return SD_ROOT + SEP + cleanName(groups[gi].name, 'Group ' + (gi + 1)); }
 const liveBm = (b) => !b.deleted && !b.recycleBin;
 
 function readDials() {
   const groups = dialGroups();
-  const otherNames = new Set(groups.slice(1).map((g, i) => groupPath(groups, i + 1)));
+  const paths = groups.map((g, gi) => groupPath(groups, gi));
   const folders = allFolderPaths();
-  const build = (path) => {
-    const subs = folders.filter((f) => f.startsWith(path + SEP) && !f.slice(path.length + SEP.length).includes(SEP) && !otherNames.has(f));
-    const out = subs.map((f) => ({ type: 'folder', title: f.slice(path.length + SEP.length), items: build(f) }));
+  // anything sitting directly in "Speed Dials" (put there by hand or by another device) belongs to the first group
+  const build = (path, adopt) => {
+    const subs = folders.filter((f) => f.startsWith(path + SEP) && !f.slice(path.length + SEP.length).includes(SEP) && !(adopt && paths.includes(f)));
+    const out = subs.map((f) => ({ type: 'folder', title: f.slice(path.length + SEP.length), items: build(f, false) }));
     for (const b of bookmarks.filter((x) => liveBm(x) && x.folder === path).sort((a, c) => (a.added || 0) - (c.added || 0))) out.push({ title: b.title || hostOf(b.url), url: b.url });
     return out;
   };
-  return groups.map((g, gi) => ({ ...JSON.parse(JSON.stringify(g)), dials: build(groupPath(groups, gi)) }));
+  return groups.map((g, gi) => {
+    const dials = build(paths[gi], false);
+    if (gi === 0) dials.push(...build(SD_ROOT, true));
+    return { ...JSON.parse(JSON.stringify(g)), dials };
+  });
 }
 const dialUrls = () => { const out = []; const w = (a) => { for (const d of a || []) { if (d.type === 'folder') w(d.items); else out.push(d.url); } }; readDials().forEach((g) => w(g.dials)); return out; };
 
@@ -1879,7 +1884,7 @@ function writeDials(groups) {
     });
     order.push({ folder: base, urls });
   };
-  groups.forEach((g, gi) => { const p = groupPath(groups, gi); if (gi > 0) folders.add(p); walk(g.dials, p); });
+  groups.forEach((g, gi) => { const p = groupPath(groups, gi); folders.add(p); walk(g.dials, p); });
   const byUrl = new Map(bookmarks.map((b) => [b.url, b]));
   for (const [url, w] of want) {
     let b = byUrl.get(url);
@@ -1912,6 +1917,8 @@ const stripDials = (groups) => (groups || []).map((g) => { const c = JSON.parse(
 function migrateDials() {
   try {
     const groups = dialGroups();
+    // older layout: the first group was the "Speed Dials" folder itself; move its tiles into a sub-folder of their own
+    if (!groups.some((g) => Array.isArray(g.dials)) && groups.length && bookmarks.some((b) => liveBm(b) && b.folder === SD_ROOT)) { writeDials(readDials()); return; }
     if (!groups.some((g) => Array.isArray(g.dials))) return;
     const legacy = JSON.parse(JSON.stringify(groups));
     const have = new Set(bookmarks.filter(liveBm).map((b) => b.url));
