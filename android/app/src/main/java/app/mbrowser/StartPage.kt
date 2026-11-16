@@ -569,7 +569,7 @@ class StartPage(
             val tlp = h.thumb.layoutParams as FrameLayout.LayoutParams
             val llp = h.letter.layoutParams as FrameLayout.LayoutParams
             if (icons) {
-                h.card.background = null; h.card.clipToOutline = false; h.card.clipChildren = false; h.card.elevation = 0f
+                h.card.background = null; h.card.clipToOutline = false; (h.card as android.view.ViewGroup).clipChildren = false; h.card.elevation = 0f
                 h.thumb.elevation = act.dp(5).toFloat(); h.letter.elevation = act.dp(5).toFloat()
                 tlp.width = size; tlp.height = size; tlp.gravity = Gravity.CENTER_HORIZONTAL
                 llp.width = size; llp.height = size; llp.gravity = Gravity.CENTER_HORIZONTAL
