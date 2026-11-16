@@ -1822,6 +1822,29 @@ function importBookmarks(items) {
   return { added, skipped, total: items.length };
 }
 
+
+// ---------- extensions (unpacked Chrome extensions; experimental, Electron supports only part of the extension API) ----------
+// Stored per computer (the folders are on this machine): [{ path, enabled, name, id? }]
+let extList = [];
+const loadedExt = new Map();   // path -> extension id
+function readExtManifest(dir) {
+  try {
+    const m = JSON.parse(fs.readFileSync(path.join(dir, 'manifest.json'), 'utf8'));
+    return { name: String(m.name || path.basename(dir)).slice(0, 80), version: String(m.version || ''), mv: Number(m.manifest_version) || 0 };
+  } catch { return null; }
+}
+async function loadExtensions(ses) {
+  for (const e of extList) {
+    if (!e.enabled || loadedExt.has(e.path)) continue;
+    try {
+      const x = await ses.loadExtension(e.path, { allowFileAccess: true });
+      loadedExt.set(e.path, x.id); e.id = x.id; e.error = '';
+    } catch (err) { e.error = String(err && err.message || err).slice(0, 200); }
+  }
+}
+const extView = () => extList.map((e) => ({ path: e.path, enabled: !!e.enabled, name: e.name, version: e.version, mv: e.mv, loaded: loadedExt.has(e.path), error: e.error || '' }));
+function saveExt() { try { save('extensions.json', extList.map((e) => ({ path: e.path, enabled: e.enabled, name: e.name, version: e.version, mv: e.mv }))); } catch { /* ignore */ } }
+
 // ---------- clearing data ----------
 async function clearData(what) {
   const ses = session.defaultSession;
@@ -2447,6 +2470,40 @@ function setupIpc() {
   on('palette:run', (_e, item) => paletteRun(item));
 
   // from web pages
+  // extensions
+  handle('extensions:list', () => extView(), PAGE_ONLY);
+  handle('extensions:add', async () => {
+    const r = await dialog.showOpenDialog({ title: 'Choose an unpacked extension folder (the one with manifest.json)', properties: ['openDirectory'] });
+    if (r.canceled || !r.filePaths[0]) return { list: extView() };
+    const dir = r.filePaths[0];
+    const m = readExtManifest(dir);
+    if (!m) return { list: extView(), error: 'That folder has no readable manifest.json.' };
+    if (!extList.some((e) => e.path === dir)) extList.push({ path: dir, enabled: true, ...m });
+    saveExt();
+    await loadExtensions(session.defaultSession);
+    const e = extList.find((x) => x.path === dir);
+    return { list: extView(), error: e && e.error ? 'Could not load it: ' + e.error : '' };
+  }, PAGE_ONLY);
+  handle('extensions:toggle', async (_e, p, on) => {
+    const e = extList.find((x) => x.path === p);
+    if (!e) return extView();
+    e.enabled = !!on;
+    if (!on && loadedExt.has(p)) {
+      try { session.defaultSession.removeExtension(loadedExt.get(p)); } catch { /* needs a restart */ }
+      loadedExt.delete(p);
+    }
+    saveExt();
+    if (on) await loadExtensions(session.defaultSession);
+    return extView();
+  }, PAGE_ONLY);
+  handle('extensions:remove', (_e, p) => {
+    const e = extList.find((x) => x.path === p);
+    if (e && loadedExt.has(p)) { try { session.defaultSession.removeExtension(loadedExt.get(p)); } catch { /* restart */ } loadedExt.delete(p); }
+    extList = extList.filter((x) => x.path !== p);
+    saveExt();
+    return extView();
+  }, PAGE_ONLY);
+
   // internal my:// pages (and chrome)
   handle('settings:get', () => JSON.parse(JSON.stringify(S())), BOTH);
   handle('settings:set', (_e, p, v) => {
@@ -3784,6 +3841,8 @@ app.whenReady().then(async () => {
   rebuildShortcuts();
   setupSession(session.defaultSession);
   setupSession(session.fromPartition('private'));
+  extList = load('extensions.json', []).filter((e) => e && typeof e.path === 'string');
+  loadExtensions(session.defaultSession).catch(() => {});
   setupIpc();
 
   Menu.setApplicationMenu(null); // no File / Edit / View menu bar

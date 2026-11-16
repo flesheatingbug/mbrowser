@@ -51,7 +51,7 @@
 <script>
   const CATS = [
     ['general', 'General'], ['appearance', 'Appearance'], ['startpage', 'Start Page'], ['tabs', 'Tabs'], ['search', 'Search'],
-    ['privacy', 'Privacy'], ['adblocker', 'Adblocker'], ['passwords', 'Passwords'], ['downloads', 'Downloads'], ['keyboard', 'Keyboard'],
+    ['privacy', 'Privacy'], ['adblocker', 'Adblocker'], ['passwords', 'Passwords'], ['downloads', 'Downloads'], ['extensions', 'Extensions'], ['keyboard', 'Keyboard'],
     ['sync', 'Sync'], ['server', 'Server Admin'], ['import', 'Import'], ['profiles', 'Profiles'], ['about', 'About'],
   ];
   const FIELDS = {
@@ -131,6 +131,31 @@
 
   const TB_ITEMS = [['back', 'Back'], ['forward', 'Forward'], ['reload', 'Reload'], ['address', 'Address bar'], ['shield', 'Tracker blocker'], ['downloads', 'Downloads'], ['star', 'Bookmark star'], ['profile', 'Profile']];
   const TB_EXTRA = [['key', 'Saved logins key (inside the address bar)'], ['siteinfo', 'Site information (inside the address bar)']];
+  async function extensionsSection(m) {
+    m.append(el('p', 'muted', 'Experimental. Load an unpacked Chrome extension (a folder containing manifest.json). Only part of the Chrome extension API exists in this browser: content scripts and simple extensions usually work; extensions that rely on a background service worker, blocking network requests or toolbar popups may not. Extensions apply to normal tabs, not private ones. Turning one off may need a restart to take full effect.'));
+    const box = el('div'); m.append(box);
+    const msg = el('p', 'muted'); m.append(msg);
+    function draw(list) {
+      box.textContent = '';
+      if (!list.length) box.append(el('p', 'muted', 'No extensions added yet.'));
+      for (const e of list) {
+        const row = el('div', 'row');
+        const lab = el('label', null, e.name + (e.version ? '  v' + e.version : ''));
+        lab.append(el('span', 'help', e.path + (e.error ? '  ·  ' + e.error : e.enabled ? (e.loaded ? '  ·  running' : '  ·  not loaded') : '')));
+        const right = el('span'); right.style.cssText = 'display:flex;gap:8px;align-items:center';
+        const cb = el('input'); cb.type = 'checkbox'; cb.checked = e.enabled; cb.title = 'Enabled';
+        cb.onchange = async () => draw(await browser.extensionsToggle(e.path, cb.checked));
+        const rm = el('button', 'danger', 'Remove');
+        rm.onclick = async () => draw(await browser.extensionsRemove(e.path));
+        right.append(cb, rm); row.append(lab, right); box.append(row);
+      }
+    }
+    draw(await browser.extensionsList());
+    const add = el('button', null, 'Add unpacked extension…');
+    add.onclick = async () => { const r = await browser.extensionsAdd(); msg.textContent = r.error || ''; draw(r.list); };
+    m.append(add);
+  }
+
   function toolbarSection(m) {
     m.append(el('h2', null, 'Toolbar'));
     m.append(el('p', 'muted', 'Choose which buttons are shown and move them left or right. The address bar always stays visible.'));
@@ -573,6 +598,7 @@
     if (cur !== 'server' && cur !== 'import' && cur !== 'profiles') m.append(el('h1', null, CATS.find((c) => c[0] === cur)[1]));
 
     if (cur === 'search') { searchSection(m); return; }
+    if (cur === 'extensions') { await extensionsSection(m); return; }
     if (cur === 'keyboard') { await keyboardSection(m); return; }
     if (cur === 'about') {
       const build = await browser.appBuildNumber();
