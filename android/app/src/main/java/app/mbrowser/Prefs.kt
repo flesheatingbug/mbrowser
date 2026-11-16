@@ -97,6 +97,14 @@ class Prefs(ctx: Context) {
     var profileAvatar: String
         get() = str("profileAvatar", "")
         set(v) = put("profileAvatar", v)
+    /** "server|profileId" that the bookmarks, history and settings stored on this phone belong to. */
+    var dataOwner: String
+        get() = str("dataOwner", "")
+        set(v) = put("dataOwner", v)
+    /** The token whose profile has been checked against dataOwner. */
+    var verifiedToken: String
+        get() = str("verifiedToken", "")
+        set(v) = put("verifiedToken", v)
     var profileId: String
         get() = str("profileId", "")
         set(v) = put("profileId", v)

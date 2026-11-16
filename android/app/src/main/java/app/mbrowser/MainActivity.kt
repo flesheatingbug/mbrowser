@@ -1282,15 +1282,16 @@ class MainActivity : BaseActivity() {
         Thread {
             try {
                 val sw = serverApi().request("POST", "/api/switch", org.json.JSONObject().put("profile", id).put("device", prefs.device))
-                ui.post {
+                // under the sync lock, so a sync that is still running cannot write the old profile's data into the new one
+                synchronized(Sync) {
                     Store.resetAll(); Settings.reset(); Vault.forgetLocal(app)
                     prefs.bmRev = 0; prefs.histRev = 0; prefs.otherTabs = "[]"; prefs.lookHash = ""
                     prefs.token = sw.getString("token")
                     prefs.profileId = sw.getJSONObject("profile").get("id").toString()
+                    prefs.dataOwner = prefs.server.trimEnd('/') + "|" + prefs.profileId; prefs.verifiedToken = prefs.token
                     prefs.profileName = name; prefs.profileColor = color; prefs.profileAvatar = avatar
-                    syncNow(true)
-                    recreate()
                 }
+                ui.post { syncNow(true); recreate() }
             } catch (e: Exception) { ui.post { Toast.makeText(this, "Could not switch: ${e.message}", Toast.LENGTH_LONG).show() } }
         }.start()
     }
