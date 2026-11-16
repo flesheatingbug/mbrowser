@@ -572,6 +572,42 @@ class MainActivity : BaseActivity() {
         }
     }
 
+    private fun copyText(label: String, text: String) {
+        (getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager).setPrimaryClip(android.content.ClipData.newPlainText(label, text))
+        Toast.makeText(this, "Copied", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun linkMenu(tab: Tab, link: String?, text: String?, img: String?) {
+        val labels = ArrayList<String>(); val acts = ArrayList<() -> Unit>()
+        fun add(l: String, a: () -> Unit) { labels.add(l); acts.add(a) }
+        if (!link.isNullOrEmpty()) {
+            add("Open in new tab") { newTab(link, tab.priv) }
+            if (!tab.priv) add("Open in private tab") { newTab(link, true) }
+            add("Copy link address") { copyText("link", link) }
+            val t = text?.trim().orEmpty()
+            if (t.isNotEmpty()) add("Copy link text") { copyText("text", t) }
+            add("Share link") { startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, link), "Share")) }
+        }
+        if (!img.isNullOrEmpty() && img.startsWith("http")) {
+            add("Open image in new tab") { newTab(img, tab.priv) }
+            add("Copy image address") { copyText("image", img) }
+            add("Download image") {
+                try {
+                    val req = DownloadManager.Request(Uri.parse(img))
+                    CookieManager.getInstance().getCookie(img)?.let { req.addRequestHeader("Cookie", it) }
+                    req.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                    req.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, URLUtil.guessFileName(img, null, null))
+                    Downloads.add(this, (getSystemService(DOWNLOAD_SERVICE) as DownloadManager).enqueue(req))
+                    Toast.makeText(this, "Downloading…", Toast.LENGTH_SHORT).show()
+                } catch (e: Exception) { Toast.makeText(this, "Download failed: ${e.message}", Toast.LENGTH_LONG).show() }
+            }
+        }
+        if (labels.isEmpty()) return
+        val shown = (link ?: img ?: "").let { if (it.length > 70) it.take(67) + "…" else it }
+        androidx.appcompat.app.AlertDialog.Builder(this).setTitle(shown)
+            .setItems(labels.toTypedArray()) { _, i -> acts[i]() }.show()
+    }
+
     private fun newTab(url: String?, priv: Boolean = false): Tab {
         val w = WebView(this)
         var isolated = false
@@ -683,6 +719,27 @@ class MainActivity : BaseActivity() {
             } catch (e: Exception) {
                 Toast.makeText(this, "Download failed: ${e.message}", Toast.LENGTH_LONG).show()
             }
+        }
+        // touch and hold a link or picture on a page: open it elsewhere, copy it, share it
+        w.setOnLongClickListener { v ->
+            val wv = v as WebView
+            val r = wv.hitTestResult
+            val t = r.type
+            val isLink = t == WebView.HitTestResult.SRC_ANCHOR_TYPE || t == WebView.HitTestResult.SRC_IMAGE_ANCHOR_TYPE
+            val isImg = t == WebView.HitTestResult.IMAGE_TYPE || t == WebView.HitTestResult.SRC_IMAGE_ANCHOR_TYPE
+            if (!isLink && !isImg) return@setOnLongClickListener false
+            val extra = r.extra
+            val hnd = android.os.Handler(android.os.Looper.getMainLooper()) { m ->
+                val d = m.data
+                var link = d.getString("url")
+                if (link.isNullOrEmpty() && t == WebView.HitTestResult.SRC_ANCHOR_TYPE) link = extra
+                var img = d.getString("src")
+                if (img.isNullOrEmpty() && t == WebView.HitTestResult.IMAGE_TYPE) img = extra
+                linkMenu(tab, if (isLink) link else null, d.getString("title"), if (isImg) img else null)
+                true
+            }
+            wv.requestFocusNodeHref(hnd.obtainMessage())
+            true
         }
         tabs.add(tab)
         switchTo(tabs.size - 1)

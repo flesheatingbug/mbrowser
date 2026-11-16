@@ -32,7 +32,7 @@ object Sync {
         val bItems = JSONArray()
         for (b in sentB) {
             bItems.put(JSONObject().put("url", b.url).put("title", b.title).put("folder", b.folder)
-                .put("added", b.added).put("updated", b.updated).put("deleted", b.deleted))
+                .put("added", b.added).put("updated", b.updated).put("deleted", b.deleted && !b.bin).put("recycleBin", b.bin && b.deleted))
         }
         val rb = api.request("POST", "/api/bookmarks", JSONObject().put("since", prefs.bmRev).put("items", bItems))
         Store.markBookmarksSent(sentB)

@@ -13,6 +13,7 @@ data class Bookmark(
     var updated: Long,
     var deleted: Boolean,
     var dirty: Boolean = false,
+    var bin: Boolean = false,     // the desktop's recycle bin flag; here it counts as deleted
 )
 
 data class Visit(val url: String, val title: String, val time: Long, var dirty: Boolean = true)
@@ -41,7 +42,7 @@ object Store {
                     val o = a.getJSONObject(i)
                     bookmarks[o.getString("url")] = Bookmark(
                         o.getString("url"), o.optString("title"), o.optString("folder"),
-                        o.optLong("added"), o.optLong("updated"), o.optBoolean("deleted"), o.optBoolean("dirty"),
+                        o.optLong("added"), o.optLong("updated"), o.optBoolean("deleted"), o.optBoolean("dirty"), o.optBoolean("bin"),
                     )
                 }
             }
@@ -72,7 +73,7 @@ object Store {
         val a = JSONArray()
         for (b in bookmarks.values) {
             a.put(JSONObject().put("url", b.url).put("title", b.title).put("folder", b.folder)
-                .put("added", b.added).put("updated", b.updated).put("deleted", b.deleted).put("dirty", b.dirty))
+                .put("added", b.added).put("updated", b.updated).put("deleted", b.deleted).put("dirty", b.dirty).put("bin", b.bin))
         }
         File(dir, "bookmarks.json").writeText(a.toString())
     }
@@ -108,7 +109,7 @@ object Store {
         if (cur != null && !cur.deleted) {
             cur.deleted = true; cur.updated = now; cur.dirty = true; on = false
         } else if (cur != null) {
-            cur.deleted = false; cur.updated = now; cur.dirty = true
+            cur.deleted = false; cur.bin = false; cur.updated = now; cur.dirty = true
             if (title.isNotBlank()) cur.title = title
             on = true
         } else {
@@ -198,7 +199,7 @@ object Store {
         }
         val cur = bookmarks[url]
         if (cur != null) {
-            cur.title = title.ifBlank { url }; cur.folder = folder; cur.deleted = false; cur.updated = now; cur.dirty = true
+            cur.title = title.ifBlank { url }; cur.folder = folder; cur.deleted = false; cur.bin = false; cur.updated = now; cur.dirty = true
         } else {
             bookmarks[url] = Bookmark(url, title.ifBlank { url }, folder, now, now, false, true)
         }
@@ -249,7 +250,7 @@ object Store {
 
     @Synchronized fun restoreMany(urls: Collection<String>) {
         val now = System.currentTimeMillis()
-        for (u in urls) bookmarks[u]?.let { it.deleted = false; it.updated = now; it.dirty = true }
+        for (u in urls) bookmarks[u]?.let { it.deleted = false; it.bin = false; it.updated = now; it.dirty = true }
         saveBookmarks()
     }
 
@@ -292,7 +293,7 @@ object Store {
             val cur = bookmarks[url]
             if (cur == null || upd > cur.updated) {
                 bookmarks[url] = Bookmark(url, o.optString("title"), cleanPath(o.optString("folder")),
-                    o.optLong("added"), upd, o.optBoolean("deleted"), false)
+                    o.optLong("added"), upd, o.optBoolean("deleted") || o.optBoolean("recycleBin"), false, o.optBoolean("recycleBin"))
             }
         }
         saveBookmarks()
