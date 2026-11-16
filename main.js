@@ -608,7 +608,7 @@ function createView(isPrivate) {
       nodeIntegration: false,
       nodeIntegrationInSubFrames: true,
       webviewTag: true,
-      preload: path.join(__dirname, 'page-preload.js'),
+      preload: BIS.includes('preload') ? undefined : path.join(__dirname, 'page-preload.js'),
       partition: isPrivate ? 'private' : undefined,
     },
   });
@@ -684,7 +684,7 @@ function wire(tab) {
       const pageHost = hostOf(wc.getURL());
       if (pageHost && !((S().privacy.allowSites || []).some((h) => pageHost === h || pageHost.endsWith('.' + h)))) {
         const css = blocker.cosmeticCss(pageHost);
-        if (css) wc.insertCSS(css).catch(() => { /* ignore */ });
+        if (css && !BIS.includes('cosmetic')) wc.insertCSS(css).catch(() => { /* ignore */ });
       }
     }
   }));
