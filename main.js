@@ -3780,6 +3780,7 @@ function makeProfile({ name, color, avatar, sync }) {
   profiles.reload();
   const r = profiles.create({ name, color, avatar });
   if (!r.ok) return r;
+  profiles.clearFirstRun(r.id);   // this window already did the setup: no welcome wizard when the profile opens
   if (sync) {
     try {
       const dir = profiles.dirFor(r.id);

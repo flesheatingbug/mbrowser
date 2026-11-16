@@ -18,7 +18,7 @@ class Prefs(ctx: Context) {
         get() = str("wallpaper", "none")
         set(v) = put("wallpaper", v)
     var dialStyle: String
-        get() = str("dialStyle", "cards")
+        get() = str("dialStyle", "icons")
         set(v) = put("dialStyle", v)
     var toolbarPreset: String
         get() = str("toolbarPreset", "classic")
