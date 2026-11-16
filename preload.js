@@ -47,6 +47,7 @@ contextBridge.exposeInMainWorld('api', {
   reload: send('nav:reload'),
   toggleBookmark: send('bookmark:toggle'),
   toggleShield: send('shield:toggle'),
+  allowHost: send('shield:allowHost'),
   closeOverlay: send('overlay:close'),
   find: send('find:do'),
   paletteQuery: (q) => ipcRenderer.invoke('palette:query', q),

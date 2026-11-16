@@ -373,6 +373,16 @@
       if (d.blockerOn) {
         const b = add('button', '', d.siteAllowed ? 'Block trackers on this site' : 'Allow trackers on this site');
         b.onclick = () => { api.toggleShield(); api.closeOverlay(); };
+        if (!d.siteAllowed && d.blockedHosts && d.blockedHosts.length) {
+          add('hr');
+          add('div', '', 'Blocked on this page (tap Allow if a site breaks):').style.cssText = 'font-size:12px;opacity:.75;margin-bottom:4px';
+          for (const bh of d.blockedHosts) {
+            const r = add('div'); r.style.cssText = 'display:flex;align-items:center;gap:8px;margin:3px 0;font-size:12px';
+            const nm = document.createElement('span'); nm.style.cssText = 'flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap'; nm.textContent = bh.host + ' ×' + bh.n + (bh.type ? ' (' + bh.type + ')' : ''); nm.title = bh.host;
+            const ab = document.createElement('button'); ab.textContent = 'Allow'; ab.style.cssText = 'padding:2px 10px;font-size:12px'; ab.onclick = () => api.allowHost(bh.host);
+            r.append(nm, ab);
+          }
+        }
       }
     }
   }

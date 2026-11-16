@@ -154,6 +154,7 @@ let settingsSyncNote = '';
 let nextId = 1;
 const closedTabs = [];
 const blockedCounts = new Map(); // webContents id -> count
+const blockedHostsLog = new Map(); // webContents id -> Map(host -> { n, type })
 const chromeIds = new Set();
 const certInfo = new Map();  // hostname -> certificate details seen during verification
 
@@ -668,7 +669,7 @@ function wire(tab) {
   wc.on('page-favicon-updated', h((_e, favs) => { tab.favicon = favs[0] || ''; pushState(); }));
   wc.on('did-start-navigation', (details) => {
     if (details && details.isMainFrame && !details.isSameDocument) {
-      blockedCounts.set(wc.id, 0);
+      blockedCounts.set(wc.id, 0); blockedHostsLog.delete(wc.id);
       tab.loginForm = false;
       tab.status = 'Connecting to ' + (hostOf(details.url) || 'site') + '…';
     }
@@ -1050,7 +1051,7 @@ function overlayBounds(mode) {
     return { x: width - w - 8, y: S().appearance.tabBar === 'left' ? TOOL_H : TAB_H, width: w, height: Math.min(540, Math.max(160, height - 90)) };
   }
   if (mode === 'security') {
-    return { x: 70, y: cur.contentRect.y, width: Math.min(400, width - 90), height: 380 };
+    return { x: 70, y: cur.contentRect.y, width: Math.min(400, width - 90), height: Math.min(560, Math.max(380, height - 90)) };
   }
   if (mode === 'bookmark') {
     return { x: Math.max(0, width - 332), y: cur.contentRect.y, width: 320, height: 220 };
@@ -1323,6 +1324,7 @@ function securityInfo() {
     blocked: wc ? blockedCounts.get(wc.id) || 0 : 0,
     blockerOn: S().privacy.blockTrackers,
     siteAllowed: !!host && allow.some((x) => host === x || host.endsWith('.' + x)),
+    blockedHosts: wc ? [...(blockedHostsLog.get(wc.id) || new Map()).entries()].map(([h, v]) => ({ host: h, n: v.n, type: v.type })).sort((a, b) => b.n - a.n).slice(0, 12) : [],
   };
 }
 
@@ -2502,6 +2504,16 @@ function setupIpc() {
   on('nav:reload', () => activeWc()?.reload());
   on('bookmark:toggle', () => toggleBookmark());
   on('shield:toggle', () => toggleSiteBlocking());
+  // never block this one domain again (found in the "blocked on this page" list), then reload
+  on('shield:allowHost', (_e, host) => {
+    host = String(host || '').toLowerCase();
+    if (!/^[a-z0-9.-]+$/.test(host)) return;
+    const list = (S().privacy.allowHosts || []).slice();
+    if (!list.includes(host)) list.push(host);
+    applySetting('privacy.allowHosts', list);
+    hideOverlay();
+    activeWc()?.reload();
+  });
   on('overlay:close', () => hideOverlay());
   on('find:do', (_e, text, forward, next) => {
     const wc = activeWc();
@@ -3201,7 +3213,15 @@ function setupSession(ses) {
     } catch { /* details are optional */ }
     callback(-3); // -3 = use Chromium's normal verification result
   });
-  blocker.attach(ses, (wcId) => { blockedCounts.set(wcId, (blockedCounts.get(wcId) || 0) + 1); pushSoon(); });
+  blocker.attach(ses, (wcId, url, type) => {
+    blockedCounts.set(wcId, (blockedCounts.get(wcId) || 0) + 1);
+    try {
+      const h = new URL(url).hostname;
+      let lg = blockedHostsLog.get(wcId); if (!lg) blockedHostsLog.set(wcId, lg = new Map());
+      const e = lg.get(h); if (e) e.n++; else if (lg.size < 60) lg.set(h, { n: 1, type: type || '' });
+    } catch { /* ignore */ }
+    pushSoon();
+  });
   // Combined header handler: DNT (all requests) + UA client-hint fix (Google domains).
   // Registered after blocker.attach so this wins the single-listener slot; it replicas
   // the blocker's DNT logic so that functionality is not lost.
