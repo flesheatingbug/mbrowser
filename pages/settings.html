@@ -604,6 +604,7 @@
     if (cur === 'keyboard') { await keyboardSection(m); return; }
     if (cur === 'about') {
       const build = await browser.appBuildNumber();
+      const vers = await browser.appVersions().catch(() => ({}));
       const logo = document.createElement('img');
       logo.src = 'my://assets/icon/color.png';
       logo.style.cssText = 'width:64px;height:64px;border-radius:16px;display:block;margin:0 0 16px;';
@@ -611,7 +612,7 @@
       const title = el('h2', null, 'mbrowser');
       title.style.cssText = 'font-size:24px;margin:0 0 4px;font-weight:700;';
       m.append(title);
-      const verLine = el('p', 'muted', `Version 0.9.0 Build ${build > 0 ? build : 'dev'}`);
+      const verLine = el('p', 'muted', `Version 0.9.0 Build ${build > 0 ? build : 'dev'} · Electron ${vers.electron || '?'} · Chromium ${vers.chrome || '?'}`);
       verLine.style.marginBottom = '16px';
       m.append(verLine);
       const tagline = el('p', null, 'A Chromium-based browser with self-hosted sync. Your data, your server.');

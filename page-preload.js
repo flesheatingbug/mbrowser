@@ -126,6 +126,7 @@ if (location.protocol === 'my:') {
     wizardDone: invoke('wizard:done'),
     wizardCancel: invoke('wizard:cancel'),
     appBuildNumber: invoke('app:build-number'),
+    appVersions: invoke('app:versions'),
     appUpdateInfo: invoke('app:update-info'),
     appAutoInstall: (info) => ipcRenderer.invoke('app:auto-install', info),
     onDlProgress: (cb) => ipcRenderer.on('app:dl-progress', (_, v) => cb(v)),

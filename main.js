@@ -145,6 +145,8 @@ protocol.registerSchemesAsPrivileged([
 ]);
 
 const START = 'my://start';
+const GAP = 6; // border left and right of the page
+const SCROLL_CSS = '::-webkit-scrollbar{width:12px;height:12px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:rgba(128,128,128,.4);border-radius:10px;border:3px solid transparent;background-clip:content-box;min-height:36px}::-webkit-scrollbar-thumb:hover{background:rgba(128,128,128,.7);background-clip:content-box}::-webkit-scrollbar-corner{background:transparent}';
 const TAB_H = 38, TOOL_H = 50, TRANSLATE_H = 34, SIDE_W = 220, STATUS_H = 32, PANEL_HEAD = 46;
 const MOBILE_UA = 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36';
 
@@ -353,11 +355,11 @@ function layout() {
   } else if (S().appearance.tabBar === 'left') {
     cur.toolbarView.setBounds({ x: 0, y: 0, width, height: toolH });
     cur.tabbarView.setBounds({ x: 0, y: toolH, width: SIDE_W, height: Math.max(0, height - toolH - bottom) });
-    c = { x: SIDE_W, y: toolH, width: Math.max(0, width - SIDE_W), height: Math.max(0, height - toolH - bottom) };
+    c = { x: SIDE_W + GAP, y: toolH, width: Math.max(0, width - SIDE_W - 2 * GAP), height: Math.max(0, height - toolH - bottom) };
   } else {
     cur.tabbarView.setBounds({ x: 0, y: 0, width, height: TAB_H });
     cur.toolbarView.setBounds({ x: 0, y: TAB_H, width, height: toolH });
-    c = { x: 0, y: TAB_H + toolH, width, height: Math.max(0, height - TAB_H - toolH - bottom) };
+    c = { x: GAP, y: TAB_H + toolH, width: Math.max(0, width - 2 * GAP), height: Math.max(0, height - TAB_H - toolH - bottom) };
   }
   // side panel (bookmarks / history / downloads / notes / web panels)
   const noBounds = { x: 0, y: 0, width: 0, height: 0 };
@@ -391,6 +393,7 @@ function layout() {
   }
   cur.statusView.setBounds(bottom ? { x: 0, y: height - STATUS_H, width, height: STATUS_H } : zero);
   cur.contentRect = c;
+  try { const bg = themeVars().bg; if (bg && cur.win._gapBg !== bg) { cur.win._gapBg = bg; cur.win.setBackgroundColor(bg); } } catch { /* ignore */ }
   const activeT = cur.tabs.get(cur.activeId);
   if (activeT) activeT.view.setBounds(c);
   if (cur.overlayMode) cur.overlay.setBounds(overlayBounds(cur.overlayMode));
@@ -679,6 +682,7 @@ function wire(tab) {
       tab.focusUrlOnLoad = false;
       if (cur.activeId === tab.id && !cur.overlayMode) focusUrl();
     }
+    if (isWeb(wc.getURL()) && !BIS.includes('cosmetic')) wc.insertCSS(SCROLL_CSS).catch(() => { /* ignore */ });
     // cosmetic ad hiding (element-hiding rules from filter lists)
     if (S().privacy.blockTrackers && isWeb(wc.getURL()) && !tab.private) {
       const pageHost = hostOf(wc.getURL());
@@ -3042,6 +3046,7 @@ function setupIpc() {
     }
   }, BOTH);
   handle('app:build-number', () => BUILD_NUMBER, BOTH);
+  handle('app:versions', () => ({ electron: process.versions.electron, chrome: process.versions.chrome }), BOTH);
   handle('app:update-info', async () => {
     if (!getAutoUpdater()) return { currentBuild: BUILD_NUMBER, releaseUrl: RELEASE_URL };
     if (_euInfo) return euToInfo(_euInfo, !_euDownloaded);

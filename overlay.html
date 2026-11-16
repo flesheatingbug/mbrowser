@@ -4,6 +4,13 @@
 <meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'unsafe-inline'; script-src 'self' 'unsafe-inline'; img-src https: http: data:">
 <style>
+/* slim themed scrollbars */
+  ::-webkit-scrollbar { width:12px; height:12px; }
+  ::-webkit-scrollbar-track { background:transparent; }
+  ::-webkit-scrollbar-thumb { background:color-mix(in srgb, var(--muted, #888) 38%, transparent); border-radius:10px; border:3px solid transparent; background-clip:content-box; min-height:36px; }
+  ::-webkit-scrollbar-thumb:hover { background:color-mix(in srgb, var(--accent, #7aa2f7) 70%, transparent); background-clip:content-box; }
+  ::-webkit-scrollbar-corner { background:transparent; }
+  
   :root { --bg:#1e1f22; --tab:#2b2d31; --active:#3a3d44; --fg:#e6e6e6; --muted:#9aa0a6; --line:#34363b; --accent:#7aa2f7; }
   * { box-sizing: border-box; }
   html, body { margin:0; height:100%; background:transparent; color:var(--fg); font:14px system-ui, sans-serif; overflow:hidden; }
