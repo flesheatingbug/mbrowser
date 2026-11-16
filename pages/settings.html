@@ -232,7 +232,7 @@
     } else if (def.type === 'wallpaper') {
       row.className = 'row col';
       const grid = el('div'); grid.style.cssText = 'display:flex;gap:10px;flex-wrap:wrap;margin-top:10px';
-      const IDS = [['none', 'Theme colours'], ['custom', 'Your picture…'], ['grey', 'Grey'], ['aurora', 'Aurora'], ['dusk', 'Dusk'], ['ocean', 'Ocean'], ['dunes', 'Dunes'], ['mist', 'Mist'], ['forest', 'Forest'], ['ember', 'Ember'], ['orchid', 'Orchid'], ['slate', 'Slate'], ['nebula', 'Nebula'], ['peaks', 'Peaks'], ['paper', 'Paper']];
+      const IDS = [['none', 'Theme colours'], ['custom', 'Your picture…'], ['grey', 'Grey'], ['aurora', 'Aurora'], ['dusk', 'Dusk'], ['ocean', 'Ocean'], ['dunes', 'Dunes'], ['mist', 'Mist'], ['forest', 'Forest'], ['ember', 'Ember'], ['orchid', 'Orchid'], ['slate', 'Slate'], ['nebula', 'Nebula'], ['peaks', 'Peaks'], ['paper', 'Paper'], ['sunrise', 'Sunrise'], ['lagoon', 'Lagoon'], ['midnight', 'Midnight'], ['blossom', 'Blossom'], ['glacier', 'Glacier'], ['canyon', 'Canyon'], ['meadow', 'Meadow'], ['neon', 'Neon'], ['tide', 'Tide'], ['graphite', 'Graphite']];
       for (const [id, name] of IDS) {
         const b = el('button'); b.type = 'button'; b.title = name;
         b.style.cssText = 'width:128px;height:76px;padding:0;border-radius:10px;overflow:hidden;position:relative;background:var(--tab);color:var(--muted);cursor:pointer;border:' + (val === id ? '3px solid var(--accent)' : '1px solid var(--line)');
