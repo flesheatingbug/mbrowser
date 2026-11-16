@@ -122,7 +122,8 @@ class BookmarksActivity : BaseActivity() {
         else -> b.updated.compareTo(a.updated)
     }
 
-    private fun sub(b: Bookmark, showFolder: Boolean) = (if (showFolder && b.folder.isNotEmpty()) b.folder + "  ·  " else "") + b.url
+    private fun sub(b: Bookmark, showFolder: Boolean) = (if (showFolder && b.folder.isNotEmpty()) b.folder + "  ·  " else "") + b.url +
+        (if (b.added > 0) "  ·  " + android.text.format.DateFormat.getMediumDateFormat(this).format(java.util.Date(b.added)) else "")
 
     private fun build(): List<Item> {
         if (bin) return Store.binList().filter { matches(it) }.map { Item(null, it, it.title.ifBlank { it.url }, sub(it, true)) }
@@ -139,7 +140,7 @@ class BookmarksActivity : BaseActivity() {
             folders[child] = (folders[child] ?: 0) + 1
         }
         for ((f, n) in folders.entries.sortedBy { it.key.lowercase() }) out.add(Item(f, null, f.substringAfterLast('/'), "$n bookmark" + (if (n == 1) "" else "s")))
-        for (b in all.filter { it.folder == path }.sortedWith { a, b -> compare(a, b) }) out.add(Item(null, b, b.title.ifBlank { b.url }, b.url))
+        for (b in all.filter { it.folder == path }.sortedWith { a, b -> compare(a, b) }) out.add(Item(null, b, b.title.ifBlank { b.url }, sub(b, false)))
         return out
     }
 

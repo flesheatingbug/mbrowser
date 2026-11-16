@@ -340,7 +340,7 @@
         cb.onchange = () => { cb.checked ? picked.add(b.url) : picked.delete(b.url); bulk(); };
         const fi = el('div', 'fi', (b.title || b.url).replace(/^https?:\/\/(www\.)?/, '').charAt(0).toUpperCase());
         const t = el('div', 't'); const a = el('a'); a.href = b.url; a.textContent = b.title || b.url;
-        const sm = el('small', 'muted', b.url); t.append(a, sm);
+        const sm = el('small', 'muted', b.url + (b.added ? '  ·  Added ' + new Date(b.added).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : '')); sm.title = b.added ? 'Added ' + new Date(b.added).toLocaleString() : ''; t.append(a, sm);
         row.append(cb, fi, t);
         const acts = el('div', 'acts');
         const rst = el('button', null, 'Restore'); rst.onclick = async () => { await browser.bookmarksRestoreFromBin([b.url]); load(); };
