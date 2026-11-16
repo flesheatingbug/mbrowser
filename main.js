@@ -461,7 +461,18 @@ function stateFor() {
   };
 }
 
+// pages that fire events in bursts (image search results loading, say) must not make us rebuild the toolbar hundreds of times a second
 function pushState() {
+  if (!cur || !cur.toolbarView) return;
+  const w = cur, now = Date.now();
+  if (now - (w._lastPush || 0) >= 70) { w._lastPush = now; pushStateNow(); return; }
+  if (w._pushT) return;
+  w._pushT = setTimeout(() => {
+    w._pushT = null; w._lastPush = Date.now();
+    const keep = cur; try { use(w); pushStateNow(); } finally { if (keep) use(keep); }
+  }, 70 - (now - w._lastPush));
+}
+function pushStateNow() {
   if (!cur || !cur.toolbarView) return;
   const s = stateFor();
   for (const v of [cur.toolbarView, cur.tabbarView, cur.statusView, cur.panelResizer, cur.overlay]) {

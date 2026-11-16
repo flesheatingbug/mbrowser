@@ -264,12 +264,15 @@ if (/^https?:$/.test(location.protocol)) {
 
   // tell the browser when this page has a visible password field (it then shows a key icon in the address bar)
   let hadForm = null, formTimer = null;
+  let formFirst = 0;
   const checkForm = () => {
-    clearTimeout(formTimer);
+    // pages that keep changing (endless image grids) would postpone this forever, or make it run constantly: at most once a second
+    if (formTimer) return;
     formTimer = setTimeout(() => {
+      formTimer = null;
       const has = pwFields(document).length > 0 || visibleInputs().some(looksLikeUser);
       if (has !== hadForm) { hadForm = has; ipcRenderer.send('pw:form', has); }
-    }, 300);
+    }, 1000);
   };
   window.addEventListener('DOMContentLoaded', () => {
     checkForm();
