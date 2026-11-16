@@ -523,7 +523,7 @@ class StartPage(
                     pill.textSize = 16f; pill.gravity = Gravity.CENTER_VERTICAL
                     pill.minWidth = 0; pill.minHeight = 0
                     pill.layoutParams = FrameLayout.LayoutParams(-2, -2, Gravity.CENTER)
-                    pill.setCompoundDrawablesRelativeWithIntrinsicBounds(R.drawable.ic_add, 0, 0, 0)
+                    pill.setCompoundDrawablesRelativeWithIntrinsicBounds(if (reorder) 0 else R.drawable.ic_add, 0, 0, 0)   // no + beside "Done"
                     pill.setPadding(act.dp(22), act.dp(14), act.dp(22), act.dp(14))
                 }
                 if (reorder) { pill.text = "Done"; pill.setOnClickListener { reorder = false; refresh() } }
