@@ -13,6 +13,11 @@ android {
         // CI numbers every build, so each new APK counts as an upgrade of the one before
         versionCode = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1
         versionName = "0.3." + (System.getenv("GITHUB_RUN_NUMBER") ?: "0")
+        // Pre-release builds (CI sets MB_PRE=1 on branch "next") install as a separate app with their own data and update channel
+        val pre = System.getenv("MB_PRE") == "1"
+        if (pre) applicationIdSuffix = ".pre"
+        manifestPlaceholders["appLabel"] = if (pre) "mbrowser Pre" else "mbrowser"
+        resValue("string", "update_tag", if (pre) "pre-apk" else "latest-apk")
     }
     // Builds are signed with a personal key so a new APK installs over the old one. The key is stored
     // encrypted in the repo (mbrowser.keystore.enc); its passphrase is the GitHub secret KEYSTORE_PASSPHRASE.

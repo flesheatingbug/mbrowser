@@ -14,7 +14,7 @@
         android:allowBackup="false"
         android:largeHeap="true"
         android:icon="@mipmap/ic_launcher"
-        android:label="mbrowser"
+        android:label="${appLabel}"
         android:usesCleartextTraffic="true"
         android:theme="@style/Theme.MBrowser">
 
@@ -45,7 +45,7 @@
             android:enabled="true"
             android:exported="true"
             android:icon="@mipmap/ic_launcher"
-            android:label="mbrowser"
+            android:label="${appLabel}"
             android:targetActivity=".MainActivity">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -57,7 +57,7 @@
             android:enabled="false"
             android:exported="true"
             android:icon="@mipmap/ic_launcher_color"
-            android:label="mbrowser"
+            android:label="${appLabel}"
             android:targetActivity=".MainActivity">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -69,7 +69,7 @@
             android:enabled="false"
             android:exported="true"
             android:icon="@mipmap/ic_launcher_blue"
-            android:label="mbrowser"
+            android:label="${appLabel}"
             android:targetActivity=".MainActivity">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -81,7 +81,7 @@
             android:enabled="false"
             android:exported="true"
             android:icon="@mipmap/ic_launcher_white"
-            android:label="mbrowser"
+            android:label="${appLabel}"
             android:targetActivity=".MainActivity">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -93,7 +93,7 @@
             android:enabled="false"
             android:exported="true"
             android:icon="@mipmap/ic_launcher_blue_m"
-            android:label="mbrowser"
+            android:label="${appLabel}"
             android:targetActivity=".MainActivity">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -105,7 +105,7 @@
             android:enabled="false"
             android:exported="true"
             android:icon="@mipmap/ic_launcher_white_m"
-            android:label="mbrowser"
+            android:label="${appLabel}"
             android:targetActivity=".MainActivity">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -118,6 +118,8 @@
         <activity android:name=".WelcomeActivity" android:exported="false" />
         <activity android:name=".ServerLoginActivity" android:exported="false" />
         <activity android:name=".ItemsActivity" android:exported="false" />
+        <activity android:name=".BookmarksActivity" android:exported="false" />
+        <activity android:name=".HistoryActivity" android:exported="false" />
         <activity android:name=".PasswordsActivity" android:exported="false" android:windowSoftInputMode="adjustResize" />
     </application>
 </manifest>

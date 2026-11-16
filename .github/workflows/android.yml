@@ -38,6 +38,8 @@ jobs:
           echo "KEYSTORE_PASSPHRASE=$KEYSTORE_PASSPHRASE" >> "$GITHUB_ENV"
       - name: Build debug APK
         working-directory: android
+        env:
+          MB_PRE: ${{ github.ref_name == 'next' && '1' || '0' }}
         run: gradle assembleDebug --no-daemon
       - uses: actions/upload-artifact@v4
         with:

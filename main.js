@@ -63,7 +63,9 @@ function applyIcon(kind) {
   return { window: windowOk, launcher: updateLauncherIcon(kind) };
 }
 
-app.setName('mbrowser');
+// Pre-release builds (built from branch next) are a separate app: own name, own data folder, own update feed.
+const CHANNEL = (() => { try { return require('./package.json').mbChannel || ''; } catch { return ''; } })();
+app.setName(CHANNEL === 'pre' ? 'mbrowser-pre' : 'mbrowser');
 if (process.platform === 'linux') app.setDesktopName('mbrowser.desktop');
 
 // Factory reset — must run HERE, before Chromium opens any files in userData.

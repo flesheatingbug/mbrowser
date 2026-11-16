@@ -1294,7 +1294,7 @@ class MainActivity : BaseActivity() {
                     (getSystemService(INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager).showSoftInput(urlBar, 0) }
                 "newtab" -> { hideSwitcher(); newTab(null) }
                 "reload" -> cur()?.let { t -> if (!t.home) { if (progress.visibility == View.VISIBLE) t.web.stopLoading() else t.web.reload() } }
-                "bookmarks" -> picker.launch(Intent(this, ItemsActivity::class.java).putExtra("mode", "bookmarks"))
+                "bookmarks" -> picker.launch(Intent(this, BookmarksActivity::class.java))
                 "menu" -> showMenu(it)
             }
         }
@@ -1319,15 +1319,16 @@ class MainActivity : BaseActivity() {
         Thread {
             try {
                 val sw = serverApi().request("POST", "/api/switch", org.json.JSONObject().put("profile", id).put("device", prefs.device))
-                ui.post {
+                // under the sync lock, so a sync that is still running cannot write the old profile's data into the new one
+                synchronized(Sync) {
                     Store.resetAll(); Settings.reset(); Vault.forgetLocal(app)
                     prefs.bmRev = 0; prefs.histRev = 0; prefs.otherTabs = "[]"; prefs.lookHash = ""
                     prefs.token = sw.getString("token")
                     prefs.profileId = sw.getJSONObject("profile").get("id").toString()
+                    prefs.dataOwner = prefs.server.trimEnd('/') + "|" + prefs.profileId; prefs.verifiedToken = prefs.token
                     prefs.profileName = name; prefs.profileColor = color; prefs.profileAvatar = avatar
-                    syncNow(true)
-                    recreate()
                 }
+                ui.post { syncNow(true); recreate() }
             } catch (e: Exception) { ui.post { Toast.makeText(this, "Could not switch: ${e.message}", Toast.LENGTH_LONG).show() } }
         }.start()
     }
@@ -1491,8 +1492,8 @@ class MainActivity : BaseActivity() {
         row(R.drawable.ic_add, "New tab", go { newTab(null) })
         row(R.drawable.ic_ghost, "New private tab", go { newTab(null, true) })
         divider()
-        row(R.drawable.ic_bookmarks, "Bookmarks", go { picker.launch(Intent(this, ItemsActivity::class.java).putExtra("mode", "bookmarks")) })
-        row(R.drawable.ic_history, "History", go { picker.launch(Intent(this, ItemsActivity::class.java).putExtra("mode", "history")) })
+        row(R.drawable.ic_bookmarks, "Bookmarks", go { picker.launch(Intent(this, BookmarksActivity::class.java)) })
+        row(R.drawable.ic_history, "History", go { picker.launch(Intent(this, HistoryActivity::class.java)) })
         row(R.drawable.ic_download, "Downloads", go { startActivity(Intent(this, ItemsActivity::class.java).putExtra("mode", "downloads")) })
         row(R.drawable.ic_devices, "Tabs from other devices", go { picker.launch(Intent(this, ItemsActivity::class.java).putExtra("mode", "devices")) })
         row(R.drawable.ic_key, "Passwords", go { picker.launch(Intent(this, PasswordsActivity::class.java)) })

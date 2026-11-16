@@ -25,6 +25,7 @@ object Sync {
         val prefs = Prefs(ctx)
         if (!prefs.syncConfigured) return "Sync is not set up"
         val api = Api(prefs.server, prefs.token, prefs.device)
+        ensureSameProfile(ctx, prefs, api)
 
         if (prefs.syncBookmarks) {
         val sentB = Store.dirtyBookmarks()
@@ -67,6 +68,28 @@ object Sync {
         if (prefs.syncVault) { try { VaultSync.run(ctx, api) } catch (e: Exception) { prefs.vaultStatus = "Sync failed: ${e.message}" } }
 
         return "Synced"
+    }
+
+    /**
+     * Local bookmarks, history and settings belong to one server profile. If this token now points at a different one (API key, pairing code,
+     * account switch) the local copy is dropped first, so two profiles are never merged.
+     */
+    private fun ensureSameProfile(ctx: Context, prefs: Prefs, api: Api) {
+        if (prefs.verifiedToken == prefs.token) return
+        val pid = (try {
+            val arr = api.request("GET", "/api/profiles").optJSONArray("profiles") ?: return
+            var found: String? = null
+            for (i in 0 until arr.length()) { val o = arr.getJSONObject(i); if (o.optBoolean("current")) found = o.get("id").toString() }
+            found
+        } catch (_: Exception) { null }) ?: return
+        val owner = prefs.server.trimEnd('/') + "|" + pid
+        val before = if (prefs.dataOwner.isNotEmpty()) prefs.dataOwner
+                     else if (prefs.profileId.isNotEmpty()) prefs.server.trimEnd('/') + "|" + prefs.profileId else ""
+        if (before.isNotEmpty() && before != owner) {
+            Store.resetAll(); Settings.reset(); Vault.forgetLocal(ctx)
+            prefs.bmRev = 0; prefs.histRev = 0; prefs.otherTabs = "[]"; prefs.lookHash = ""
+        }
+        prefs.dataOwner = owner; prefs.profileId = pid; prefs.verifiedToken = prefs.token
     }
 
     /** Merges the managed settings groups with the server's document. The newest change to a group wins. */
