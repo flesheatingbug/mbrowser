@@ -356,3 +356,95 @@ class Store:
             times.append(lu)
         out['lastSync'] = max(times) if times else None
         return out
+
+
+# ---------------------------------------------------------------- whole-server backup (appended to Store below)
+import io
+import tempfile
+import zipfile
+
+
+def _store_backup_zip(self):
+    """A zip with a consistent copy of every database (taken with SQLite's own backup, so it is safe while the server runs)."""
+    tmp = tempfile.mkdtemp(prefix='mbbackup-')
+    try:
+        names = [('admin.db', self.admin_path)]
+        for f in sorted(os.listdir(self.pdir)):
+            if re.match(r'^\d+\.db$', f):
+                names.append(('profiles/' + f, os.path.join(self.pdir, f)))
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as z:
+            z.writestr('manifest.json', json.dumps({'app': 'mbrowser-sync', 'created': now_ms(), 'files': [n for n, _ in names]}))
+            for i, (arc, path) in enumerate(names):
+                out = os.path.join(tmp, '%d.db' % i)
+                src = sqlite3.connect(path, timeout=15)
+                dst = sqlite3.connect(out)
+                try:
+                    src.backup(dst)
+                finally:
+                    dst.close()
+                    src.close()
+                z.write(out, arc)
+        return buf.getvalue()
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def _store_restore_zip(self, data):
+    """Replaces every database with the ones in the zip. The current data is saved to backups/ first. Returns the number of files restored."""
+    try:
+        z = zipfile.ZipFile(io.BytesIO(data))
+    except zipfile.BadZipFile:
+        raise ApiError(400, 'That is not a backup file.')
+    names = [n for n in z.namelist() if n != 'manifest.json']
+    ok = lambda n: n == 'admin.db' or re.match(r'^profiles/\d+\.db$', n)
+    if 'admin.db' not in names or not all(ok(n) for n in names):
+        raise ApiError(400, 'That is not an mbrowser server backup.')
+    tmp = tempfile.mkdtemp(prefix='mbrestore-')
+    try:
+        staged = {}
+        for i, n in enumerate(names):
+            p = os.path.join(tmp, '%d.db' % i)
+            with open(p, 'wb') as f:
+                f.write(z.read(n))
+            try:
+                c = sqlite3.connect(p)
+                good = c.execute('PRAGMA integrity_check').fetchone()[0] == 'ok'
+                if n == 'admin.db':
+                    c.execute('SELECT COUNT(*) FROM users')
+                c.close()
+            except sqlite3.Error:
+                good = False
+            if not good:
+                raise ApiError(400, 'The backup file is damaged (%s).' % n)
+            staged[n] = p
+        bdir = os.path.join(self.dir, 'backups')
+        os.makedirs(bdir, exist_ok=True)
+        with open(os.path.join(bdir, 'before-restore-%s.zip' % time.strftime('%Y%m%d-%H%M%S')), 'wb') as f:
+            f.write(self.backup_zip())
+        keep = sorted(os.listdir(bdir))
+        for old in keep[:-5]:
+            try:
+                os.remove(os.path.join(bdir, old))
+            except OSError:
+                pass
+        with self._lock:
+            for f in os.listdir(self.pdir):
+                if re.match(r'^\d+\.db(-wal|-shm)?$', f):
+                    os.remove(os.path.join(self.pdir, f))
+            for ext in ('-wal', '-shm'):
+                try:
+                    os.remove(self.admin_path + ext)
+                except OSError:
+                    pass
+            for n, p in staged.items():
+                dest = self.admin_path if n == 'admin.db' else os.path.join(self.pdir, n.split('/')[1])
+                shutil.move(p, dest)
+            self._ready.clear()
+        return len(staged)
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+Store.backup_zip = _store_backup_zip
+Store.restore_zip = _store_restore_zip

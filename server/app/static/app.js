@@ -624,7 +624,40 @@
     show(shell('users', h('div', null,
       h('div', { class: 'head' }, h('div', null, h('h1', null, 'Users'), h('div', { class: 'muted' }, 'Everyone who can sign in. Each user only sees their own profiles.')),
         h('button', { class: 'btn primary', onclick: add }, h('span', { html: ICONS.plus }), 'New user')),
-      h('div', { class: 'card' }, h('div', { class: 'tablewrap' }, h('table', null, h('thead', null, h('tr', null, ['User', 'Profiles', 'Security', 'Created', ''].map((t) => h('th', null, t)))), h('tbody', null, rows)))))));
+      h('div', { class: 'card' }, h('div', { class: 'tablewrap' }, h('table', null, h('thead', null, h('tr', null, ['User', 'Profiles', 'Security', 'Created', ''].map((t) => h('th', null, t)))), h('tbody', null, rows)))),
+      serverBackupCard())));
+  }
+
+  /** Whole-server backup: every user, profile, key and sync data in one zip. Passwords stay encrypted inside it. */
+  function serverBackupCard() {
+    const file = h('input', { type: 'file', accept: '.zip,application/zip' });
+    const status = h('div', { class: 'muted small', style: 'margin-top:8px' });
+    const say = (t, bad) => { status.className = (bad ? 'bad' : 'muted') + ' small'; status.textContent = t; };
+    const dl = h('button', { class: 'btn', onclick: async () => {
+      try {
+        const r = await fetch('/api/gui/server/backup', { credentials: 'same-origin' });
+        if (!r.ok) throw new Error('Backup failed (' + r.status + ')');
+        const blob = await r.blob();
+        const name = ((r.headers.get('Content-Disposition') || '').match(/filename="([^"]+)"/) || [])[1] || 'mbrowser-server-backup.zip';
+        const url = URL.createObjectURL(blob);
+        const l = h('a', { href: url, download: name }); document.body.append(l); l.click(); l.remove(); setTimeout(() => URL.revokeObjectURL(url), 5000);
+        say('Backup downloaded (' + Math.round(blob.size / 1024) + ' KB).');
+      } catch (e) { say(e.message, true); }
+    } }, 'Download backup');
+    const rs = h('button', { class: 'btn', onclick: async () => {
+      const f = file.files[0];
+      if (!f) { say('Choose a backup file first.', true); return; }
+      if (!confirm('Replace EVERYTHING on this server (all users, profiles, API keys and sync data) with this backup?\n\nThe current data is saved on the server in the backups folder first.')) return;
+      try {
+        const r = await fetch('/api/gui/server/restore', { method: 'PUT', credentials: 'same-origin', headers: { 'Content-Type': 'application/zip', 'X-CSRF-Token': state.csrf }, body: f });
+        let j = null; try { j = await r.json(); } catch { /* none */ }
+        if (!r.ok) throw new Error((j && j.error) || 'Restore failed (' + r.status + ')');
+        say('Restored. Reloading…'); setTimeout(() => location.reload(), 1200);
+      } catch (e) { say(e.message, true); }
+    } }, 'Restore backup');
+    return h('div', { class: 'card' }, h('h2', null, 'Server backup'),
+      h('p', { class: 'muted small' }, 'One file with every user, profile, API key, bookmark, history entry and the (still encrypted) password vaults. Keep it somewhere safe. Restoring replaces everything on this server.'),
+      h('div', { class: 'keybox' }, dl), h('div', { style: 'margin-top:12px;display:flex;gap:10px;flex-wrap:wrap;align-items:center' }, file, rs), status);
   }
 
   // ---------------------------------------------------------------- about / connect

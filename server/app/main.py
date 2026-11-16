@@ -103,6 +103,8 @@ route('GET', P + '/export/bookmarks.html')(guiapi.export_bookmarks)
 route('GET', P + '/export/history.json')(guiapi.export_history)
 route('GET', G + '/users', 'admin')(guiapi.users_list)
 route('POST', G + '/users', 'admin')(guiapi.user_create)
+route('GET', G + '/server/backup', 'admin')(guiapi.server_backup)
+route('PUT', G + '/server/restore', 'admin', 512 * MB)(guiapi.server_restore)
 route('DELETE', G + r'/users/(\d+)', 'admin')(guiapi.user_delete)
 route('POST', G + r'/users/(\d+)/password', 'admin')(guiapi.user_password)
 route('POST', G + r'/users/(\d+)/disable2fa', 'admin')(guiapi.user_disable_2fa)
@@ -329,7 +331,7 @@ class Handler(BaseHTTPRequestHandler):
                 raise ApiError(413, 'Request too large.')
             body = self.rfile.read(n) if n else b''
             req = Req(self, method, path, parse_qs(parsed.query), body)
-            if body and method in ('POST', 'PUT', 'PATCH', 'DELETE') and 'json' not in self.headers.get('Content-Type', '').lower():
+            if body and method in ('POST', 'PUT', 'PATCH', 'DELETE') and 'json' not in self.headers.get('Content-Type', '').lower() and 'zip' not in self.headers.get('Content-Type', '').lower():
                 raise ApiError(415, 'Send JSON (Content-Type: application/json).')
 
             if auth == 'token':

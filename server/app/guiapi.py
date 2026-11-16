@@ -487,3 +487,18 @@ def user_toggle(ctx, req, uid):
     if disable:
         ctx.store.end_other_sessions(u['id'], '')
     return 200, {'disabled': bool(disable)}
+
+
+# ---------------------------------------------------------------- whole-server backup (admin)
+def server_backup(ctx, req):
+    data = ctx.store.backup_zip()
+    name = 'mbrowser-server-backup-%s.zip' % time.strftime('%Y%m%d-%H%M%S')
+    return 200, data, {'Content-Type': 'application/zip', 'Content-Disposition': 'attachment; filename="%s"' % name}
+
+
+def server_restore(ctx, req):
+    """Replaces everything on this server with a backup made by server_backup. Everybody is signed out afterwards if the backup has other sessions."""
+    if not req.body:
+        raise ApiError(400, 'No file received.')
+    n = ctx.store.restore_zip(req.body)
+    return 200, {'ok': True, 'files': n}
