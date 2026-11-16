@@ -35,6 +35,7 @@ class StartPage(
     private val prefs = Prefs(act)
     private val tabsRow: LinearLayout = root.findViewById(R.id.dialTabs)
     private val grid: RecyclerView = root.findViewById(R.id.grid)
+    init { grid.clipChildren = false; grid.clipToPadding = false }
     private val crumb: TextView = root.findViewById(R.id.crumb)
     private val ADD = Any()
     private var wp = false                  // drawn over a wallpaper: no bar behind the dial tabs, light text
@@ -252,14 +253,59 @@ class StartPage(
         }.show()
     }
 
+    /** The same compact bar as on the desktop: one address field and an Add button, titled by the site's name. */
     private fun addItem(groupId: String, p: List<Int>) {
-        promptFields(act, "Add to speed dial", listOf("Address", "Title (optional)"), listOf("https://", ""), "Add") { v ->
-            var url = v[0]
-            if (url.isEmpty() || url == "https://") return@promptFields
-            if (!Regex("^[a-zA-Z][a-zA-Z0-9+.-]*://").containsMatchIn(url)) url = "https://$url"
-            edit { sp -> listAt(sp, groupId, p)?.put(JSONObject().put("title", v[1].ifBlank { Thumbs.hostOf(url) }).put("url", url)) }
-            refresh()
+        val dlg = android.app.Dialog(act)
+        dlg.requestWindowFeature(android.view.Window.FEATURE_NO_TITLE)
+        val bar = LinearLayout(act)
+        bar.orientation = LinearLayout.HORIZONTAL
+        bar.gravity = Gravity.CENTER_VERTICAL
+        bar.setPadding(act.dp(14), act.dp(6), act.dp(8), act.dp(6))
+        bar.background = GradientDrawable().also { g ->
+            g.cornerRadius = act.dp(14).toFloat(); g.setColor(act.tc(R.attr.mbCard)); g.setStroke(act.dp(1), act.tc(R.attr.mbLine))
         }
+        val field = android.widget.EditText(act)
+        field.hint = "Type address to add to your Speed Dial"
+        field.setSingleLine()
+        field.inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_URI
+        field.imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_GO
+        field.importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_NO
+        field.background = null
+        field.setTextColor(act.tc(R.attr.mbText)); field.setHintTextColor(act.tc(R.attr.mbMuted))
+        field.textSize = 15f
+        bar.addView(field, LinearLayout.LayoutParams(0, -2, 1f))
+        val go = TextView(act)
+        go.text = "Add"; go.textSize = 15f; go.setTypeface(null, android.graphics.Typeface.BOLD)
+        go.setPadding(act.dp(16), act.dp(10), act.dp(16), act.dp(10))
+        go.background = GradientDrawable().also { g -> g.cornerRadius = act.dp(10).toFloat(); g.setColor(act.tc(R.attr.mbAccent)) }
+        go.setTextColor(Color.WHITE)
+        go.alpha = 0.5f; go.isEnabled = false
+        bar.addView(go)
+        fun submit() {
+            var url = field.text.toString().trim()
+            if (url.isEmpty()) return
+            if (!Regex("^[a-zA-Z][a-zA-Z0-9+.-]*://").containsMatchIn(url)) url = "https://$url"
+            edit { sp -> listAt(sp, groupId, p)?.put(JSONObject().put("title", Thumbs.hostOf(url).removePrefix("www.").ifBlank { url }).put("url", url)) }
+            dlg.dismiss(); refresh()
+        }
+        field.addTextChangedListener(object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
+            override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
+            override fun afterTextChanged(e: android.text.Editable?) { val on = !e.isNullOrBlank(); go.isEnabled = on; go.alpha = if (on) 1f else 0.5f }
+        })
+        field.setOnEditorActionListener { _, _, _ -> submit(); true }
+        go.setOnClickListener { submit() }
+        dlg.setContentView(bar)
+        dlg.window?.let { w ->
+            w.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
+            w.setGravity(Gravity.TOP)
+            w.setLayout(android.view.WindowManager.LayoutParams.MATCH_PARENT, android.view.WindowManager.LayoutParams.WRAP_CONTENT)
+            w.attributes = w.attributes.also { it.y = act.dp(56); it.horizontalMargin = 0.02f; it.dimAmount = 0.35f }
+            w.addFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND)
+            w.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE)
+        }
+        dlg.show()
+        field.requestFocus()
     }
 
     private fun addFolder(groupId: String, p: List<Int>) {
@@ -442,7 +488,7 @@ class StartPage(
         val close = TextView(act); close.text = "✕"; close.textSize = 18f; close.setTextColor(act.tc(R.attr.mbMuted)); close.setPadding(act.dp(12), act.dp(6), act.dp(12), act.dp(6))
         close.setOnClickListener { dlg.dismiss() }
         head.addView(back); head.addView(title, LinearLayout.LayoutParams(0, -2, 1f)); head.addView(close)
-        val rv = RecyclerView(act)
+        val rv = RecyclerView(act); rv.clipChildren = false; rv.clipToPadding = false
         rv.overScrollMode = View.OVER_SCROLL_NEVER
         makeHelper().attachToRecyclerView(rv)
         card.addView(head, LinearLayout.LayoutParams(-1, -2))
@@ -498,7 +544,16 @@ class StartPage(
 
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
             return if (viewType == 1) AddVH(inflater.inflate(R.layout.item_add, parent, false))
-            else CardVH(inflater.inflate(R.layout.item_card, parent, false)).also { it.card.clipToOutline = true }
+            else CardVH(inflater.inflate(R.layout.item_card, parent, false)).also {
+                it.card.clipToOutline = true
+                it.itemView.setOnTouchListener { v, e ->
+                    when (e.actionMasked) {
+                        android.view.MotionEvent.ACTION_DOWN -> v.animate().translationY(-act.dp(3).toFloat()).scaleX(1.03f).scaleY(1.03f).setDuration(140).start()
+                        android.view.MotionEvent.ACTION_UP, android.view.MotionEvent.ACTION_CANCEL -> v.animate().translationY(0f).scaleX(1f).scaleY(1f).setDuration(180).start()
+                    }
+                    false
+                }
+            }
         }
 
         override fun onBindViewHolder(h: RecyclerView.ViewHolder, pos: Int) {
@@ -514,7 +569,8 @@ class StartPage(
             val tlp = h.thumb.layoutParams as FrameLayout.LayoutParams
             val llp = h.letter.layoutParams as FrameLayout.LayoutParams
             if (icons) {
-                h.card.background = null; h.card.clipToOutline = false
+                h.card.background = null; h.card.clipToOutline = false; h.card.clipChildren = false; h.card.elevation = 0f
+                h.thumb.elevation = act.dp(5).toFloat(); h.letter.elevation = act.dp(5).toFloat()
                 tlp.width = size; tlp.height = size; tlp.gravity = Gravity.CENTER_HORIZONTAL
                 llp.width = size; llp.height = size; llp.gravity = Gravity.CENTER_HORIZONTAL
                 val round = object : ViewOutlineProvider() {
@@ -530,7 +586,8 @@ class StartPage(
                 (h.row as LinearLayout).gravity = Gravity.CENTER
                 (h.title.layoutParams as LinearLayout.LayoutParams).apply { width = -1; weight = 0f; marginStart = 0 }
             } else {
-                h.card.setBackgroundResource(R.drawable.bg_card); h.card.clipToOutline = true
+                h.card.setBackgroundResource(R.drawable.bg_card); h.card.clipToOutline = true; h.card.elevation = act.dp(4).toFloat()
+                h.thumb.elevation = 0f; h.letter.elevation = 0f
                 tlp.width = -1; tlp.height = th; tlp.gravity = Gravity.NO_GRAVITY
                 llp.width = -1; llp.height = th; llp.gravity = Gravity.NO_GRAVITY
                 h.thumb.outlineProvider = ViewOutlineProvider.BACKGROUND; h.thumb.clipToOutline = false
