@@ -814,7 +814,7 @@ function renderPanel() {
   wpNone.onclick = () => { SP.wallpaper = 'none'; save(); applyLook(); renderPanel(); };
   wpGrid.append(wpNone);
 
-  ['aurora','dusk','ocean','dunes','mist','forest','ember','orchid','slate','nebula','peaks','grey','paper'].forEach((id) => {
+  ['aurora','dusk','ocean','dunes','mist','forest','ember','orchid','slate','nebula','peaks','grey','paper','sunrise','lagoon','midnight','blossom','glacier','canyon','meadow','neon','tide','graphite'].forEach((id) => {
     const s = document.createElement('button');
     s.className = 'wp-sw' + (curWp === id ? ' on' : '');
     s.title = id.charAt(0).toUpperCase() + id.slice(1);

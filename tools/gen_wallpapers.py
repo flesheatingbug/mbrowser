@@ -45,14 +45,17 @@ def ridge(img, colour, base, amp, freqs, seed, haze=0.0):
     return img * (1 - mask) + col * mask
 
 def finish(img, seed, path, blur=0):
+    blur = blur * img.shape[1] / 1080.0 if img.shape[1] < img.shape[0] else blur * img.shape[1] / 1920.0
     im = Image.fromarray(np.clip(img, 0, 255).astype(np.uint8))
     if blur: im = im.filter(ImageFilter.GaussianBlur(blur))
     a = np.asarray(im).astype(np.float32)
-    a += np.random.default_rng(seed).normal(0, 1.1, a.shape)   # a touch of grain hides banding
-    Image.fromarray(np.clip(a, 0, 255).astype(np.uint8)).save(path, quality=84, optimize=True, progressive=True)
+    a += np.random.default_rng(seed).normal(0, 0.8, a.shape)   # a touch of grain hides banding
+    Image.fromarray(np.clip(a, 0, 255).astype(np.uint8)).save(path, quality=90, optimize=True, progressive=True)
 
 def stars(img, n, seed, size=1.6):
     h, w, _ = img.shape
+    k = w / 1080.0 if w < h else w / 1920.0
+    n = int(n * k * k); size = size * k
     rng = np.random.default_rng(seed)
     for _ in range(n):
         x, y = rng.integers(0, w), rng.integers(0, int(h * 0.7))
@@ -60,6 +63,22 @@ def stars(img, n, seed, size=1.6):
         r = int(size * rng.uniform(0.6, 1.6))
         img[max(0, y - r):y + r + 1, max(0, x - r):x + r + 1] += 200 * b
     return np.clip(img, 0, 255)
+
+def glow(img, x, y, r, colour, strength=1.0, disc=0.0):
+    """A soft light (and optionally a crisp disc) at x, y (fractions of the size), radius r as a fraction of the height."""
+    h, w, _ = img.shape
+    yy, xx = np.mgrid[0:h, 0:w].astype(np.float32)
+    d = np.sqrt(((xx / w - x) * (w / h)) ** 2 + (yy / h - y) ** 2)
+    g = np.exp(-(d / r) ** 2)[..., None] * strength
+    c = rgb(colour)
+    out = img * (1 - np.clip(g, 0, 1)) + c * np.clip(g, 0, 1)
+    if disc:
+        m = np.clip((disc - d) / (disc * 0.06 + 1e-4), 0, 1)[..., None]
+        out = out * (1 - m) + c * m
+    return out
+
+def waves(img, colour, base, amp, freqs, seed, haze=0.0, tilt=0.0):
+    return ridge(img, colour, base, amp, freqs, seed, haze)
 
 def make(name, w, h, desktop):
     s = hash(name) % 1000 + 7
@@ -99,6 +118,39 @@ def make(name, w, h, desktop):
         img = mesh(w, h, '#f6c9a0', [(0.5, 0.55, '#ffd9a0', 0.4), (0.5, 0.0, '#6a79c9', 0.6), (0.1, 0.3, '#c99ac9', 0.4)], s)
         for i, (c, b) in enumerate([('#8d7fb0', 0.52), ('#6a5f93', 0.64), ('#4a416f', 0.76), ('#2c2650', 0.88)]):
             img = ridge(img, c, b, 0.07, [1.2, 3.0, 7.0], s + i, 0.35)
+    elif name == 'sunrise':
+        img = sky(w, h, '#2b2f6b', '#f7b267')
+        img = glow(img, 0.5, 0.66, 0.32, '#ffd9a0', 0.9, disc=0.035)
+        for i, (c, b) in enumerate([('#6b4a7a', 0.70), ('#4a3466', 0.78), ('#2d2250', 0.87)]):
+            img = ridge(img, c, b, 0.035, [1.1, 2.7, 6.0], s + i, 0.25)
+    elif name == 'lagoon':
+        img = mesh(w, h, '#06222b', [(0.2, 0.15, '#12b3a6', 0.4), (0.85, 0.4, '#1d6fa8', 0.45), (0.4, 0.9, '#7fe0c9', 0.35), (0.9, 0.95, '#0a3d4d', 0.4)], s)
+    elif name == 'midnight':
+        img = mesh(w, h, '#050914', [(0.5, 0.0, '#0f1d46', 0.6), (0.2, 0.8, '#162a5e', 0.5), (0.8, 0.9, '#0b1636', 0.5)], s)
+        img = stars(img, 520, s, 1.3)
+        img = glow(img, 0.74, 0.2, 0.22, '#9fb4ff', 0.45, disc=0.045)
+    elif name == 'blossom':
+        img = mesh(w, h, '#fbe8ee', [(0.15, 0.2, '#f7b6cf', 0.4), (0.85, 0.3, '#fdd9c6', 0.4), (0.5, 0.95, '#e89bb8', 0.4), (0.9, 0.9, '#f6c4dd', 0.35)], s)
+    elif name == 'glacier':
+        img = sky(w, h, '#d7ecf7', '#f6fbff')
+        for i, (c, b) in enumerate([('#b4d6ea', 0.46), ('#8bbbd8', 0.58), ('#5f98bd', 0.71), ('#356f99', 0.85)]):
+            img = ridge(img, c, b, 0.06, [1.3, 3.4, 7.5], s + i, 0.5)
+    elif name == 'canyon':
+        img = sky(w, h, '#f1b98a', '#f9dcb8')
+        for i, (c, b) in enumerate([('#d98458', 0.48), ('#bf6342', 0.60), ('#99452f', 0.73), ('#6b2b22', 0.87)]):
+            img = ridge(img, c, b, 0.045, [1.8, 4.2, 9.5], s + i, 0.22)
+    elif name == 'meadow':
+        img = sky(w, h, '#a8d8f0', '#e9f6e0')
+        for i, (c, b) in enumerate([('#9ccf86', 0.55), ('#6fb36a', 0.66), ('#468f55', 0.77), ('#2b6b41', 0.89)]):
+            img = ridge(img, c, b, 0.035, [1.0, 2.3, 5.0], s + i, 0.3)
+    elif name == 'neon':
+        img = mesh(w, h, '#0a0615', [(0.2, 0.25, '#7a1fd1', 0.35), (0.85, 0.55, '#1bc8e0', 0.3), (0.5, 0.95, '#e0239f', 0.32), (0.5, 0.0, '#05030b', 0.5)], s)
+    elif name == 'tide':
+        img = sky(w, h, '#0d3b66', '#5ec4d6')
+        for i, (c, b) in enumerate([('#2a8fb5', 0.52), ('#1f78a0', 0.62), ('#17607f', 0.73), ('#0e4660', 0.85)]):
+            img = ridge(img, c, b, 0.02, [2.5, 5.5, 11.0], s + i, 0.2)
+    elif name == 'graphite':
+        img = mesh(w, h, '#0e0f12', [(0.7, 0.2, '#2a2d34', 0.45), (0.2, 0.85, '#1b1d22', 0.5), (0.5, 0.5, '#16181c', 0.4)], s)
     elif name == 'grey':
         # plain, quiet grey: a soft top-to-bottom gradient, no pattern, no lines
         img = sky(w, h, '#4b4e53', '#2d2f33')
@@ -108,12 +160,13 @@ def make(name, w, h, desktop):
         raise SystemExit(name)
     return img
 
-NAMES = ['grey', 'aurora', 'dusk', 'ocean', 'dunes', 'mist', 'forest', 'ember', 'orchid', 'slate', 'nebula', 'peaks', 'paper']
+NAMES = ['grey', 'aurora', 'dusk', 'ocean', 'dunes', 'mist', 'forest', 'ember', 'orchid', 'slate', 'nebula', 'peaks', 'paper',
+         'sunrise', 'lagoon', 'midnight', 'blossom', 'glacier', 'canyon', 'meadow', 'neon', 'tide', 'graphite']
 if __name__ == '__main__':
     os.makedirs(ANDROID, exist_ok=True); os.makedirs(DESKTOP, exist_ok=True)
     only = os.environ.get('ONLY')
     for n in NAMES:
         if only and n not in only.split(','): continue
-        finish(make(n, 1080, 2400, False), 1, os.path.join(ANDROID, f'wp_{n}.jpg'), blur=1.2)
-        finish(make(n, 1920, 1080, True), 2, os.path.join(DESKTOP, f'{n}.jpg'), blur=1.2)
+        finish(make(n, 1440, 3200, False), 1, os.path.join(ANDROID, f'wp_{n}.jpg'), blur=1.2)
+        finish(make(n, 2560, 1440, True), 2, os.path.join(DESKTOP, f'{n}.jpg'), blur=1.2)
         print('made', n)

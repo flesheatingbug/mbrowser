@@ -228,6 +228,15 @@ if (/^https?:$/.test(location.protocol)) {
   const visibleInputs = () => [...document.querySelectorAll('input')].filter(isVisible);
   const pwFields = (root) => [...(root || document).querySelectorAll('input[type=password]')].filter(isVisible);
   const textual = (el) => ['text', 'email', 'tel', ''].includes((el.type || 'text').toLowerCase());
+  // the first step of a two-step sign-in (Amazon, Google…) has only the email / username field: no password field yet
+  const looksLikeUser = (el) => {
+    if (!(el instanceof HTMLInputElement) || !textual(el) || el.readOnly || el.disabled) return false;
+    const ac = (el.getAttribute('autocomplete') || '').toLowerCase();
+    if (/(^|\s)(username|email|webauthn)/.test(ac)) return true;
+    const t = (el.type || 'text').toLowerCase(), nm = ((el.name || '') + ' ' + (el.id || '')).toLowerCase();
+    if (/search|query|(^|[^a-z])q($|[^a-z])|coupon|promo|newsletter|subscribe|comment|zip|postal|city|first|last/.test(nm)) return false;
+    return t === 'email' || /email|e-mail|user(name)?|login|identifier|signin|sign-in|account/.test(nm);
+  };
   const userFieldFor = (pw) => {
     const all = visibleInputs();
     for (let k = all.indexOf(pw) - 1; k >= 0; k--) if (textual(all[k])) return all[k];
@@ -258,7 +267,7 @@ if (/^https?:$/.test(location.protocol)) {
   const checkForm = () => {
     clearTimeout(formTimer);
     formTimer = setTimeout(() => {
-      const has = pwFields(document).length > 0;
+      const has = pwFields(document).length > 0 || visibleInputs().some(looksLikeUser);
       if (has !== hadForm) { hadForm = has; ipcRenderer.send('pw:form', has); }
     }, 300);
   };
@@ -275,7 +284,7 @@ if (/^https?:$/.test(location.protocol)) {
     let login = el.type === 'password';
     if (!login && textual(el)) {
       const all = visibleInputs();
-      login = all.slice(all.indexOf(el) + 1, all.indexOf(el) + 3).some((n) => n.type === 'password');
+      login = all.slice(all.indexOf(el) + 1, all.indexOf(el) + 3).some((n) => n.type === 'password') || looksLikeUser(el);
     }
     if (!login) return;
     lastField = el;

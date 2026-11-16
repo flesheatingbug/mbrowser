@@ -3103,7 +3103,7 @@ const PAGES = { bookmarks: 'bookmarks.html', profiles: 'profiles.html', import: 
 const CORS = { 'access-control-allow-origin': '*' };
 
 // ---------- start page wallpapers and site icons ----------
-const WALLPAPER_IDS = ['grey', 'aurora', 'dusk', 'ocean', 'dunes', 'mist', 'forest', 'ember', 'orchid', 'slate', 'nebula', 'peaks', 'paper'];
+const WALLPAPER_IDS = ['grey', 'aurora', 'dusk', 'ocean', 'dunes', 'mist', 'forest', 'ember', 'orchid', 'slate', 'nebula', 'peaks', 'paper', 'sunrise', 'lagoon', 'midnight', 'blossom', 'glacier', 'canyon', 'meadow', 'neon', 'tide', 'graphite'];
 const sniffMime = (b) => {
   if (b.length > 4 && b[0] === 0xff && b[1] === 0xd8) return 'image/jpeg';
   if (b.length > 4 && b[0] === 0x89 && b[1] === 0x50) return 'image/png';

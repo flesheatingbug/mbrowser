@@ -13,6 +13,7 @@ object Wallpapers {
     val LIST = listOf(
         "grey" to "Grey", "aurora" to "Aurora", "dusk" to "Dusk", "ocean" to "Ocean", "dunes" to "Dunes", "mist" to "Mist", "forest" to "Forest",
         "ember" to "Ember", "orchid" to "Orchid", "slate" to "Slate", "nebula" to "Nebula", "peaks" to "Peaks", "paper" to "Paper",
+        "sunrise" to "Sunrise", "lagoon" to "Lagoon", "midnight" to "Midnight", "blossom" to "Blossom", "glacier" to "Glacier", "canyon" to "Canyon", "meadow" to "Meadow", "neon" to "Neon", "tide" to "Tide", "graphite" to "Graphite",
     )
 
     private var cacheKey = ""
