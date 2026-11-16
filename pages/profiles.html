@@ -224,7 +224,8 @@
     }
   }
 
-  $('new').onclick = () => browser.appNewProfileWizard();
+  $('new').onclick = () => browser.profilesAddWindow();
+  window.addEventListener('focus', () => load());
   $('ask').onchange = () => browser.profilesAskAtStart($('ask').checked);
   $('open-last').onchange = () => browser.profilesSetOpenLast($('open-last').checked);
 

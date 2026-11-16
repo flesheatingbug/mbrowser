@@ -2396,6 +2396,7 @@ function setupIpc() {
     if (r.error) await sleep(400);
     return r;
   }, PAGE_ONLY);
+  handle('profiles:addWindow', () => { showAddProfile(); return true; }, PAGE_ONLY);
   handle('profiles:open', (_e, id) => { if (!profiles.get(String(id))) return false; launchProfile(String(id), false); return true; }, PAGE_ONLY);
   handle('profiles:askAtStart', (_e, v) => { profiles.setAskAtStart(!!v); return true; }, PAGE_ONLY);
   on('profile:menu', () => profileMenu());
@@ -2940,7 +2941,7 @@ function setupIpc() {
 }
 
 // ---------- internal pages ----------
-const PAGES = { bookmarks: 'bookmarks.html', profiles: 'profiles.html', import: 'import.html', passwords: 'passwords.html', history: 'history.html', panel: 'panel.html', error: 'error.html', start: 'start.html', settings: 'settings.html', library: 'library.html', downloads: 'downloads.html', welcome: 'welcome.html', notes: 'notes.html', 'server-admin': 'server-admin.html' };
+const PAGES = { bookmarks: 'bookmarks.html', profiles: 'profiles.html', import: 'import.html', passwords: 'passwords.html', history: 'history.html', panel: 'panel.html', error: 'error.html', start: 'start.html', settings: 'settings.html', library: 'library.html', downloads: 'downloads.html', welcome: 'welcome.html', addprofile: 'addprofile.html', notes: 'notes.html', 'server-admin': 'server-admin.html' };
 
 const CORS = { 'access-control-allow-origin': '*' };
 
@@ -3590,6 +3591,123 @@ ipcMain.handle('gate:choose', async (e, id, pw, remember) => {
   return { ok: true };
 });
 ipcMain.on('gate:cancel', (e) => { if (e.sender.id === gateWcId && gateResolve) gateResolve('quit'); });
+
+// ----- "Add a profile" window: 4 ways to add one (existing server profile / new server profile / new server / local) -----
+let addProfileWcId = null;
+let addProfileWin = null;
+function showAddProfile() {
+  if (addProfileWin && !addProfileWin.isDestroyed()) { addProfileWin.focus(); return; }
+  const win = new BaseWindow({ width: 640, height: 720, title: 'Add a profile', icon: appIconImage(), resizable: true, minWidth: 480, minHeight: 560, backgroundColor: '#0f0524' });
+  try { if (typeof win.removeMenu === 'function') win.removeMenu(); } catch { /* ignore */ }
+  const view = new WebContentsView({ webPreferences: { preload: path.join(__dirname, 'page-preload.js'), contextIsolation: true, sandbox: true } });
+  win.contentView.addChildView(view);
+  const fit = () => { const b = win.getContentBounds(); view.setBounds({ x: 0, y: 0, width: b.width, height: b.height }); };
+  fit();
+  win.on('resize', fit);
+  addProfileWin = win;
+  addProfileWcId = view.webContents.id;
+  view.webContents.loadURL('my://addprofile');
+  win.on('closed', () => { addProfileWin = null; addProfileWcId = null; });
+}
+const isAddProfile = (e) => e.sender.id === addProfileWcId;
+
+// Create a local profile (optionally already signed in to a server profile) and write its sync settings.
+function makeProfile({ name, color, avatar, sync }) {
+  profiles.reload();
+  const r = profiles.create({ name, color, avatar });
+  if (!r.ok) return r;
+  if (sync) {
+    try {
+      const dir = profiles.dirFor(r.id);
+      fs.mkdirSync(dir, { recursive: true });
+      const sf = path.join(dir, 'settings.json');
+      let existing = {};
+      try { existing = JSON.parse(fs.readFileSync(sf, 'utf8')); } catch { /* fresh profile */ }
+      existing.sync = Object.assign({}, existing.sync || {}, sync);
+      const tmp = sf + '.tmp';
+      fs.writeFileSync(tmp, JSON.stringify(existing, null, 2), { mode: 0o600 });
+      fs.renameSync(tmp, sf);
+    } catch (err) { return { error: 'Could not set up sync for the new profile: ' + err.message }; }
+  }
+  return r;
+}
+const takenNames = () => profiles.list().map((p) => p.name.toLowerCase());
+const uniqueName = (n) => {
+  const t = takenNames(); let name = n, i = 2;
+  while (t.includes(name.toLowerCase())) name = n + ' ' + i++;
+  return name;
+};
+
+ipcMain.handle('addprofile:info', (e) => {
+  if (!isAddProfile(e)) return null;
+  const acc = S().sync.account || {};
+  return { connected: syncReady(), server: S().sync.server || '', user: acc.user || '', profile: acc.profile || '', hasAccount: !!(syncReady() && acc.user) };
+});
+// Server profiles of the connected account, marking the ones that already exist on this computer.
+ipcMain.handle('addprofile:serverProfiles', async (e) => {
+  if (!isAddProfile(e)) return null;
+  if (!syncReady()) return { error: 'This profile is not connected to a server.' };
+  try {
+    const r = await call('GET', '/api/profiles');
+    const have = takenNames();
+    return { profiles: (r.profiles || []).map((p) => ({ id: p.id, name: p.name, color: p.color || '', avatar: p.avatar || '', current: !!p.current, here: have.includes(String(p.name).toLowerCase()) })) };
+  } catch (err) { return { error: 'Cannot reach the server: ' + err.message }; }
+});
+// { id } = use an existing server profile, { newName } = create one first
+ipcMain.handle('addprofile:useConnected', async (e, o) => {
+  if (!isAddProfile(e)) return null;
+  o = o || {};
+  if (!syncReady()) return { error: 'This profile is not connected to a server.' };
+  try {
+    let id = o.id, name = '';
+    if (o.newName) {
+      const nm = String(o.newName).trim();
+      if (!nm) return { error: 'Enter a name for the new profile.' };
+      const c = await call('POST', '/api/profiles', { name: nm });
+      id = c.id; name = c.name;
+    } else {
+      const list = await call('GET', '/api/profiles');
+      const p = (list.profiles || []).find((x) => x.id === id);
+      if (!p) return { error: 'That profile is no longer on the server.' };
+      name = p.name;
+    }
+    const sw = await call('POST', '/api/switch', { profile: id, device: S().sync.device || os.hostname() });
+    const acc = S().sync.account || {};
+    const r = makeProfile({ name: uniqueName(name), sync: { server: S().sync.server, token: sw.token, account: { user: acc.user || '', profile: sw.profile?.name || name } } });
+    if (r.ok && o.open) launchProfile(r.id, false);
+    return r;
+  } catch (err) { return { error: err.message }; }
+});
+// Sign in to another server. Step 1 { server, username, password, totp } lists profiles; step 2 adds { profile } or { profile, create }.
+ipcMain.handle('addprofile:newServer', async (e, o) => {
+  if (!isAddProfile(e)) return null;
+  o = o || {};
+  const base = String(o.server || '').trim().replace(/\/+$/, '');
+  if (!/^https?:\/\//i.test(base)) return { error: 'Enter the server address, starting with http:// or https://.' };
+  try {
+    const res = await fetch(base + '/api/auth/device-login', {
+      method: 'POST', headers: { 'content-type': 'application/json' }, signal: AbortSignal.timeout(15000),
+      body: JSON.stringify({ username: String(o.username || ''), password: String(o.password || ''), totp: String(o.totp || ''), profile: o.profile ? String(o.profile) : '', create: !!o.create, list: !o.profile, device: os.hostname() }),
+    });
+    let data = {};
+    try { data = await res.json(); } catch { /* not JSON */ }
+    if (res.status === 404) return { error: 'That server is too old for account sign-in. Update it first.' };
+    if (!res.ok) return { error: data.error || ('Sign-in failed (HTTP ' + res.status + ')'), needTotp: !!data.needTotp };
+    if (data.needProfile) return { needProfile: true, profiles: data.profiles || [] };
+    const pname = data.profile?.name || String(o.profile || 'Profile');
+    const r = makeProfile({ name: uniqueName(pname), sync: { server: base, token: data.token, account: { user: String(o.username), profile: pname } } });
+    if (r.ok && o.open) launchProfile(r.id, false);
+    return r;
+  } catch (err) { return { error: 'Cannot reach the server: ' + err.message }; }
+});
+ipcMain.handle('addprofile:local', (e, o) => {
+  if (!isAddProfile(e)) return null;
+  o = o || {};
+  const r = makeProfile({ name: o.name, color: o.color, avatar: o.avatar });
+  if (r.ok && o.open) launchProfile(r.id, false);
+  return r;
+});
+ipcMain.on('addprofile:close', (e) => { if (isAddProfile(e) && addProfileWin) addProfileWin.close(); });
 
 function showWizard() {
   wizardActive = true;

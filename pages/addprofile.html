@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Add a profile</title>
+<link rel="stylesheet" href="my://assets/theme.css">
+<style>
+* { box-sizing: border-box; }
+body { margin: 0; font: 14px system-ui, sans-serif; background: var(--bg); color: var(--fg); padding: 28px 24px; }
+main { max-width: 560px; margin: 0 auto; }
+h1 { font-size: 22px; margin: 0 0 4px; }
+p.sub { color: var(--muted); margin: 0 0 20px; }
+.opt { display: flex; gap: 14px; align-items: flex-start; width: 100%; text-align: left; background: var(--tab); color: var(--fg); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; margin-bottom: 10px; cursor: pointer; font: inherit; }
+.opt:hover:not(:disabled) { border-color: var(--accent); }
+.opt:disabled { opacity: .45; cursor: not-allowed; }
+.opt b { display: block; font-size: 15px; margin-bottom: 2px; }
+.opt span { color: var(--muted); font-size: 13px; }
+.opt svg { flex: none; width: 24px; height: 24px; margin-top: 2px; color: var(--accent); }
+label { display: block; margin: 12px 0 4px; color: var(--muted); font-size: 13px; }
+input[type=text], input[type=password], input[type=url] { width: 100%; background: var(--tab); border: 1px solid var(--line); border-radius: 8px; color: var(--fg); padding: 9px 12px; font: inherit; outline: none; }
+input:focus { border-color: var(--accent); }
+.row { display: flex; gap: 10px; margin-top: 18px; align-items: center; }
+button.pri, button.sec { border-radius: 999px; padding: 9px 22px; font: inherit; cursor: pointer; border: 1px solid var(--line); }
+button.pri { background: var(--accent); color: var(--onaccent); border-color: var(--accent); font-weight: 600; }
+button.sec { background: transparent; color: var(--fg); }
+.err { color: #ef4444; margin-top: 12px; min-height: 1em; }
+.plist button { display: flex; width: 100%; justify-content: space-between; align-items: center; background: var(--tab); color: var(--fg); border: 1px solid var(--line); border-radius: 10px; padding: 11px 14px; margin-bottom: 8px; font: inherit; cursor: pointer; }
+.plist button:hover:not(:disabled) { border-color: var(--accent); }
+.plist button:disabled { opacity: .5; cursor: default; }
+.tag { color: var(--muted); font-size: 12px; }
+.note { color: var(--muted); font-size: 13px; margin-top: 10px; }
+label.chk { display: flex; align-items: center; gap: 8px; color: var(--fg); margin-top: 16px; }
+.hide { display: none; }
+</style>
+</head>
+<body>
+<main>
+  <div id="v-menu">
+    <h1>Add a profile</h1>
+    <p class="sub">Choose how the new profile should be set up.</p>
+    <button class="opt" id="o-existing"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14" opacity="0"/><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></svg><div><b>Add an existing profile from the connected server</b><span id="s-existing"></span></div></button>
+    <button class="opt" id="o-newonserver"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="6" rx="1"/><rect x="3" y="14" width="18" height="6" rx="1"/><path d="M7 7h.01M7 17h.01"/></svg><div><b>Make a new profile on the connected server</b><span id="s-newonserver"></span></div></button>
+    <button class="opt" id="o-newserver"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/></svg><div><b>Connect to a new server</b><span>Sign in to a different sync server and use one of its profiles.</span></div></button>
+    <button class="opt" id="o-local"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg><div><b>Make a local profile</b><span>Stays on this computer. No sync.</span></div></button>
+    <div class="row"><button class="sec" id="cancel">Cancel</button></div>
+  </div>
+
+  <div id="v-pick" class="hide">
+    <h1>Profiles on your server</h1>
+    <p class="sub" id="pick-sub"></p>
+    <div class="plist" id="plist"></div>
+    <div class="err" id="pick-err"></div>
+    <label class="chk"><input type="checkbox" id="pick-open" checked> Open the profile when it is added</label>
+    <div class="row"><button class="sec" data-back>Back</button></div>
+  </div>
+
+  <div id="v-name" class="hide">
+    <h1 id="name-title">Name the profile</h1>
+    <p class="sub" id="name-sub"></p>
+    <label for="name">Profile name</label>
+    <input type="text" id="name" maxlength="40" autocomplete="off">
+    <label class="chk"><input type="checkbox" id="name-open" checked> Open the profile when it is added</label>
+    <div class="err" id="name-err"></div>
+    <div class="row"><button class="pri" id="name-ok">Add profile</button><button class="sec" data-back>Back</button></div>
+  </div>
+
+  <div id="v-server" class="hide">
+    <h1>Connect to a new server</h1>
+    <p class="sub">Sign in with your account on that server.</p>
+    <label for="srv">Server address</label>
+    <input type="url" id="srv" placeholder="https://sync.example.com" autocomplete="off">
+    <label for="usr">Username</label>
+    <input type="text" id="usr" autocomplete="off">
+    <label for="pwd">Password</label>
+    <input type="password" id="pwd" autocomplete="off">
+    <div id="totp-wrap" class="hide"><label for="totp">Two-factor code</label><input type="text" id="totp" inputmode="numeric" autocomplete="off"></div>
+    <div class="err" id="srv-err"></div>
+    <div class="row"><button class="pri" id="srv-ok">Sign in</button><button class="sec" data-back>Back</button></div>
+  </div>
+
+  <div id="v-done" class="hide">
+    <h1>Profile added</h1>
+    <p class="sub" id="done-msg"></p>
+    <div class="row"><button class="pri" id="done-ok">Close</button></div>
+  </div>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+const views = ['menu', 'pick', 'name', 'server', 'done'];
+function show(v) { views.forEach((x) => $('v-' + x).classList.toggle('hide', x !== v)); }
+let info = {}, mode = '', creds = null;
+
+document.querySelectorAll('[data-back]').forEach((b) => b.onclick = () => show('menu'));
+$('cancel').onclick = () => browser.addProfileClose();
+$('done-ok').onclick = () => browser.addProfileClose();
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') browser.addProfileClose(); });
+
+function done(msg) { $('done-msg').textContent = msg; show('done'); }
+
+(async () => {
+  info = (await browser.addProfileInfo()) || {};
+  const ok = info.connected && info.hasAccount;
+  if (!ok) {
+    for (const id of ['o-existing', 'o-newonserver']) $(id).disabled = true;
+    const msg = info.connected ? 'This profile is connected with an API key, not an account, so it cannot list the other profiles.' : 'This profile is not connected to a server yet.';
+    $('s-existing').textContent = msg; $('s-newonserver').textContent = msg;
+  } else {
+    $('s-existing').textContent = 'Pick a profile that already lives on ' + info.server + ' (signed in as ' + info.user + ').';
+    $('s-newonserver').textContent = 'Create a fresh profile on ' + info.server + ' and set it up here.';
+  }
+})();
+
+$('o-existing').onclick = async () => {
+  mode = 'existing';
+  $('plist').innerHTML = ''; $('pick-err').textContent = '';
+  $('pick-sub').textContent = 'Choose the profile to add to this computer.';
+  show('pick');
+  const r = await browser.addProfileServerProfiles();
+  if (!r || r.error) { $('pick-err').textContent = (r && r.error) || 'Could not load profiles.'; return; }
+  if (!r.profiles.length) { $('pick-err').textContent = 'The server has no profiles.'; return; }
+  for (const p of r.profiles) {
+    const b = document.createElement('button');
+    const n = document.createElement('span'); n.textContent = p.name;
+    const t = document.createElement('span'); t.className = 'tag'; t.textContent = p.here ? 'already here' : (p.current ? 'this window' : '');
+    b.append(n, t);
+    if (p.here) b.title = 'A profile with this name is already on this computer. Adding it again makes a copy named “' + p.name + ' 2”.';
+    b.onclick = async () => {
+      document.querySelectorAll('#plist button').forEach((x) => x.disabled = true);
+      const res = await browser.addProfileUseConnected({ id: p.id, open: $('pick-open').checked });
+      if (res && res.ok) done('“' + p.name + '” was added and is syncing from your server.');
+      else { $('pick-err').textContent = (res && res.error) || 'Failed.'; document.querySelectorAll('#plist button').forEach((x) => x.disabled = false); }
+    };
+    $('plist').appendChild(b);
+  }
+};
+
+function askName(title, sub) {
+  $('name-title').textContent = title; $('name-sub').textContent = sub; $('name').value = ''; $('name-err').textContent = '';
+  show('name'); $('name').focus();
+}
+$('o-newonserver').onclick = () => { mode = 'newonserver'; askName('New profile on your server', 'It is created on ' + info.server + ' and set up on this computer.'); };
+$('o-local').onclick = () => { mode = 'local'; askName('New local profile', 'This profile stays on this computer and does not sync.'); };
+$('name-ok').onclick = async () => {
+  const name = $('name').value.trim();
+  if (!name) { $('name-err').textContent = 'Enter a name.'; return; }
+  $('name-ok').disabled = true; $('name-err').textContent = '';
+  const open = $('name-open').checked;
+  let r;
+  if (mode === 'local') r = await browser.addProfileLocal({ name, open });
+  else if (mode === 'newserver') r = await browser.addProfileNewServer({ ...creds, profile: name, create: true, open });
+  else r = await browser.addProfileUseConnected({ newName: name, open });
+  $('name-ok').disabled = false;
+  if (r && r.ok) done('“' + name + '” was added' + (mode === 'local' ? '.' : ' and is syncing.'));
+  else $('name-err').textContent = (r && r.error) || 'Failed.';
+};
+$('name').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('name-ok').click(); });
+
+$('o-newserver').onclick = () => { mode = 'newserver'; $('srv-err').textContent = ''; show('server'); $('srv').focus(); };
+$('srv-ok').onclick = async () => {
+  $('srv-err').textContent = ''; $('srv-ok').disabled = true;
+  creds = { server: $('srv').value.trim(), username: $('usr').value.trim(), password: $('pwd').value, totp: $('totp').value.trim() };
+  const r = await browser.addProfileNewServer(creds);
+  $('srv-ok').disabled = false;
+  if (!r) { $('srv-err').textContent = 'Failed.'; return; }
+  if (r.needTotp) $('totp-wrap').classList.remove('hide');
+  if (r.error) { $('srv-err').textContent = r.error; return; }
+  if (r.needProfile) {
+    mode = 'newserver';
+    $('plist').innerHTML = ''; $('pick-err').textContent = '';
+    $('pick-sub').textContent = 'Signed in. Choose a profile from this server, or make a new one.';
+    show('pick');
+    for (const p of r.profiles) {
+      const b = document.createElement('button'); const n = document.createElement('span'); n.textContent = p.name; b.appendChild(n);
+      b.onclick = async () => {
+        document.querySelectorAll('#plist button').forEach((x) => x.disabled = true);
+        const res = await browser.addProfileNewServer({ ...creds, profile: String(p.id), open: $('pick-open').checked });
+        if (res && res.ok) done('“' + p.name + '” was added from the new server.');
+        else { $('pick-err').textContent = (res && res.error) || 'Failed.'; document.querySelectorAll('#plist button').forEach((x) => x.disabled = false); }
+      };
+      $('plist').appendChild(b);
+    }
+    const mk = document.createElement('button'); mk.innerHTML = '<span>+ Make a new profile on this server</span>';
+    mk.onclick = () => askName('New profile on the server', 'It is created on ' + creds.server + '.');
+    $('plist').appendChild(mk);
+    return;
+  }
+  if (r.ok) done('Connected to the new server and added the profile.');
+};
+['srv', 'usr', 'pwd', 'totp'].forEach((id) => $(id).addEventListener('keydown', (e) => { if (e.key === 'Enter') $('srv-ok').click(); }));
+</script>
+</body>
+</html>
