@@ -518,6 +518,12 @@
     $('shield').classList.toggle('tb-hidden', tb.shield === false);
     $('star').classList.toggle('tb-hidden', tb.star === false);
     $('profile').classList.toggle('tb-hidden', tb.profile === false);
+    $('key').classList.toggle('tb-hidden', tb.key === false);
+    $('sec').classList.toggle('tb-hidden', tb.siteinfo === false);
+    const TB_IDS = { back: 'back', forward: 'fwd', reload: 'reload', address: 'urlwrap', shield: 'shield', downloads: 'dlbtn', star: 'star', profile: 'profile' };
+    const ord = Array.isArray(tb.order) ? tb.order : [];
+    Object.keys(TB_IDS).forEach((k, i) => { const idx = ord.indexOf(k); $(TB_IDS[k]).style.order = String(idx >= 0 ? idx + 1 : 50 + i); });
+    $('priv').style.order = '0';
 
     if (s.profile) {
       const chip = $('pchip');
@@ -614,7 +620,7 @@
       pill.style.display = 'none'; pill.classList.remove('active');
       ring.classList.remove('indet');
     }
-    dlbtn.className = 'ic' + (nDl ? ' show' : '') + (activeDl ? ' active' : '');
+    dlbtn.className = 'ic' + (nDl && tb.downloads !== false ? ' show' : '') + (activeDl ? ' active' : '');
     $('dlbtn-n').textContent = nDl ? String(nDl) : '';
     if (startedDl) triggerDownloadWhoosh();
 

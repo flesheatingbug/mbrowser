@@ -67,12 +67,6 @@
       { path: 'appearance.nativeTitleBar', label: 'Use the system title bar', type: 'toggle', help: 'Takes effect for new windows after a restart. Off = no title bar, the tab strip carries the window buttons.' },
       { path: 'appearance.statusBar', label: 'Show the status bar', type: 'toggle', help: 'Loading progress, link addresses, zoom level and blocked trackers along the bottom.' },
       { path: 'appearance.tabBar', label: 'Tab bar position', type: 'select', options: [['top', 'Top'], ['left', 'Left (vertical tabs)']] },
-      { path: 'appearance.toolbar.back', label: 'Show Back button', type: 'toggle' },
-      { path: 'appearance.toolbar.forward', label: 'Show Forward button', type: 'toggle' },
-      { path: 'appearance.toolbar.reload', label: 'Show Reload button', type: 'toggle' },
-      { path: 'appearance.toolbar.shield', label: 'Show Tracker Blocker button', type: 'toggle' },
-      { path: 'appearance.toolbar.star', label: 'Show Bookmark button', type: 'toggle' },
-      { path: 'appearance.toolbar.profile', label: 'Show Profile button', type: 'toggle' },
     ],
     startpage: [
       { path: 'startPage.tileSize', label: 'Speed dial size (px)', type: 'number', min: 90, max: 260, help: 'Width of each speed dial tile.' },
@@ -134,6 +128,52 @@
   let S = null, cur = (location.hash || '#general').slice(1), searchQuery = '';
 
   const get = (p) => p.split('.').reduce((o, k) => (o == null ? o : o[k]), S);
+
+  const TB_ITEMS = [['back', 'Back'], ['forward', 'Forward'], ['reload', 'Reload'], ['address', 'Address bar'], ['shield', 'Tracker blocker'], ['downloads', 'Downloads'], ['star', 'Bookmark star'], ['profile', 'Profile']];
+  const TB_EXTRA = [['key', 'Saved logins key (inside the address bar)'], ['siteinfo', 'Site information (inside the address bar)']];
+  function toolbarSection(m) {
+    m.append(el('h2', null, 'Toolbar'));
+    m.append(el('p', 'muted', 'Choose which buttons are shown and move them left or right. The address bar always stays visible.'));
+    const tb = S.appearance.toolbar || {};
+    const order = (Array.isArray(tb.order) ? tb.order.filter((k) => TB_ITEMS.some((x) => x[0] === k)) : []);
+    for (const [k] of TB_ITEMS) if (!order.includes(k)) order.push(k);
+    const label = Object.fromEntries(TB_ITEMS);
+    const box = el('div');
+    async function save(next) { await set('appearance.toolbar.order', next); box.textContent = ''; draw(next); }
+    function draw(ord) {
+      ord.forEach((k, i) => {
+        const row = el('div', 'row');
+        const lab = el('label', null, label[k]);
+        const right = el('span'); right.style.cssText = 'display:flex;gap:6px;align-items:center';
+        if (k !== 'address') {
+          const cb = el('input'); cb.type = 'checkbox'; cb.checked = (S.appearance.toolbar || {})[k] !== false; cb.title = 'Show';
+          cb.onchange = () => set('appearance.toolbar.' + k, cb.checked);
+          right.append(cb);
+        }
+        const up = el('button', null, '←'); up.disabled = i === 0; up.title = 'Move left';
+        up.onclick = () => { const n = ord.slice(); [n[i - 1], n[i]] = [n[i], n[i - 1]]; save(n); };
+        const dn = el('button', null, '→'); dn.disabled = i === ord.length - 1; dn.title = 'Move right';
+        dn.onclick = () => { const n = ord.slice(); [n[i + 1], n[i]] = [n[i], n[i + 1]]; save(n); };
+        right.append(up, dn);
+        row.append(lab, right); box.append(row);
+      });
+    }
+    draw(order);
+    m.append(box);
+    for (const [k, t] of TB_EXTRA) {
+      const row = el('div', 'row'); row.append(el('label', null, t));
+      const cb = el('input'); cb.type = 'checkbox'; cb.checked = tb[k] !== false; cb.onchange = () => set('appearance.toolbar.' + k, cb.checked);
+      row.append(cb); m.append(row);
+    }
+    const reset = el('button', null, 'Reset toolbar'); reset.style.marginTop = '10px';
+    reset.onclick = async () => {
+      for (const [k] of TB_ITEMS) if (k !== 'address') await browser.setSetting('appearance.toolbar.' + k, true);
+      for (const [k] of TB_EXTRA) await browser.setSetting('appearance.toolbar.' + k, true);
+      await set('appearance.toolbar.order', TB_ITEMS.map((x) => x[0])); render();
+    };
+    m.append(reset);
+  }
+
   async function set(p, v) {
     await browser.setSetting(p, v);
     S = await browser.getSettings();
@@ -600,7 +640,7 @@
       m.append(el('p', 'muted', navigator.userAgent));
       return;
     }
-    if (cur === 'appearance') { await themeSection(m); iconSection(m); }
+    if (cur === 'appearance') { await themeSection(m); toolbarSection(m); iconSection(m); }
     if (cur === 'import' || cur === 'profiles' || cur === 'passwords') {
       const frame = document.createElement('iframe');
       frame.src = cur === 'passwords' ? 'my://passwords' : ('my://' + cur);
