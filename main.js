@@ -110,6 +110,8 @@ try { app.setPath('userData', profiles.dirFor(profileId)); } catch { /* keep the
 const gotLock = app.requestSingleInstanceLock(); // one running instance per profile
 if (!gotLock) app.quit();
 
+// Troubleshooting: MB_BISECT=switches,cdp,ua,webrequest (any of them, comma separated) turns that customisation off to find which one breaks a page
+const BIS = (process.env.MB_BISECT || '').split(',').map((x) => x.trim()).filter(Boolean);
 // Look like plain Chrome to websites: Google sign-in refuses user agents that say "Electron".
 if (app.userAgentFallback) {
   app.userAgentFallback = app.userAgentFallback.replace(/\s*Electron\/\S+/, '').replace(/\s*(mybrowser|mbrowser)\/\S+/i, '');
@@ -129,12 +131,12 @@ const EARLY_ID = (() => {
   let _ua = `Mozilla/5.0 ${_uaPlat} AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${_uaChr} Safari/537.36`;
   if (EARLY_ID === 'firefox' || EARLY_ID === 'auto') _ua = `Mozilla/5.0 (${_win ? 'Windows NT 10.0; Win64; x64' : 'X11; Linux x86_64'}; rv:140.0) Gecko/20100101 Firefox/140.0`;
   else if (EARLY_ID === 'safari') _ua = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.6 Safari/605.1.15';
-  if (EARLY_ID !== 'none') app.commandLine.appendSwitch('user-agent', _ua);
+  if (EARLY_ID !== 'none' && !BIS.includes('switches')) app.commandLine.appendSwitch('user-agent', _ua);
 }
 // silences the harmless "--ozone-platform=wayland is not compatible with Vulkan" message.
 // Firefox and Safari have no "client hints" (navigator.userAgentData, Sec-CH-UA headers), so for those identities the feature is switched off
 // instead of faked: a faked one is easy to detect, a missing one is exactly what a real Firefox looks like.
-app.commandLine.appendSwitch('disable-features', EARLY_ID === 'chrome' || EARLY_ID === 'none' ? 'Vulkan' : 'Vulkan,UserAgentClientHint');
+app.commandLine.appendSwitch('disable-features', EARLY_ID === 'chrome' || EARLY_ID === 'none' || BIS.includes('switches') ? 'Vulkan' : 'Vulkan,UserAgentClientHint');
 // prevent navigator.webdriver from being set (some Chromium builds set it when DevTools attaches)
 app.commandLine.appendSwitch('disable-blink-features', 'AutomationControlled');
 
@@ -526,6 +528,7 @@ function isAuthHost(url) {
 function maskUserAgentData(wc) {
   // Override navigator.userAgentData via CDP so Google sign-in doesn't see "Electron" in the brand list.
   // ses.setUserAgent() patches navigator.userAgent but not the Client Hints API.
+  if (BIS.includes('cdp')) return;
   if (S().general.browserId !== 'chrome') return;   // only the Chrome identity is faked; the others are left exactly as they are
   // Don't bail on attach failure (e.g. debugger already attached by DevTools) — just send the command anyway.
   try { wc.debugger.attach('1.3'); } catch { /* already attached is fine */ }
@@ -657,6 +660,7 @@ function newTab(target, opts = {}) {
 // small diagnostics file for pages that hang or crash (userData/mbrowser-debug.log)
 const debugLogPath = () => path.join(app.getPath('userData'), 'mbrowser-debug.log');
 function dbg(msg) { try { fs.appendFileSync(debugLogPath(), new Date().toISOString() + ' ' + msg + '\n'); } catch { /* best effort */ } }
+if (BIS.length) dbg('troubleshooting switches off: ' + BIS.join(','));
 app.on('child-process-gone', (_e, d) => dbg('process gone: ' + d.type + ' name=' + (d.name || d.serviceName || '?') + ' ' + d.reason + ' code=' + d.exitCode + ' electron=' + process.versions.electron + ' chrome=' + process.versions.chrome + ' gpu=' + JSON.stringify(Object.keys(app.getGPUFeatureStatus ? app.getGPUFeatureStatus() : {}).length)));
 { let last = Date.now(); setInterval(() => { const now = Date.now(), lag = now - last - 1000; last = now; if (lag > 1500) dbg('main process was blocked for ' + lag + ' ms'); }, 1000).unref(); }
 
@@ -3295,6 +3299,7 @@ const FIREFOX_UA = process.platform === 'win32'
 // not Google's get a Chrome identity on top of that, set per page. A page that moves between the two is loaded again with the right one,
 // because the identity a page sees is fixed when its navigation starts.
 function applyAutoIdentity(wc) {
+  if (BIS.includes('ua')) return;
   if (S().general.browserId !== 'auto') return;
   const chromeUA = uaForMode('chrome');
   let last = FIREFOX_UA;   // what the process says by default
@@ -3363,7 +3368,7 @@ function setupSession(ses) {
     } catch { /* details are optional */ }
     callback(-3); // -3 = use Chromium's normal verification result
   });
-  blocker.attach(ses, (wcId, url, type) => {
+  if (!BIS.includes('webrequest')) blocker.attach(ses, (wcId, url, type) => {
     blockedCounts.set(wcId, (blockedCounts.get(wcId) || 0) + 1);
     try {
       const h = new URL(url).hostname;
@@ -3378,7 +3383,7 @@ function setupSession(ses) {
   const uaPlatHint = process.platform === 'win32' ? '"Windows"' : '"Linux"';
   const googlePattern = /^https?:\/\/([^/]*\.)?(google\.[a-z]{2,}|gmail\.com|googleapis\.com|gstatic\.com|googleusercontent\.com)\//i;
   const uaPlatVerHint = JSON.stringify(chromePlatformVersion());
-  ses.webRequest.onBeforeSendHeaders({ urls: ['<all_urls>'] }, (details, callback) => {
+  if (!BIS.includes('webrequest')) ses.webRequest.onBeforeSendHeaders({ urls: ['<all_urls>'] }, (details, callback) => {
     const h = details.requestHeaders;
     // DNT for all requests (mirrors blocker's removed handler)
     if (S().privacy?.doNotTrack) { h['DNT'] = '1'; h['Sec-GPC'] = '1'; }
