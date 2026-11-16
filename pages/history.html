@@ -44,8 +44,10 @@
       <option value="week">Last 7 days</option>
       <option value="all">Everything</option>
     </select>
+    <button id="binbtn">Recycle bin</button>
   </div>
   <div id="list"></div>
+  <div id="binview" style="display:none"></div>
   <div class="more"><button id="more" style="display:none">Show more</button></div>
 </div>
 <script>
@@ -136,9 +138,44 @@
     const now = Date.now(), today = startOfDay(now);
     const spec = { hour: { from: now - 3600e3 }, today: { from: today }, week: { from: today - 6 * DAY }, all: { from: 0 } }[v];
     const label = { hour: 'the last hour', today: 'today', week: 'the last 7 days', all: 'all time' }[v];
-    if (!confirm('Delete browsing history for ' + label + '? This only affects this computer; entries already on the sync server are not removed.')) return;
+    if (!confirm('Delete browsing history for ' + label + '? They go to the recycle bin for 30 days. This only affects this computer; entries already on the sync server are not removed.')) return;
     await browser.historyDelete(spec);
     load();
+  };
+
+  // ---- recycle bin (removed history is kept for 30 days) ----
+  let inBin = false;
+  async function showBin() {
+    const items = await browser.historyBinList();
+    const v = $('binview'); v.textContent = '';
+    const top = document.createElement('div'); top.className = 'bar';
+    const info = document.createElement('span'); info.className = 'muted'; info.textContent = items.length + ' removed pages, kept for 30 days';
+    const sp = document.createElement('span'); sp.style.flex = '1';
+    const ra = document.createElement('button'); ra.textContent = 'Restore all'; ra.disabled = !items.length;
+    ra.onclick = async () => { await browser.historyRestore({ all: true }); showBin(); };
+    const eb = document.createElement('button'); eb.className = 'danger'; eb.textContent = 'Empty bin'; eb.disabled = !items.length;
+    eb.onclick = async () => { if (confirm('Permanently delete everything in the bin?')) { await browser.historyEmptyBin(); showBin(); } };
+    top.append(info, sp, ra, eb); v.append(top);
+    for (const h of items) {
+      const row = document.createElement('div'); row.className = 'h';
+      const tm = document.createElement('span'); tm.className = 'tm'; tm.textContent = new Date(h.time).toLocaleDateString([], { day: 'numeric', month: 'short' });
+      const t = document.createElement('div'); t.className = 't';
+      const a = document.createElement('a'); a.textContent = h.title || h.url;
+      const sm = document.createElement('small'); sm.className = 'muted'; sm.textContent = h.url;
+      t.append(a, sm);
+      const x = document.createElement('button'); x.textContent = 'Restore';
+      x.onclick = async () => { await browser.historyRestore({ urls: [h.url] }); showBin(); };
+      row.append(tm, t, x); v.append(row);
+    }
+    if (!items.length) { const p = document.createElement('p'); p.className = 'muted'; p.textContent = 'The bin is empty.'; v.append(p); }
+  }
+  $('binbtn').onclick = () => {
+    inBin = !inBin;
+    $('binbtn').textContent = inBin ? 'Back to history' : 'Recycle bin';
+    $('list').style.display = inBin ? 'none' : '';
+    $('binview').style.display = inBin ? '' : 'none';
+    for (const id of ['q', 'range', 'del', 'count']) $(id).style.display = inBin ? 'none' : '';
+    if (inBin) { $('more').style.display = 'none'; showBin(); } else load();
   };
   load();
 </script>

@@ -246,6 +246,7 @@ const save = (name, data) => fs.writeFileSync(file(name), JSON.stringify(data, n
 
 let bookmarks = [];  // { url, title, added, updated, deleted }
 let history = [];    // { url, title, time }
+let historyBin = []; // removed history, kept 30 days: { url, title, time, binTime }
 let remoteTabs = [];
 let notes = [];     // { id, title, text, updated }
 let bookmarkFolders = []; // folder paths such as "Work / Dev" (so empty folders exist too)
@@ -2480,21 +2481,45 @@ function setupIpc() {
     }
     return { items: out, total: history.length };
   }, BOTH);
-  // remove history entries: { urls: [...] } removes every visit of those pages, { from, to } removes a time range
+  // remove history entries: { urls: [...] } removes every visit of those pages, { from, to } removes a time range.
+  // Removed entries go to a recycle bin for 30 days.
   handle('history:delete', (_e, spec) => {
     const sp = spec || {};
     const before = history.length;
+    let gone = [];
     if (Array.isArray(sp.urls)) {
       const set = new Set(sp.urls.filter((u) => typeof u === 'string'));
+      gone = history.filter((h) => set.has(h.url));
       history = history.filter((h) => !set.has(h.url));
     } else if (Number.isFinite(Number(sp.from)) || Number.isFinite(Number(sp.to))) {
       const from = Number(sp.from) || 0;
       const to = Number.isFinite(Number(sp.to)) ? Number(sp.to) : Infinity;
+      gone = history.filter((h) => !(h.time < from || h.time > to));
       history = history.filter((h) => h.time < from || h.time > to);
     }
+    const now = Date.now();
+    historyBin.push(...gone.map((h) => ({ url: h.url, title: h.title, time: h.time, binTime: now })));
+    if (historyBin.length > 5000) historyBin = historyBin.slice(-5000);
     save('history.json', history);
+    save('history-bin.json', historyBin);
     return before - history.length;
   }, BOTH);
+  handle('history:binList', () => [...historyBin].sort((a, b) => b.binTime - a.binTime || b.time - a.time).slice(0, 1000), BOTH);
+  // restore { urls: [...] } or everything when spec.all
+  handle('history:restore', (_e, spec) => {
+    const sp = spec || {};
+    const set = Array.isArray(sp.urls) ? new Set(sp.urls.filter((u) => typeof u === 'string')) : null;
+    const back = historyBin.filter((h) => sp.all || (set && set.has(h.url)));
+    if (!back.length) return 0;
+    historyBin = historyBin.filter((h) => !back.includes(h));
+    const seen = new Set(history.map((h) => h.url + '|' + h.time));
+    for (const h of back) if (!seen.has(h.url + '|' + h.time)) history.push({ url: h.url, title: h.title, time: h.time });
+    history.sort((a, b) => a.time - b.time);
+    save('history.json', history);
+    save('history-bin.json', historyBin);
+    return back.length;
+  }, BOTH);
+  handle('history:emptyBin', () => { historyBin = []; save('history-bin.json', historyBin); return true; }, BOTH);
   handle('import:detect', () => {
     detectedSources.clear();
     return detectBrowsers().map((src, i) => {
@@ -2719,7 +2744,7 @@ function setupIpc() {
     // Chromium's LevelDB files may be locked on Windows — clearStorageData clears them in-process.
     setImmediate(async () => {
       const dir = profiles.dirFor(profileId);
-      for (const f of ['bookmarks.json', 'history.json', 'notes.json', 'bookmark-folders.json',
+      for (const f of ['bookmarks.json', 'history.json', 'history-bin.json', 'notes.json', 'bookmark-folders.json',
                         'settings.json', 'vault.json', 'session.json', 'syncstate.json',
                         'vault-remember.key', 'vault-device.key', 'dialicons']) {
         try { fs.rmSync(path.join(dir, f), { recursive: true, force: true }); } catch {}
@@ -2789,7 +2814,7 @@ function setupIpc() {
       } catch {}
       // Delete our own data files from the active profile dir
       // (Chromium's LevelDB files may be locked on Windows — clearStorageData clears them in-process)
-      for (const f of ['bookmarks.json', 'history.json', 'notes.json', 'bookmark-folders.json',
+      for (const f of ['bookmarks.json', 'history.json', 'history-bin.json', 'notes.json', 'bookmark-folders.json',
                         'settings.json', 'vault.json', 'session.json', 'syncstate.json',
                         'vault-remember.key', 'vault-device.key', 'dialicons']) {
         try { fs.rmSync(path.join(baseDir, f), { recursive: true, force: true }); } catch {}
@@ -3745,6 +3770,7 @@ app.whenReady().then(async () => {
 
   bookmarks = load('bookmarks.json', []).map((b) => ({ deleted: false, updated: b.added || Date.now(), ...b }));
   history = load('history.json', []);
+  historyBin = load('history-bin.json', []).filter((h) => Date.now() - (h.binTime || 0) < 30 * 864e5);
   notes = load('notes.json', []);
   bookmarkFolders = load('bookmark-folders.json', []);
   vault = createVault(file('vault.json'));
