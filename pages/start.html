@@ -106,6 +106,24 @@
   .tile.folder-target .thumb { border-color: var(--accent); border-style: solid;
     background: color-mix(in srgb, var(--accent) 18%, var(--tab)); }
 
+
+  /* folder popup + drag */
+  #fpop { display: none; position: fixed; inset: 0; z-index: 350; background: rgba(0,0,0,.5);
+    backdrop-filter: blur(6px); align-items: center; justify-content: center; }
+  #fpop.on { display: flex; }
+  #fbox { background: var(--tab); border: 1px solid var(--line); border-radius: 18px; padding: 18px 22px 24px;
+    width: min(760px, 92vw); max-height: 82vh; overflow-y: auto; box-shadow: 0 16px 60px rgba(0,0,0,.55); }
+  #fhead { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; }
+  #ftitle { flex: 1; text-align: center; font-size: 16px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #fhead button { background: none; border: none; color: var(--muted); font-size: 18px; cursor: pointer; width: 30px; height: 30px; border-radius: 8px; }
+  #fhead button:hover { background: var(--active); color: var(--fg); }
+  .tile { user-select: none; -webkit-user-select: none; }
+  .tile.ghost { opacity: .3; transform: none !important; }
+  .tile.dragclone { transform: scale(1.07) !important; opacity: .95; filter: drop-shadow(0 10px 18px rgba(0,0,0,.5)); transition: none; }
+  body.dragging-tiles, body.dragging-tiles * { cursor: grabbing !important; }
+  body.dragging-tiles .tile:hover { transform: none; }
+  .tbtn.drop { background: color-mix(in srgb, var(--accent) 35%, transparent); outline: 2px dashed var(--accent); }
+
   /* context menu */
   #ctx { position: fixed; background: var(--active); border: 1px solid var(--line); border-radius: 10px;
     padding: 4px 0; z-index: 500; min-width: 190px; box-shadow: 0 4px 20px rgba(0,0,0,.4); display: none; }
@@ -185,6 +203,10 @@
   <div id="breadcrumb"></div>
   <div class="grid" id="grid"></div>
 </div>
+<div id="fpop"><div id="fbox">
+  <div id="fhead"><button id="fback" title="Back">‹</button><div id="ftitle" title="Double-click to rename"></div><button id="fclose" title="Close">✕</button></div>
+  <div class="grid" id="fgrid"></div>
+</div></div>
 <div id="panel"></div>
 <div id="ctx"></div>
 <div id="modal"><div id="mbox"></div></div>
@@ -211,7 +233,6 @@ const SAMPLE_BGS = [
 ];
 
 let SP = null, syncServer = '';
-let drag = null;
 let folderPath = [];
 let thumbVer = 0;
 let thumbPoll = null;
@@ -479,14 +500,7 @@ function renderTabBar() {
     b.onclick = () => { folderPath = []; SP.activeGroup = g.id; save(); render(); };
     b.ondblclick = (e) => { e.preventDefault(); showModal('group', { gi }); };
     b.oncontextmenu = (e) => showCtx(e, 'tab', { gi });
-    b.ondragover = (e) => { if (drag) { e.preventDefault(); b.classList.add('drop'); } };
-    b.ondragleave = () => b.classList.remove('drop');
-    b.ondrop = async (e) => {
-      e.preventDefault(); b.classList.remove('drop');
-      if (!drag || folderPath.length || drag.gi === gi) return;
-      const [d] = SP.groups[drag.gi].dials.splice(drag.di, 1);
-      g.dials.push(d); drag = null; await save(); render();
-    };
+    b.dataset.gi = gi;
     tc.append(b);
   });
 
@@ -557,117 +571,59 @@ function makeFolderThumb(d) {
 }
 
 // --- grid ---
-function renderGrid() {
-  isRendering = true;
-  const grid = $('grid'); grid.textContent = '';
-  const ai = activeIdx();
-  const cols = +(SP.columns) || 0;
-  if (cols > 0) {
-    // up to N columns; fewer when the window is too narrow, so tiles wrap like Auto
-    grid.style.maxWidth = `calc(${cols} * var(--tile) + ${cols - 1} * var(--gap, 22px))`;
-    grid.style.marginInline = 'auto';
-    grid.style.gridTemplateColumns = '';
-    grid.style.maxWidth = '';
-    grid.classList.add('auto-cols');
-  } else {
-    grid.style.gridTemplateColumns = '';
-    grid.classList.add('auto-cols');
-  }
+function layoutGrid(grid) {
+  grid.style.gridTemplateColumns = '';
+  grid.style.maxWidth = '';
+  grid.classList.add('auto-cols');
+}
 
-  const bc = $('breadcrumb');
-  if (folderPath.length) {
-    bc.className = 'show'; bc.textContent = '';
-    const seg = (txt, fn) => {
-      const s = document.createElement('span');
-      if (fn) { s.className = 'bc-link'; s.onclick = fn; }
-      s.textContent = txt; bc.append(s);
+function buildTile(d, idx, items, inFolder) {
+  const isFolder = d.type === 'folder';
+  const tile = isFolder ? document.createElement('div') : document.createElement('a');
+  tile.className = 'tile' + (isFolder ? ' folder' : '');
+  tile.dataset.key = isFolder ? 'f:' + (d.title || idx) : (d.url || String(idx));
+  tile._d = d;
+  if (!isFolder) {
+    tile.href = d.url;
+    tile.onclick = (e) => {
+      e.preventDefault(); if (dragSuppress) return;
+      if (e.ctrlKey || e.metaKey) browser.openUrl(d.url, 'tab'); else browser.go(d.url);
     };
-    const slash = () => { const s = document.createElement('span'); s.style.cssText = 'margin:0 5px;opacity:.4'; s.textContent = '›'; bc.append(s); };
-    seg('Home', () => navTo(0));
-    folderPath.forEach((f, i) => { slash(); seg(f.title, i < folderPath.length - 1 ? () => navTo(i + 1) : null); });
-  } else { bc.className = ''; bc.textContent = ''; }
+    tile.onauxclick = (e) => { if (e.button === 1) { e.preventDefault(); browser.openUrl(d.url, 'background'); } };
+  } else {
+    tile.onclick = (e) => { e.preventDefault(); if (dragSuppress) return; openFolder(d); };
+  }
+  tile.oncontextmenu = (e) => showCtx(e, isFolder ? 'folder' : 'tile', { d, idx: items.indexOf(d) });
 
-  const items = currentItems();
-  items.forEach((d, idx) => {
-    const isFolder = d.type === 'folder';
-    const tile = isFolder ? document.createElement('div') : document.createElement('a');
-    tile.className = 'tile' + (isFolder ? ' folder' : '');
-    tile.dataset.key = isFolder ? 'f:' + (d.title || idx) : (d.url || String(idx));
-    if (!isFolder) {
-      tile.href = d.url;
-      tile.onclick = (e) => { e.preventDefault(); if (e.ctrlKey || e.metaKey) browser.openUrl(d.url, 'tab'); else browser.go(d.url); };
-      tile.onauxclick = (e) => { if (e.button === 1) { e.preventDefault(); browser.openUrl(d.url, 'background'); } };
-    } else {
-      tile.onclick = (e) => { e.preventDefault(); openFolder(d); };
+  const th = isFolder ? makeFolderThumb(d) : (() => {
+    const t = document.createElement('div'); t.className = 'thumb';
+    const big = document.createElement('div'); big.className = 'big';
+    big.textContent = (d.title || d.url).charAt(0).toUpperCase(); t.append(big);
+    if (SP.dialStyle === 'icons' && isWeb(d.url)) {
+      dialIcon(d.url).then((src) => { if (!src) return; const img = new Image(); img.src = src; img.onload = () => { big.remove(); t.prepend(img); }; });
+    } else if (SP.thumbnails && isWeb(d.url)) {
+      const img = document.createElement('img');
+      img.src = 'my://thumb/x?u=' + encodeURIComponent(d.url) + '&v=' + thumbVer;
+      img.onload = () => { big.remove(); t.prepend(img); };
     }
-    tile.oncontextmenu = (e) => showCtx(e, isFolder ? 'folder' : 'tile', { d, idx });
+    return t;
+  })();
 
-    const th = isFolder ? makeFolderThumb(d) : (() => {
-      const t = document.createElement('div'); t.className = 'thumb';
-      const big = document.createElement('div'); big.className = 'big';
-      big.textContent = (d.title || d.url).charAt(0).toUpperCase(); t.append(big);
-      if (SP.dialStyle === 'icons' && isWeb(d.url)) {
-        dialIcon(d.url).then((src) => { if (!src) return; const img = new Image(); img.src = src; img.onload = () => { big.remove(); t.prepend(img); }; });
-      } else if (SP.thumbnails && isWeb(d.url)) {
-        const img = document.createElement('img');
-        img.src = 'my://thumb/x?u=' + encodeURIComponent(d.url) + '&v=' + thumbVer;
-        img.onload = () => { big.remove(); t.prepend(img); };
-      }
-      return t;
-    })();
+  const nm = document.createElement('div'); nm.className = 'nm';
+  nm.textContent = d.title || (isFolder ? 'Folder' : d.url);
+  tile.append(th, nm);
 
-    const nm = document.createElement('div'); nm.className = 'nm';
-    nm.textContent = d.title || (isFolder ? 'Folder' : d.url);
-    tile.append(th, nm);
+  tile.ondragstart = (e) => e.preventDefault();
+  tile.onpointerdown = (e) => armDrag(e, tile, grid2(tile), items, inFolder);
+  return tile;
+}
+const grid2 = (tile) => tile.parentElement;
 
-    if (!folderPath.length) {
-      tile.draggable = true;
-      tile.ondragstart = (e) => {
-        drag = { gi: ai, di: idx, isFolder };
-        e.dataTransfer.setData('text/plain', isFolder ? d.title : d.url);
-        e.dataTransfer.effectAllowed = 'move';
-        requestAnimationFrame(() => tile.classList.add('dragging'));
-      };
-      tile.ondragend = () => { drag = null; tile.classList.remove('dragging'); };
-      tile.ondragover = (e) => {
-        if (!drag || drag.gi !== ai || drag.di === idx) return;
-        e.preventDefault();
-        const r = tile.getBoundingClientRect();
-        const cx = (e.clientX - r.left) / r.width, cy = (e.clientY - r.top) / r.height;
-        const center = !drag.isFolder && cx > 0.2 && cx < 0.8 && cy > 0.2 && cy < 0.8;
-        tile.classList.toggle('over', !center);
-        tile.classList.toggle('folder-target', center);
-      };
-      tile.ondragleave = () => tile.classList.remove('over', 'folder-target');
-      tile.ondrop = async (e) => {
-        e.preventDefault();
-        const wasCenter = tile.classList.contains('folder-target');
-        tile.classList.remove('over', 'folder-target');
-        if (!drag || drag.gi !== ai || drag.di === idx) return;
-        const list = items;
-        const draggedItem = list[drag.di];
-        if (wasCenter && !drag.isFolder) {
-          if (isFolder) {
-            list.splice(drag.di, 1);
-            d.items = [...(d.items || []), draggedItem];
-            folderPath = [...folderPath, d];
-          } else {
-            const folder = { title: 'New folder', type: 'folder', items: [d, draggedItem] };
-            list.splice(drag.di, 1);
-            list.splice(drag.di < idx ? idx - 1 : idx, 1, folder);
-            folderPath = [...folderPath, folder];
-          }
-        } else {
-          const [moved] = list.splice(drag.di, 1);
-          list.splice(idx, 0, moved);
-        }
-        drag = null; await save(); render();
-      };
-    }
-    grid.append(tile);
-  });
-
-  if (SP.showAddButton !== false) {
+function fillGrid(grid, items, inFolder) {
+  grid.textContent = '';
+  layoutGrid(grid);
+  items.forEach((d, idx) => grid.append(buildTile(d, idx, items, inFolder)));
+  if (SP.showAddButton !== false || inFolder) {
     const add = document.createElement('div'); add.className = 'tile add';
     add.innerHTML = SP.dialStyle === 'icons' ? '<div class="thumb">+</div>' : '<div class="thumb">+</div><div class="nm">Add</div>';
     add.title = 'Add speed dial';
@@ -675,13 +631,228 @@ function renderGrid() {
     add.oncontextmenu = (e) => showCtx(e, 'blank', {});
     grid.append(add);
   }
+  grid.oncontextmenu = (e) => { if (e.target === grid) showCtx(e, 'blank', {}); };
+}
 
-  grid.oncontextmenu = (e) => showCtx(e, 'blank', {});
+function renderGrid() {
+  isRendering = true;
+  const grid = $('grid');
+  $('breadcrumb').className = '';
+  fillGrid(grid, SP.groups[activeIdx()].dials, false);
+  renderFolderPopup();
   snapTilePositions();
   isRendering = false;
 }
 
+// --- folder popup (stack of folders; the top one is shown) ---
+function renderFolderPopup() {
+  const pop = $('fpop');
+  if (!folderPath.length) { pop.classList.remove('on'); $('fgrid').textContent = ''; return; }
+  const cur = folderPath[folderPath.length - 1];
+  pop.classList.add('on');
+  const back = $('fback');
+  back.style.visibility = folderPath.length > 1 ? 'visible' : 'hidden';
+  $('ftitle').textContent = folderPath.map((f) => f.title || 'Folder').join(' › ');
+  cur.items = cur.items || [];
+  fillGrid($('fgrid'), cur.items, true);
+}
+$('fpop').addEventListener('pointerdown', (e) => { if (e.target === $('fpop') && !dragSess) { folderPath = []; render(); } });
+$('fclose').onclick = () => { folderPath = []; render(); };
+$('fback').onclick = () => { folderPath = folderPath.slice(0, -1); render(); };
+$('ftitle').ondblclick = () => { const cur = folderPath[folderPath.length - 1]; if (cur) showModal('folder', { d: cur, self: true }); };
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && folderPath.length && !modal.classList.contains('on')) { folderPath = []; render(); }
+});
+
 function render() { applyLook(); renderTabBar(); renderGrid(); }
+
+// --- pointer drag engine: long-press a tile, drag; others move out of the way; hold over a tile = folder ---
+let dragSuppress = false;
+let dragSess = null;
+const HOLD_MS = 320, SWAP_MS = 130, FOLDER_MS = 380, LEAVE_MS = 350;
+
+function armDrag(e, tile, grid, items, inFolder) {
+  if (e.button !== 0 || tile.classList.contains('add') || dragSess) return;
+  const sx = e.clientX, sy = e.clientY;
+  let timer = null;
+  const cancel = () => {
+    clearTimeout(timer);
+    document.removeEventListener('pointermove', mv, true);
+    document.removeEventListener('pointerup', cancel, true);
+    document.removeEventListener('pointercancel', cancel, true);
+  };
+  const mv = (ev) => { if (Math.hypot(ev.clientX - sx, ev.clientY - sy) > 6) cancel(); };
+  document.addEventListener('pointermove', mv, true);
+  document.addEventListener('pointerup', cancel, true);
+  document.addEventListener('pointercancel', cancel, true);
+  timer = setTimeout(() => { cancel(); beginDrag(tile, grid, items, inFolder, sx, sy); }, HOLD_MS);
+}
+
+function tilesOf(grid) { return [...grid.children].filter((t) => t.classList.contains('tile') && !t.classList.contains('add')); }
+
+function flip(grid, mutate) {
+  const els = tilesOf(grid);
+  const before = new Map(els.map((t) => [t, t.getBoundingClientRect()]));
+  mutate();
+  els.forEach((t) => {
+    if (t.classList.contains('ghost')) return;
+    const a = before.get(t), b = t.getBoundingClientRect();
+    const dx = a.left - b.left, dy = a.top - b.top;
+    if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return;
+    t.animate([{ transform: `translate(${dx}px,${dy}px)` }, { transform: 'none' }],
+      { duration: 380, easing: 'cubic-bezier(.34,1.56,.64,1)' });
+  });
+}
+
+function beginDrag(tile, grid, items, inFolder, px, py, grab) {
+  const d = tile._d;
+  const r = tile.getBoundingClientRect();
+  const clone = tile.cloneNode(true);
+  clone.className = 'tile dragclone' + (tile.classList.contains('folder') ? ' folder' : '');
+  clone.style.cssText = `position:fixed;left:${r.left}px;top:${r.top}px;width:${r.width}px;pointer-events:none;z-index:600;`;
+  document.body.append(clone);
+  tile.classList.add('ghost');
+  document.body.classList.add('dragging-tiles');
+  const off = grab || { x: px - r.left, y: py - r.top };
+  const s = { d, tile, grid, items, inFolder, clone, off, hover: null, hoverT: 0, mode: null, leaveT: 0, lastX: px, lastY: py };
+  dragSess = s;
+  dragSuppress = true;
+  place(s, px, py);
+  s.mv = (ev) => { s.lastX = ev.clientX; s.lastY = ev.clientY; place(s, ev.clientX, ev.clientY); onDragMove(s, ev.clientX, ev.clientY); };
+  s.up = () => endDrag(s, true);
+  s.esc = (ev) => { if (ev.key === 'Escape') { ev.stopPropagation(); endDrag(s, false); } };
+  document.addEventListener('pointermove', s.mv, true);
+  document.addEventListener('pointerup', s.up, true);
+  document.addEventListener('pointercancel', s.up, true);
+  document.addEventListener('keydown', s.esc, true);
+  onDragMove(s, px, py);
+}
+
+function place(s, x, y) {
+  s.clone.style.left = (x - s.off.x) + 'px';
+  s.clone.style.top = (y - s.off.y) + 'px';
+}
+
+function clearHover(s) {
+  clearTimeout(s.hoverT); s.hoverT = 0;
+  if (s.hover) s.hover.classList.remove('folder-target');
+  s.hover = null; s.mode = null;
+}
+
+function onDragMove(s, x, y) {
+  // tab buttons (main grid only): move to another page
+  document.querySelectorAll('.tbtn.drop').forEach((b) => b.classList.remove('drop'));
+  s.tabGi = -1;
+  if (!s.inFolder) {
+    const btns = [...document.querySelectorAll('#tab-bar .tbtn[data-gi]')];
+    for (const b of btns) {
+      const r = b.getBoundingClientRect();
+      if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) {
+        const gi = +b.dataset.gi;
+        if (gi !== activeIdx()) { b.classList.add('drop'); s.tabGi = gi; }
+      }
+    }
+    if (s.tabGi >= 0) { clearHover(s); return; }
+  }
+
+  // leaving the folder popup: after a moment the tile pops out into the main grid
+  if (s.inFolder) {
+    const br = $('fbox').getBoundingClientRect();
+    const inside = x >= br.left && x <= br.right && y >= br.top && y <= br.bottom;
+    if (!inside) {
+      if (!s.leaveT) s.leaveT = setTimeout(() => popOut(s), LEAVE_MS);
+      clearHover(s); return;
+    }
+    clearTimeout(s.leaveT); s.leaveT = 0;
+  }
+
+  // what are we over?
+  let over = null;
+  for (const t of tilesOf(s.grid)) {
+    if (t === s.tile) continue;
+    const r = t.getBoundingClientRect();
+    if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) { over = t; break; }
+  }
+  if (!over) { clearHover(s); return; }
+  const r = over.getBoundingClientRect();
+  const cx = (x - r.left) / r.width, cy = (y - r.top) / (r.width);   // thumb is square, ignore the title row
+  const center = s.d.type !== 'folder' && cx > 0.22 && cx < 0.78 && cy > 0.15 && cy < 0.8;
+  const mode = center ? 'folder' : 'swap';
+  if (s.hover === over && s.mode === mode) return;
+  clearHover(s);
+  s.hover = over; s.mode = mode;
+  if (mode === 'swap') {
+    s.hoverT = setTimeout(() => {
+      s.hoverT = 0;
+      const t = s.hover; if (!t || !t.isConnected) return;
+      const order = tilesOf(s.grid);
+      const before = order.indexOf(s.tile) < order.indexOf(t);
+      flip(s.grid, () => { if (before) t.after(s.tile); else t.before(s.tile); });
+      s.hover = null; s.mode = null;
+    }, SWAP_MS);
+  } else {
+    s.hoverT = setTimeout(() => {
+      s.hoverT = 0;
+      if (s.hover) s.hover.classList.add('folder-target');
+      s.mode = 'folder-ready';
+    }, FOLDER_MS);
+  }
+}
+
+// drag a tile out of the popup: move it to the page's top level and carry on dragging there
+function popOut(s) {
+  s.leaveT = 0;
+  if (dragSess !== s) return;
+  const d = s.d;
+  const idx = s.items.indexOf(d); if (idx >= 0) s.items.splice(idx, 1);
+  const top = SP.groups[activeIdx()].dials;
+  top.push(d);
+  teardown(s);
+  folderPath = [];
+  applyLook(); renderTabBar(); renderGrid();
+  const tile = tilesOf($('grid')).find((t) => t._d === d);
+  if (tile) beginDrag(tile, $('grid'), top, false, s.lastX, s.lastY, s.off);
+  else save();
+}
+
+function teardown(s) {
+  clearHover(s); clearTimeout(s.leaveT);
+  document.removeEventListener('pointermove', s.mv, true);
+  document.removeEventListener('pointerup', s.up, true);
+  document.removeEventListener('pointercancel', s.up, true);
+  document.removeEventListener('keydown', s.esc, true);
+  s.clone.remove();
+  s.tile.classList.remove('ghost');
+  document.body.classList.remove('dragging-tiles');
+  document.querySelectorAll('.tbtn.drop').forEach((b) => b.classList.remove('drop'));
+  if (dragSess === s) dragSess = null;
+  setTimeout(() => { dragSuppress = false; }, 60);
+}
+
+async function endDrag(s, commit) {
+  const target = s.hover && s.mode === 'folder-ready' ? s.hover : null;
+  const tabGi = s.tabGi;
+  teardown(s);
+  if (!commit) { render(); return; }
+  const list = s.items;
+  if (tabGi >= 0) {
+    const i = list.indexOf(s.d); if (i >= 0) list.splice(i, 1);
+    SP.groups[tabGi].dials.push(s.d);
+  } else if (target) {
+    const t = target._d;
+    const i = list.indexOf(s.d); if (i >= 0) list.splice(i, 1);
+    if (t.type === 'folder') { t.items = [...(t.items || []), s.d]; }
+    else {
+      const ti = list.indexOf(t);
+      list.splice(ti, 1, { title: 'New folder', type: 'folder', items: [t, s.d] });
+    }
+  } else {
+    const order = tilesOf(s.grid).map((t) => t._d);
+    list.splice(0, list.length, ...order);
+  }
+  await save(); render();
+}
+
 
 // --- bouncy resize animation (FLIP technique) ---
 const snapPos = new Map();
