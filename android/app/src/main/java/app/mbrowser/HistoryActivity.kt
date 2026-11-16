@@ -13,6 +13,7 @@ import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
+import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.ImageView
 import android.widget.LinearLayout
@@ -39,7 +40,10 @@ class HistoryActivity : BaseActivity() {
     private var bin = false
     private val selected = LinkedHashSet<String>()
     private var rows: List<Row> = emptyList()
-    private var shownKeys: List<String> = emptyList()
+    private var shownKeys: List<String> = emptyList()      // every entry matching the search and filter, across all pages
+    private var pageKeys: List<String> = emptyList()       // the entries on the page being shown
+    private var page = 0
+    private val PAGE_SIZE = 30
 
     private lateinit var titleView: TextView
     private lateinit var normalBar: LinearLayout
@@ -52,6 +56,11 @@ class HistoryActivity : BaseActivity() {
     private lateinit var binBtn: TextView
     private lateinit var clearBtn: TextView
     private lateinit var actBtn: TextView
+    private lateinit var allBox: CheckBox
+    private lateinit var pageInfo: TextView
+    private lateinit var prevBtn: TextView
+    private lateinit var nextBtn: TextView
+    private lateinit var pagerLabel: TextView
 
     private fun dpi(v: Int) = (v * resources.displayMetrics.density).toInt()
     private fun col(attr: Int): Int { val tv = TypedValue(); theme.resolveAttribute(attr, tv, true); return tv.data }
@@ -81,7 +90,7 @@ class HistoryActivity : BaseActivity() {
         actBtn = textBtn("Delete") { actOnSelected() }
         selectBar.addView(close, LinearLayout.LayoutParams(dpi(48), dpi(48)))
         selectBar.addView(selCount, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-        selectBar.addView(textBtn("All") { selected.addAll(shownKeys); refresh() })
+        selectBar.addView(textBtn("Page") { selected.addAll(pageKeys); refresh() })
         selectBar.addView(actBtn)
 
         val searchRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
@@ -90,7 +99,7 @@ class HistoryActivity : BaseActivity() {
             setBackgroundResource(R.drawable.bg_pill); setPadding(dpi(18), 0, dpi(18), 0); maxLines = 1; inputType = InputType.TYPE_CLASS_TEXT
             importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_NO
             addTextChangedListener(object : TextWatcher {
-                override fun afterTextChanged(s: Editable?) { query = s?.toString()?.trim() ?: ""; refresh() }
+                override fun afterTextChanged(s: Editable?) { query = s?.toString()?.trim() ?: ""; page = 0; refresh() }
                 override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
                 override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
             })
@@ -102,13 +111,32 @@ class HistoryActivity : BaseActivity() {
         searchRow.addView(searchBox, LinearLayout.LayoutParams(0, dpi(48), 1f))
         searchRow.addView(filterChip, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dpi(48)).apply { marginStart = dpi(8) })
 
+        val allRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(dpi(10), 0, dpi(16), 0) }
+        allBox = CheckBox(this).apply {
+            setOnClickListener {
+                if (pageKeys.isNotEmpty() && selected.containsAll(pageKeys)) selected.removeAll(pageKeys.toSet()) else selected.addAll(pageKeys)
+                refresh()
+            }
+        }
+        pageInfo = TextView(this).apply { textSize = 13f; setTextColor(col(R.attr.mbMuted)) }
+        allRow.addView(allBox)
+        allRow.addView(pageInfo, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+
+        val pager = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER; setBackgroundColor(col(R.attr.mbBar)); setPadding(dpi(6), dpi(2), dpi(6), dpi(2)) }
+        prevBtn = textBtn("‹ Newer") { if (page > 0) { page--; refresh(); list.scrollToPosition(0) } }
+        nextBtn = textBtn("Older ›") { page++; refresh(); list.scrollToPosition(0) }
+        pagerLabel = TextView(this).apply { textSize = 13f; setTextColor(col(R.attr.mbText)); gravity = Gravity.CENTER }
+        pager.addView(prevBtn); pager.addView(pagerLabel, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)); pager.addView(nextBtn)
+
         list = RecyclerView(this).apply { layoutManager = LinearLayoutManager(this@HistoryActivity); adapter = Adapter(); clipToPadding = false; setPadding(0, 0, 0, dpi(24)) }
         empty = TextView(this).apply { textSize = 15f; setTextColor(col(R.attr.mbMuted)); gravity = Gravity.CENTER; setPadding(dpi(24), dpi(40), dpi(24), dpi(24)) }
 
         root.addView(normalBar); root.addView(selectBar)
         root.addView(searchRow, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { setMargins(dpi(10), dpi(10), dpi(10), dpi(6)) })
+        root.addView(allRow)
         root.addView(empty, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         root.addView(list, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+        root.addView(pager)
         setContentView(root)
         onBackPressedDispatcher.addCallback(this, object : androidx.activity.OnBackPressedCallback(true) { override fun handleOnBackPressed() { goBack() } })
         refresh()
@@ -144,16 +172,20 @@ class HistoryActivity : BaseActivity() {
 
     private fun refresh() {
         val src: List<Visit> = if (bin) Store.historyBinList().map { it.visit } else Store.historyList()
-        val shown = src.filter { matches(it) }.take(3000)
+        val filtered = src.filter { matches(it) }
+        shownKeys = filtered.map { Store.visitKey(it) }
+        val pages = maxOf(1, (filtered.size + PAGE_SIZE - 1) / PAGE_SIZE)
+        page = page.coerceIn(0, pages - 1)
+        val slice = filtered.drop(page * PAGE_SIZE).take(PAGE_SIZE)
         val out = ArrayList<Row>(); val keys = ArrayList<String>()
         var last = ""
-        for (v in shown) {
+        for (v in slice) {
             val lab = dayLabel(v.time)
             if (lab != last) { out.add(Row(lab, null, "h$lab")); last = lab }
             out.add(Row(null, v, Store.visitKey(v))); keys.add(Store.visitKey(v))
         }
-        rows = out; shownKeys = keys
-        selected.retainAll(keys.toSet())
+        rows = out; pageKeys = keys
+        selected.retainAll(shownKeys.toSet())
         val sel = selected.isNotEmpty()
         normalBar.visibility = if (sel) View.GONE else View.VISIBLE
         selectBar.visibility = if (sel) View.VISIBLE else View.GONE
@@ -161,28 +193,36 @@ class HistoryActivity : BaseActivity() {
         actBtn.text = if (bin) "Restore" else "Delete"
         binBtn.text = if (bin) "Done" else "Bin"
         clearBtn.text = if (bin) "Empty" else "Clear"
-        clearBtn.visibility = if (keys.isEmpty() && !bin) View.GONE else View.VISIBLE
+        clearBtn.visibility = if (shownKeys.isEmpty() && !bin) View.GONE else View.VISIBLE
         titleView.text = if (bin) "Recycle bin (30 days)" else "History"
         filterChip.text = "$filterLabel ▾"
+        allBox.isChecked = keys.isNotEmpty() && selected.containsAll(keys)
+        allBox.isEnabled = keys.isNotEmpty()
+        val first = if (filtered.isEmpty()) 0 else page * PAGE_SIZE + 1
+        pageInfo.text = "Select all on this page  ·  $first–${page * PAGE_SIZE + slice.size} of ${filtered.size}"
+        pagerLabel.text = "Page ${page + 1} of $pages"
+        prevBtn.alpha = if (page > 0) 1f else 0.35f; nextBtn.alpha = if (page < pages - 1) 1f else 0.35f
+        prevBtn.isEnabled = page > 0; nextBtn.isEnabled = page < pages - 1
         empty.visibility = if (out.isEmpty()) View.VISIBLE else View.GONE
         empty.text = when { bin -> "The bin is empty."; query.isNotEmpty() || filterLabel != "All time" -> "Nothing matches."; else -> "No history yet." }
         list.adapter?.notifyDataSetChanged()
     }
 
     // ---------- filter ----------
-    private fun setRange(label: String, f: Long, t: Long) { filterLabel = label; from = f; to = t; refresh() }
+    private fun setRange(label: String, f: Long, t: Long) { filterLabel = label; from = f; to = t; page = 0; refresh() }
 
     private fun pickFilter() {
-        val names = arrayOf("All time", "Today", "Yesterday", "Last 7 days", "Last 30 days", "Pick a date…", "Pick a date range…")
+        val names = arrayOf("All time", "Last hour", "Today", "Yesterday", "Last 7 days", "Last 30 days", "Pick a date…", "Pick a date range…")
         AlertDialog.Builder(this).setTitle("Show history from").setItems(names) { _, w ->
             val today = dayStart(System.currentTimeMillis()); val day = 86_400_000L
             when (w) {
                 0 -> setRange("All time", 0L, Long.MAX_VALUE)
-                1 -> setRange("Today", today, Long.MAX_VALUE)
-                2 -> setRange("Yesterday", today - day, today - 1)
-                3 -> setRange("Last 7 days", today - 6 * day, Long.MAX_VALUE)
-                4 -> setRange("Last 30 days", today - 29 * day, Long.MAX_VALUE)
-                5 -> pickDate("Pick a day") { d -> setRange(DateFormat.getDateInstance(DateFormat.MEDIUM).format(Date(d)), d, d + day - 1) }
+                1 -> setRange("Last hour", System.currentTimeMillis() - 3_600_000L, Long.MAX_VALUE)
+                2 -> setRange("Today", today, Long.MAX_VALUE)
+                3 -> setRange("Yesterday", today - day, today - 1)
+                4 -> setRange("Last 7 days", today - 6 * day, Long.MAX_VALUE)
+                5 -> setRange("Last 30 days", today - 29 * day, Long.MAX_VALUE)
+                6 -> pickDate("Pick a day") { d -> setRange(DateFormat.getDateInstance(DateFormat.MEDIUM).format(Date(d)), d, d + day - 1) }
                 else -> pickDate("From") { a -> pickDate("To") { b ->
                     val lo = minOf(a, b); val hi = maxOf(a, b)
                     val fmt = DateFormat.getDateInstance(DateFormat.SHORT)
@@ -223,7 +263,7 @@ class HistoryActivity : BaseActivity() {
         }
         val n = shownKeys.size
         if (n == 0) return
-        val what = if (query.isEmpty() && filterLabel == "All time") "all $n entries" else "the $n entries shown"
+        val what = if (query.isEmpty() && filterLabel == "All time") "all $n entries" else "$n " + (if (n == 1) "entry" else "entries") + (if (filterLabel != "All time") " from " + filterLabel.lowercase() else "") + (if (query.isNotEmpty()) " matching \"$query\"" else "")
         AlertDialog.Builder(this).setTitle("Remove $what?")
             .setMessage("They go to the recycle bin for 30 days. This only affects this phone.")
             .setPositiveButton("Remove") { _, _ -> Store.removeVisits(shownKeys.toSet()); refresh() }
@@ -245,13 +285,16 @@ class HistoryActivity : BaseActivity() {
                 return object : RecyclerView.ViewHolder(h) {}
             }
             val row = LinearLayout(this@HistoryActivity).apply {
-                orientation = LinearLayout.VERTICAL; setPadding(dpi(16), dpi(9), dpi(16), dpi(9))
+                orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(dpi(6), dpi(4), dpi(16), dpi(4))
                 layoutParams = RecyclerView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
             }
+            val cb = CheckBox(this@HistoryActivity)
+            val texts = LinearLayout(this@HistoryActivity).apply { orientation = LinearLayout.VERTICAL }
             val t1 = TextView(this@HistoryActivity).apply { textSize = 14f; setTextColor(col(R.attr.mbText)); maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END }
             val t2 = TextView(this@HistoryActivity).apply { textSize = 11f; setTextColor(col(R.attr.mbMuted)); maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END }
-            row.addView(t1); row.addView(t2)
-            row.tag = arrayOf(t1, t2)
+            texts.addView(t1); texts.addView(t2)
+            row.addView(cb); row.addView(texts, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            row.tag = arrayOf<View>(t1, t2, cb)
             return object : RecyclerView.ViewHolder(row) {}
         }
 
@@ -259,10 +302,13 @@ class HistoryActivity : BaseActivity() {
             val r = rows[pos]
             if (r.header != null) { (h.itemView as TextView).text = r.header; return }
             val v = r.visit ?: return
-            @Suppress("UNCHECKED_CAST") val tv = h.itemView.tag as Array<TextView>
+            @Suppress("UNCHECKED_CAST") val tags = h.itemView.tag as Array<View>
+            val tv = arrayOf(tags[0] as TextView, tags[1] as TextView); val cb = tags[2] as CheckBox
             tv[0].text = v.title.ifBlank { v.url }
             tv[1].text = DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(v.time)) + "  ·  " + v.url
             val isSel = r.key in selected
+            cb.isChecked = isSel
+            cb.setOnClickListener { toggle(r.key) }
             h.itemView.setBackgroundColor(if (isSel) (col(R.attr.mbAccent) and 0x00FFFFFF) or 0x33000000 else Color.TRANSPARENT)
             h.itemView.setOnClickListener { if (selected.isNotEmpty() || bin) toggle(r.key) else open(v.url) }
             h.itemView.setOnLongClickListener { toggle(r.key); true }
