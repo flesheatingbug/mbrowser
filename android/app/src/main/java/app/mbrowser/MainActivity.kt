@@ -616,6 +616,11 @@ class MainActivity : BaseActivity() {
 
             override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
                 if (url.startsWith("about:")) return
+                // a site you set to desktop or mobile keeps that choice; others follow the default
+                val wantDesktop = when (prefs.siteMode(Thumbs.hostOf(url))) { "d" -> true; "m" -> false; else -> prefs.desktopSite }
+                if (wantDesktop != tab.desktop && (url.startsWith("http://") || url.startsWith("https://"))) {
+                    tab.desktop = wantDesktop; applyUa(tab); ui.post { tab.web.reload() }
+                }
                 tab.url = url; tab.home = false; tab.icon = favicon ?: tab.icon
                 if (tab === cur()) { urlBar.setText(url); progress.visibility = View.VISIBLE; pillFill.setColor(tc(R.attr.mbAccent)); pillFill.set(5); updateChrome() }
             }
@@ -1492,7 +1497,7 @@ class MainActivity : BaseActivity() {
         row(R.drawable.ic_devices, "Tabs from other devices", go { picker.launch(Intent(this, ItemsActivity::class.java).putExtra("mode", "devices")) })
         row(R.drawable.ic_key, "Passwords", go { picker.launch(Intent(this, PasswordsActivity::class.java)) })
         divider()
-        row(R.drawable.ic_desktop, (if (t?.desktop == true) "✓ " else "") + "Desktop site", need { tab -> tab.desktop = !tab.desktop; applyUa(tab); tab.web.reload() })
+        row(R.drawable.ic_desktop, (if (t?.desktop == true) "✓ " else "") + "Desktop site (remembered per site)", need { tab -> tab.desktop = !tab.desktop; if (!tab.home) prefs.setSiteMode(Thumbs.hostOf(tab.url), if (tab.desktop) "d" else "m"); applyUa(tab); tab.web.reload() })
         row(R.drawable.ic_search, "Find on this page", need { openFind() })
         row(R.drawable.ic_translate, "Translate page", need { tab -> newTab(Translate.pageUrl(tab.url, prefs.translateLang)) })
         row(R.drawable.ic_translate, "Translate selected text", go {

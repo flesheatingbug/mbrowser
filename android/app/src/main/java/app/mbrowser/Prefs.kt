@@ -163,6 +163,9 @@ class Prefs(ctx: Context) {
         set(v) = put("currentDial", v)
 
     // browsing
+    /** Sites the user chose to view as desktop ("d") or as mobile ("m") regardless of the default. */
+    fun siteMode(host: String): String? = p.getString("siteMode:" + host, null)
+    fun setSiteMode(host: String, mode: String?) { if (host.isBlank()) return; p.edit().apply { if (mode == null) remove("siteMode:" + host) else putString("siteMode:" + host, mode) }.apply() }
     var desktopSite: Boolean
         get() = bool("desktopSite", false)
         set(v) = putB("desktopSite", v)
