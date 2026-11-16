@@ -41,7 +41,9 @@
   .bc-link:hover { text-decoration: underline; }
 
   /* grid */
-  .grid { display: grid; gap: 22px; justify-content: center; }
+  .grid { display: grid; gap: var(--gap, 22px); justify-content: center; }
+  body.m-narrow .box { width: 99vw; max-width: none; }
+  body.m-none .box { width: 100vw; max-width: none; padding-left: 4px; padding-right: 4px; box-sizing: border-box; }
   .grid.auto-cols { grid-template-columns: repeat(auto-fill, var(--tile)); }
   .tile { position: relative; display: flex; flex-direction: column; width: var(--tile);
     color: var(--fg); text-decoration: none; cursor: pointer;
@@ -407,6 +409,9 @@ function navTo(depth) { folderPath = folderPath.slice(0, depth); render(); }
 // --- look & feel ---
 function applyLook() {
   document.documentElement.style.setProperty('--tile', SP.tileSize + 'px');
+  document.documentElement.style.setProperty('--gap', (SP.gap == null ? 22 : +SP.gap) + 'px');
+  document.body.classList.toggle('m-narrow', SP.margins === 'narrow');
+  document.body.classList.toggle('m-none', SP.margins === 'none');
   document.body.classList.toggle('hide-brand', SP.showBrand === false);
   document.body.classList.toggle('hide-search', SP.showSearch === false);
   document.body.classList.toggle('hide-titles', SP.showTitles === false);
@@ -558,8 +563,12 @@ function renderGrid() {
   const ai = activeIdx();
   const cols = +(SP.columns) || 0;
   if (cols > 0) {
-    grid.style.gridTemplateColumns = `repeat(${cols}, var(--tile))`;
-    grid.classList.remove('auto-cols');
+    // up to N columns; fewer when the window is too narrow, so tiles wrap like Auto
+    grid.style.maxWidth = `calc(${cols} * var(--tile) + ${cols - 1} * var(--gap, 22px))`;
+    grid.style.marginInline = 'auto';
+    grid.style.gridTemplateColumns = '';
+    grid.style.maxWidth = '';
+    grid.classList.add('auto-cols');
   } else {
     grid.style.gridTemplateColumns = '';
     grid.classList.add('auto-cols');
@@ -762,7 +771,21 @@ function renderPanel() {
 
   const colI = Object.assign(document.createElement('input'), { type: 'number', min: 0, max: 12, value: SP.columns || 0 });
   colI.onchange = () => { SP.columns = Math.max(0, +colI.value || 0); save(); renderGrid(); };
-  row('Columns (0 = auto)', colI);
+  row('Max columns (0 = auto)', colI);
+
+  const gapVal = document.createElement('span'); gapVal.className = 'rval'; gapVal.textContent = (SP.gap == null ? 22 : SP.gap) + 'px';
+  const gapR = Object.assign(document.createElement('input'), { type: 'range', min: 0, max: 40, step: 2, value: SP.gap == null ? 22 : SP.gap });
+  gapR.oninput = () => { SP.gap = +gapR.value; gapVal.textContent = SP.gap + 'px'; applyLook(); renderGrid(); };
+  gapR.onchange = save;
+  const gapRow = document.createElement('label');
+  gapRow.append(Object.assign(document.createElement('span'), { textContent: 'Space between tiles' }), gapR, gapVal);
+  p.append(gapRow);
+
+  const mSel = document.createElement('select');
+  [['normal', 'Normal'], ['narrow', 'Narrow'], ['none', 'None']].forEach(([v, t]) => { const o = new Option(t, v); mSel.add(o); });
+  mSel.value = SP.margins || 'normal';
+  mSel.onchange = () => { SP.margins = mSel.value; save(); applyLook(); renderGrid(); };
+  row('Page margins', mSel);
 
   // ----- Display -----
   ph('Display');
