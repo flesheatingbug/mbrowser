@@ -5,7 +5,6 @@ if (location.protocol === 'my:') {
   const invoke = (ch) => (...a) => ipcRenderer.invoke(ch, ...a);
   contextBridge.exposeInMainWorld('browser', {
     getSettings: invoke('settings:get'),
-    speedDialsToBookmarks: invoke('speeddial:toBookmarks'),
     setSetting: invoke('settings:set'),
     getCommands: invoke('commands:list'),
     getThemes: invoke('themes:list'),

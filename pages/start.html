@@ -787,10 +787,6 @@ function renderPanel() {
   mSel.onchange = () => { SP.margins = mSel.value; save(); applyLook(); renderGrid(); };
   row('Page margins', mSel);
 
-  const toBm = document.createElement('button'); toBm.style.cssText = 'background:var(--tab);color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:6px 12px;cursor:pointer;font:inherit'; toBm.textContent = 'Save to bookmarks';
-  toBm.onclick = async () => { const r = await browser.speedDialsToBookmarks(); toBm.textContent = r && r.added ? 'Saved ' + r.added + ' ✓' : 'Already in bookmarks ✓'; setTimeout(() => { toBm.textContent = 'Save to bookmarks'; }, 2500); };
-  row('Speed dials in Bookmarks (top-level "Speed Dials" folder)', toBm);
-
   // ----- Display -----
   ph('Display');
   row('Search bar',  tog(SP.showSearch  !== false, (v) => { SP.showSearch  = v; save(); applyLook(); }));

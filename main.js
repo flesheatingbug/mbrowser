@@ -1838,24 +1838,6 @@ function touchBookmarks() {
 }
 
 
-// Copy the start page speed dials into the bookmarks, under a top-level "Speed Dials" folder
-// (one sub-folder per extra dial group; dial folders keep their names).
-function speedDialsToBookmarks() {
-  const sp = S().startPage, groups = sp.groups || [];
-  const items = [];
-  const walk = (list, base) => {
-    for (const d of list || []) {
-      if (d.type === 'folder') walk(d.items, base + SEP + String(d.title || 'Folder').replace(/\s*\/\s*/g, '-'));
-      else if (d.url) items.push({ url: d.url, title: d.title || '', folder: base });
-    }
-  };
-  groups.forEach((g, i) => walk(g.dials, groups.length > 1 ? 'Speed Dials' + SEP + String(g.name || ('Dial ' + (i + 1))).replace(/\s*\/\s*/g, '-') : 'Speed Dials'));
-  const r = importBookmarks(items);
-  bookmarkFolders = [...new Set([...bookmarkFolders, ...items.map((x) => x.folder)])];
-  saveFolders();
-  return r;
-}
-
 // ---------- importing bookmarks ----------
 const detectedSources = new Map();
 
@@ -2793,7 +2775,6 @@ function setupIpc() {
     save('bookmarks.json', bookmarks); pushState(); syncSoon();
     return { ok: true };
   }, BOTH);
-  handle('speeddial:toBookmarks', () => speedDialsToBookmarks(), PAGE_ONLY);
   handle('bookmark:popup-speeddial', (_e, url, title) => {
     const added = addSpeedDial(String(url), String(title || ''));
     if (added) { const t = activeTab(); if (t) maybeThumb(t, true); }

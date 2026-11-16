@@ -120,6 +120,8 @@
   const FOLDER = '<svg viewBox="0 0 24 24"><path d="M3.5 7a2 2 0 0 1 2-2h4l2 2.5h7a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/></svg>';
   const ALL = '<svg viewBox="0 0 24 24"><path d="M7 4h10a1 1 0 0 1 1 1v15l-6-4-6 4V5a1 1 0 0 1 1-1z"/></svg>';
 
+  const SD_SEL = '\u0001speeddials';
+  let SPG = { groups: [] };   // live start page speed dials
   let D = { bookmarks: [], folders: [] };
   let binItems = [];
   let sel = null;          // null=all, ''=unsorted, BIN_SEL=recycle bin, otherwise folder path
@@ -176,10 +178,49 @@
     });
   }
 
+
+  // ---- speed dials: the live tiles from the start page ----
+  function sdCount() { let n = 0; const w = (a) => { for (const d of a || []) { if (d.type === 'folder') w(d.items); else n++; } }; (SPG.groups || []).forEach((g) => w(g.dials)); return n; }
+  function renderSpeedDials(list) {
+    const q = $('q').value.toLowerCase().split(/\s+/).filter(Boolean);
+    const multi = (SPG.groups || []).length > 1;
+    let shown = 0;
+    const saveSp = async () => { await browser.setSetting('startPage', SPG); load(); };
+    const walk = (arr, depth, label) => {
+      for (const d of arr) {
+        if (d.type === 'folder') {
+          const head = el('div', 'row'); head.style.paddingLeft = (12 + depth * 18) + 'px';
+          head.append(el('div', 'fi', '📁'), el('div', 't', d.title || 'Folder'));
+          list.append(head); shown++;
+          walk(d.items || [], depth + 1, label);
+          continue;
+        }
+        if (q.length && !q.every((t) => ((d.title || '') + ' ' + d.url).toLowerCase().includes(t))) continue;
+        const row = el('div', 'row'); row.style.paddingLeft = (12 + depth * 18) + 'px';
+        const fi = el('div', 'fi', (d.title || d.url).replace(/^https?:\/\/(www\.)?/, '').charAt(0).toUpperCase());
+        const t = el('div', 't'); const a = el('a'); a.href = d.url; a.textContent = d.title || d.url;
+        t.append(a, el('small', 'muted', d.url));
+        row.append(fi, t);
+        const acts = el('div', 'acts');
+        const rm = el('button', 'danger', 'Remove from speed dial'); rm.onclick = async () => {
+          if (!confirm('Remove "' + (d.title || d.url) + '" from the speed dial?')) return;
+          arr.splice(arr.indexOf(d), 1); await saveSp();
+        };
+        acts.append(rm); row.append(acts); list.append(row); shown++;
+      }
+    };
+    (SPG.groups || []).forEach((g) => {
+      if (multi) { const h = el('div', 'empty', g.name || 'Speed dial'); h.style.cssText = 'text-align:left;font-weight:600;padding:12px 12px 4px'; list.append(h); }
+      walk(g.dials || [], 0, g.name);
+    });
+    if (!shown) list.append(el('div', 'empty', 'No speed dials' + (q.length ? ' match.' : ' yet. Add some from the start page.')));
+  }
+
   async function load() {
     D = await browser.bookmarksAll();
     const bd = await browser.bookmarksRecycleBin();
     binItems = bd.bookmarks || [];
+    try { SPG = (await browser.getSettings()).startPage || { groups: [] }; } catch { /* keep old */ }
     render();
   }
 
@@ -234,7 +275,7 @@
 
   // ---- list ----
   function visible() {
-    if (sel === BIN_SEL) return [];
+    if (sel === BIN_SEL || sel === SD_SEL) return [];
     const terms = $('q').value.toLowerCase().split(/\s+/).filter(Boolean);
     let items = D.bookmarks.filter((b) => {
       if (terms.length) { const s = (b.title + ' ' + b.url + ' ' + b.folder).toLowerCase(); return terms.every((t) => s.includes(t)); }
@@ -255,7 +296,10 @@
     } else if (sel === null) {
       addPnSeg('All bookmarks');
       // show root folders as chips in panel nav
+      if (!$('q').value.trim()) { pn.append(el('span', null, ' ')); addPnSeg('⚡ Speed dials', () => { sel = SD_SEL; picked.clear(); render(); }); }
       if (!$('q').value.trim()) D.folders.filter((f) => !f.includes(SEP)).forEach((f) => { pn.append(el('span', null, ' ')); addPnSeg('📁 ' + leaf(f), () => { sel = f; open.add(f); picked.clear(); render(); }); });
+    } else if (sel === SD_SEL) {
+      addPnSeg('All', () => { sel = null; picked.clear(); render(); }); addPnSep(); addPnSeg('Speed dials');
     } else if (sel === '') {
       addPnSeg('All', () => { sel = null; picked.clear(); render(); }); addPnSep(); addPnSeg('Unsorted');
     } else {
@@ -274,6 +318,7 @@
     const tree = $('tree'); tree.textContent = '';
     tree.append(special('All bookmarks', ALL, null, D.bookmarks.length));
     tree.append(special('Unsorted', FOLDER, '', D.bookmarks.filter((b) => !b.folder).length));
+    tree.append(special('Speed dials', FOLDER, SD_SEL, sdCount()));
     D.folders.filter((f) => !f.includes(SEP)).forEach((f) => tree.append(treeNode(f, 0)));
     // recycle bin entry
     const binRow = el('div', 'node bin-node' + (sel === BIN_SEL ? ' on' : ''));
@@ -290,6 +335,7 @@
     else if (searching) crumb.append(el('span', null, 'Search results'));
     else if (sel === null) crumb.append(el('span', null, 'All bookmarks'));
     else if (sel === '') crumb.append(el('span', null, 'Unsorted'));
+    else if (sel === SD_SEL) crumb.append(el('span', null, 'Speed dials (the tiles on your start page)'));
     else {
       crumb.append(el('span', null, sel.split(SEP).join('  ›  ')));
       const mk = (t, fn, cls) => { const b = el('button', cls||'', t); b.onclick = fn; crumb.append(b); };
@@ -304,7 +350,7 @@
 
     // sub folder chips
     const subs = $('subs'); subs.textContent = '';
-    if (!searching && sel !== null && sel !== '' && sel !== BIN_SEL) {
+    if (!searching && sel !== null && sel !== '' && sel !== BIN_SEL && sel !== SD_SEL) {
       D.folders.filter((f) => parentOf(f) === sel).forEach((f) => {
         const c = el('div', 'chip'); const i = el('span'); i.innerHTML = FOLDER; i.firstChild.style.cssText = 'width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2';
         c.append(i, el('span', null, leaf(f) + ' (' + countIn(f) + ')'));
@@ -326,11 +372,12 @@
     // recycle bin bar
     $('binbar').classList.toggle('on', sel === BIN_SEL);
     $('bincnt').textContent = binItems.length + ' item(s) in recycle bin';
-    $('add').style.display = sel === BIN_SEL ? 'none' : '';
-    $('sort').style.display = sel === BIN_SEL ? 'none' : '';
+    $('add').style.display = (sel === BIN_SEL || sel === SD_SEL) ? 'none' : '';
+    $('sort').style.display = (sel === BIN_SEL || sel === SD_SEL) ? 'none' : '';
 
     // list
     const list = $('list'); list.textContent = '';
+    if (sel === SD_SEL) { renderSpeedDials(list); bulk(); return; }
     if (sel === BIN_SEL) {
       if (!binItems.length) { list.append(el('div', 'empty', 'The recycle bin is empty.')); bulk(); return; }
       const sortedBin = [...binItems].sort((a, b) => (b.binTime || 0) - (a.binTime || 0));
