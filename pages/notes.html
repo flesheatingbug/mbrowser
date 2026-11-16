@@ -170,6 +170,19 @@
 
   window.addEventListener('focus', load);
   load();
+
+  // right-click the Recycle bin entry for "Empty bin"
+  $('bin-entry').oncontextmenu = (e) => {
+    e.preventDefault();
+    document.querySelectorAll('.binmenu').forEach((x) => x.remove());
+    const m = document.createElement('div'); m.className = 'binmenu';
+    m.style.cssText = 'position:fixed;z-index:100;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:4px;box-shadow:0 6px 20px rgba(0,0,0,.4);left:' + Math.min(e.clientX, innerWidth - 170) + 'px;top:' + e.clientY + 'px';
+    const it = document.createElement('div'); it.textContent = 'Empty recycle bin'; it.style.cssText = 'padding:7px 14px;border-radius:6px;cursor:pointer;font-size:13px;color:#ef4444;white-space:nowrap';
+    it.onmouseenter = () => { it.style.background = '#ef4444'; it.style.color = '#fff'; }; it.onmouseleave = () => { it.style.background = ''; it.style.color = '#ef4444'; };
+    it.onclick = async () => { m.remove(); if (!binNotes.length) return; if (!confirm('Permanently delete all ' + binNotes.length + ' note(s) in the bin?')) return; await browser.notesEmptyBin(); cur = null; load(); };
+    m.append(it); document.body.append(m);
+    setTimeout(() => document.addEventListener('click', () => m.remove(), { once: true }), 0);
+  };
 </script>
 </body>
 </html>
