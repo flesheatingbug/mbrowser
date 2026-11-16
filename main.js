@@ -1856,11 +1856,18 @@ function readDials() {
   const paths = groups.map((g, gi) => groupPath(groups, gi));
   const folders = allFolderPaths();
   // anything sitting directly in "Speed Dials" (put there by hand or by another device) belongs to the first group
+  const layout = S().startPage.dialLayout || {};
+  // order inside a folder: the saved layout first (folders and tiles mixed as you arranged them), anything new after it
+  const arrange = (path, items) => {
+    const pos = new Map((layout[path] || []).map((k, i) => [k, i]));
+    const keyOf = (d) => (d.type === 'folder' ? 'f:' + d.title : 'u:' + d.url);
+    return items.map((d, i) => ({ d, i })).sort((a, b) => ((pos.has(keyOf(a.d)) ? pos.get(keyOf(a.d)) : 1e6) - (pos.has(keyOf(b.d)) ? pos.get(keyOf(b.d)) : 1e6)) || (a.i - b.i)).map((x) => x.d);
+  };
   const build = (path, adopt) => {
     const subs = folders.filter((f) => f.startsWith(path + SEP) && !f.slice(path.length + SEP.length).includes(SEP) && !(adopt && paths.includes(f)));
     const out = subs.map((f) => ({ type: 'folder', title: f.slice(path.length + SEP.length), items: build(f, false) }));
     for (const b of bookmarks.filter((x) => liveBm(x) && x.folder === path).sort((a, c) => (a.added || 0) - (c.added || 0))) out.push({ title: b.title || hostOf(b.url), url: b.url });
-    return out;
+    return arrange(path, out);
   };
   return groups.map((g, gi) => {
     const dials = build(paths[gi], false);
@@ -1875,14 +1882,14 @@ function writeDials(groups) {
   const now = Date.now();
   const want = new Map();     // url -> { title, folder, idx }
   const folders = new Set();
-  const order = [];           // [{ folder, urls: [...] }]
+  const layout = {};          // folder path -> ['f:Name' | 'u:url', ...] in display order
   const walk = (items, base) => {
-    const urls = [];
+    const keys = [];
     (items || []).forEach((d) => {
-      if (d && d.type === 'folder') { const p = base + SEP + cleanName(d.title, 'Folder'); folders.add(p); walk(d.items, p); }
-      else if (d && isWeb(d.url)) { if (!want.has(d.url)) { want.set(d.url, { title: String(d.title || '').slice(0, 900), folder: base }); urls.push(d.url); } }
+      if (d && d.type === 'folder') { const nm = cleanName(d.title, 'Folder'); const p = base + SEP + nm; folders.add(p); keys.push('f:' + nm); walk(d.items, p); }
+      else if (d && isWeb(d.url)) { if (!want.has(d.url)) { want.set(d.url, { title: String(d.title || '').slice(0, 900), folder: base }); keys.push('u:' + d.url); } }
     });
-    order.push({ folder: base, urls });
+    layout[base] = keys;
   };
   groups.forEach((g, gi) => { const p = groupPath(groups, gi); folders.add(p); walk(g.dials, p); });
   const byUrl = new Map(bookmarks.map((b) => [b.url, b]));
@@ -1894,13 +1901,8 @@ function writeDials(groups) {
       if (revive || b.title !== w.title || b.folder !== w.folder) { b.deleted = false; delete b.recycleBin; delete b.binTime; b.title = w.title || b.title; b.folder = w.folder; b.updated = now; }
     }
   }
-  // tile order: hand the same set of "added" times to the tiles in their new order
-  for (const { urls } of order) {
-    const recs = urls.map((u) => byUrl.get(u));
-    const times = recs.map((r) => r.added || now).sort((a, b) => a - b);
-    for (let i = 1; i < times.length; i++) if (times[i] <= times[i - 1]) times[i] = times[i - 1] + 1;
-    recs.forEach((r, i) => { if (r.added !== times[i]) { r.added = times[i]; r.updated = now; } });
-  }
+  // the order you arranged (folders and tiles mixed) is kept in the start page settings
+  store.set('startPage.dialLayout', layout);
   // tiles that are no longer in the tree go to the recycle bin
   for (const b of bookmarks) if (liveBm(b) && b.folder && inFolder(b.folder, SD_ROOT) && !want.has(b.url)) { b.recycleBin = true; b.binTime = now; b.updated = now; }
   // empty dial folders
@@ -2664,7 +2666,7 @@ function setupIpc() {
   handle('settings:get', () => { const o = JSON.parse(JSON.stringify(S())); try { o.startPage.groups = readDials(); } catch { /* keep */ } return o; }, BOTH);
   handle('settings:set', (_e, p, v) => {
     try {
-      if (p === 'startPage' && v && Array.isArray(v.groups)) { writeDials(v.groups); v = { ...v, groups: stripDials(v.groups) }; }
+      if (p === 'startPage' && v && Array.isArray(v.groups)) { writeDials(v.groups); v = { ...v, groups: stripDials(v.groups), dialLayout: S().startPage.dialLayout }; }
       else if (p === 'startPage.groups' && Array.isArray(v)) { writeDials(v); v = stripDials(v); }
       applySetting(p, v); return true;
     } catch { return false; }
