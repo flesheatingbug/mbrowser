@@ -280,7 +280,7 @@ class StartPage(
         else arrayOf("Open in new tab", "Edit", "Move to…", "Remove", "Rearrange")
         AlertDialog.Builder(act).setTitle(d.title.ifBlank { d.url }).setItems(opts) { _, i ->
             when (i) {
-                0 -> if (d.folder) openFolder(p + d.index) else open(d.url, true)
+                0 -> if (d.folder) openFolder(p + d.index) else { resetPath(); open(d.url, true) }
                 1 -> if (d.folder) promptFields(act, "Rename folder", listOf("Folder name"), listOf(d.title), "Rename") { v ->
                     if (v[0].isNotEmpty()) { edit { sp -> listAt(sp, groupId, p)?.optJSONObject(d.index)?.put("title", v[0]) }; refresh() }
                 } else promptFields(act, "Edit", listOf("Address", "Title"), listOf(d.url, d.title)) { v ->
@@ -637,7 +637,7 @@ class StartPage(
                 }
                 h.title.text = label
                 h.row.visibility = if (prefs.showTitles) View.VISIBLE else View.GONE
-                h.itemView.setOnClickListener { open(d.url, false) }
+                h.itemView.setOnClickListener { resetPath(); open(d.url, false) }
                 h.itemView.setOnLongClickListener { itemMenu(d, groupId, p); true }
                 return
             }
@@ -659,7 +659,7 @@ class StartPage(
             h.title.text = label
             h.row.visibility = if (prefs.showTitles) View.VISIBLE else View.GONE
 
-            h.itemView.setOnClickListener { open(d.url, false) }
+            h.itemView.setOnClickListener { resetPath(); open(d.url, false) }
             h.itemView.setOnLongClickListener { itemMenu(d, groupId, p); true }
         }
     }
