@@ -22,12 +22,19 @@ object Dials {
     private fun keyOf(o: JSONObject) = if (isFolder(o)) "f:" + o.optString("title") else "u:" + o.optString("url")
     private fun parents(p: String): List<String> { val parts = p.split('/'); return (1..parts.size).map { parts.take(it).joinToString("/") } }
 
+    /** The saved tile order: its own synced settings group (older versions kept it inside the start page group). */
+    private fun savedLayout(sp: JSONObject): JSONObject {
+        val own = Settings.raw("dialLayout").optJSONObject("layout")
+        if (own != null && own.length() > 0) return own
+        return sp.optJSONObject("dialLayout") ?: JSONObject()
+    }
+
     /** Puts the tiles (read from the bookmarks) into each page of [sp] as "dials". */
     fun attach(sp: JSONObject) {
         if (!Store.ready()) return
         val groups = sp.optJSONArray("groups") ?: return
         val live = Store.liveBookmarks().map { it to norm(it.folder) }.filter { it.second == ROOT || it.second.startsWith("$ROOT/") }
-        val layout = sp.optJSONObject("dialLayout") ?: JSONObject()
+        val layout = savedLayout(sp)
         val paths = (0 until groups.length()).map { groupPath(groups, it) }
         val folders = TreeSet<String>()
         for (p in live.map { it.second }) folders.addAll(parents(p))
@@ -104,7 +111,8 @@ object Dials {
         if (gone.isNotEmpty()) Store.deleteMany(gone)
         val used = HashSet<String>(); for (tf in want.values) used.addAll(parents(tf.second))
         val empty = JSONArray(); for (f in folders) if (f !in used) empty.put(f)
-        sp.put("dialLayout", layout); sp.put("dialFolders", empty)
+        if (layout.toString() != savedLayout(sp).toString()) Settings.set("dialLayout", JSONObject().put("layout", layout))
+        sp.remove("dialLayout"); sp.put("dialFolders", empty)
     }
 
     /** A start page group from an older desktop still carries its tiles: add the ones not yet bookmarked, then drop them from [sp]. */
@@ -138,7 +146,7 @@ object Dials {
             merge(legacy.getJSONObject(i).optJSONArray("dials") ?: JSONArray(), into)
         }
         val out = detach(cur)
-        sp.put("dialLayout", out.optJSONObject("dialLayout") ?: JSONObject()); sp.put("dialFolders", out.optJSONArray("dialFolders") ?: JSONArray())
+        sp.remove("dialLayout"); sp.put("dialFolders", out.optJSONArray("dialFolders") ?: JSONArray())
         for (i in 0 until groups.length()) groups.getJSONObject(i).remove("dials")
         return sp
     }

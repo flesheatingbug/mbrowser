@@ -1852,12 +1852,18 @@ function dialGroups() { return (S().startPage.groups || []); }
 function groupPath(groups, gi) { return SD_ROOT + SEP + cleanName(groups[gi].name, 'Group ' + (gi + 1)); }
 const liveBm = (b) => !b.deleted && !b.recycleBin;
 
+// the saved order of the tiles: its own synced group (older versions kept it inside startPage)
+function curLayout() {
+  const own = S().dialLayout && S().dialLayout.layout;
+  if (own && Object.keys(own).length) return own;
+  return S().startPage.dialLayout || {};
+}
 function readDials() {
   const groups = dialGroups();
   const paths = groups.map((g, gi) => groupPath(groups, gi));
   const folders = allFolderPaths();
   // anything sitting directly in "Speed Dials" (put there by hand or by another device) belongs to the first group
-  const layout = S().startPage.dialLayout || {};
+  const layout = curLayout();
   // order inside a folder: the saved layout first (folders and tiles mixed as you arranged them), anything new after it
   const arrange = (path, items) => {
     const pos = new Map((layout[path] || []).map((k, i) => [k, i]));
@@ -1903,7 +1909,7 @@ function writeDials(groups) {
     }
   }
   // the order you arranged (folders and tiles mixed) is kept in the start page settings
-  store.set('startPage.dialLayout', layout);
+  if (JSON.stringify(layout) !== JSON.stringify(curLayout())) store.set('dialLayout.layout', layout);
   // tiles that are no longer in the tree go to the recycle bin
   for (const b of bookmarks) if (liveBm(b) && b.folder && inFolder(b.folder, SD_ROOT) && !want.has(b.url)) { b.recycleBin = true; b.binTime = now; b.updated = now; }
   // empty dial folders
@@ -2667,7 +2673,7 @@ function setupIpc() {
   handle('settings:get', () => { const o = JSON.parse(JSON.stringify(S())); try { o.startPage.groups = readDials(); } catch { /* keep */ } return o; }, BOTH);
   handle('settings:set', (_e, p, v) => {
     try {
-      if (p === 'startPage' && v && Array.isArray(v.groups)) { writeDials(v.groups); v = { ...v, groups: stripDials(v.groups), dialLayout: S().startPage.dialLayout }; }
+      if (p === 'startPage' && v && Array.isArray(v.groups)) { writeDials(v.groups); v = { ...v, groups: stripDials(v.groups) }; delete v.dialLayout; }
       else if (p === 'startPage.groups' && Array.isArray(v)) { writeDials(v); v = stripDials(v); }
       applySetting(p, v); return true;
     } catch { return false; }
