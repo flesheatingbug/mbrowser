@@ -654,8 +654,17 @@ function newTab(target, opts = {}) {
   return id;
 }
 
+// small diagnostics file for pages that hang or crash (userData/mbrowser-debug.log)
+const debugLogPath = () => path.join(app.getPath('userData'), 'mbrowser-debug.log');
+function dbg(msg) { try { fs.appendFileSync(debugLogPath(), new Date().toISOString() + ' ' + msg + '\n'); } catch { /* best effort */ } }
+app.on('child-process-gone', (_e, d) => dbg('process gone: ' + d.type + ' ' + d.reason + ' code=' + d.exitCode));
+{ let last = Date.now(); setInterval(() => { const now = Date.now(), lag = now - last - 1000; last = now; if (lag > 1500) dbg('main process was blocked for ' + lag + ' ms'); }, 1000).unref(); }
+
 function wire(tab) {
   const wc = tab.wc;
+  wc.on('unresponsive', () => { dbg('page not responding: ' + wc.getURL()); tab.status = 'Page not responding (details: ' + debugLogPath() + ')'; pushSoon(); });
+  wc.on('responsive', () => { dbg('page responding again: ' + wc.getURL()); tab.status = ''; pushSoon(); });
+  wc.on('render-process-gone', (_e, d) => { dbg('page process gone: ' + d.reason + ' code=' + d.exitCode + ' ' + wc.getURL()); tab.status = 'Page crashed: ' + d.reason + ' (details: ' + debugLogPath() + ')'; pushSoon(); });
   // every event runs in the context of the window that currently owns the tab
   const h = (fn) => (...a) => { use(tab.owner); fn(...a); };
   wc.on('page-title-updated', h(() => pushState()));
