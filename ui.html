@@ -76,6 +76,7 @@
   #bar button.ic { display:grid; place-items:center; }
   #star.on svg { fill:var(--accent); stroke:var(--accent); }
   #shield.off svg { opacity:.45; }
+  #key .n { display:none; }
   #shield .n, #key .n { position:absolute; right:-2px; top:-3px; font-size:9px; background:var(--accent); color:var(--onaccent); border-radius:8px; padding:0 4px; }
   #bar #key { display:none; position:relative; height:28px; min-width:28px; margin-right:6px; border-radius:50%; color:var(--muted); }
   #bar #key.show { display:grid; }
@@ -570,7 +571,6 @@
     const lg = s.logins;
     $('key').classList.toggle('show', !!(lg && (lg.form || lg.count > 0)));
     $('key').classList.toggle('has', !!(lg && lg.count > 0));
-    $('keyn').textContent = lg && lg.count > 0 ? lg.count : '';
     $('key').title = lg && lg.locked ? 'Saved logins (locked)' : 'Saved logins for this site';
     if (!zoomDragging) {
       $('st-zoom-range').value = s.zoom;
