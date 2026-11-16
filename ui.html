@@ -148,8 +148,8 @@
   body.is-private #priv { display:block; }
   #dl-pill { display:none; align-items:center; padding:1px 8px; height:20px; border-radius:11px; background:var(--tab); border:1px solid transparent; font-size:11px; cursor:pointer; white-space:nowrap; overflow:hidden; max-width:220px; text-overflow:ellipsis; color:var(--muted); }
   #dl-pill.active { color:var(--accent); border-color:var(--accent); }
-  #dlbtn { display:none; }
-  #dlbtn.show { display:grid; }
+  #bar button.ic#dlbtn { display:none; }
+  #bar button.ic#dlbtn.show { display:grid; }
   #dlbtn { position:relative; }
   #dlbtn .ring { position:absolute; inset:0; margin:auto; width:26px; height:26px; transform:rotate(-90deg); pointer-events:none; display:none; }
   #dlbtn.active .ring { display:block; }
@@ -620,7 +620,7 @@
       pill.style.display = 'none'; pill.classList.remove('active');
       ring.classList.remove('indet');
     }
-    dlbtn.className = 'ic' + (nDl && tb.downloads !== false ? ' show' : '') + (activeDl ? ' active' : '');
+    dlbtn.className = 'ic' + (nDl && tb.downloads !== false ? ' show' : '') + (activeDl ? ' active' : '') + (tb.downloads === false ? ' tb-hidden' : '');
     $('dlbtn-n').textContent = nDl ? String(nDl) : '';
     if (startedDl) triggerDownloadWhoosh();
 
