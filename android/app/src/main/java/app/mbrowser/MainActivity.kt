@@ -69,6 +69,15 @@ class MainActivity : BaseActivity() {
     }
 
     // Tells the app when a touch starts on a video, player, slider or scrolled inner list, so pulling down there does not refresh the page.
+    private val LOGIN_CAPTURE_JS = """(function(){if(window.__mbLogin)return;window.__mbLogin=1;var last='';
+      function grab(){var pw=[].slice.call(document.querySelectorAll('input[type=password]')).filter(function(i){return i.value&&i.offsetParent!==null;})[0];if(!pw)return;
+        var ins=[].slice.call((pw.form||document).querySelectorAll('input'));var user='';
+        for(var k=ins.indexOf(pw)-1;k>=0;k--){var ty=(ins[k].type||'text').toLowerCase();if(['text','email','tel'].indexOf(ty)>-1&&ins[k].value){user=ins[k].value;break;}}
+        var key=user+'\u0000'+pw.value;if(key===last)return;last=key;
+        try{mbNative.loginSubmitted(location.href,user,pw.value);}catch(e){}}
+      document.addEventListener('submit',grab,true);
+      document.addEventListener('click',function(e){var b=e.target.closest&&e.target.closest('button,input[type=submit]');if(b&&b.type==='submit')grab();},true);
+      document.addEventListener('keydown',function(e){if(e.key==='Enter')grab();},true);})();"""
     private val DRAG_GUARD_JS = """(function(){if(window.__mbRef)return;window.__mbRef=1;
       function bad(e){for(var n=e;n&&n.nodeType===1;n=n.parentElement){var t=n.tagName;
         if(t==='VIDEO'||t==='AUDIO'||t==='CANVAS'||n.draggable)return true;
@@ -619,6 +628,7 @@ class MainActivity : BaseActivity() {
                 if (url.startsWith("about:")) return
                 if (tab.fresh) { tab.fresh = false; view.clearHistory() }
                 view.evaluateJavascript(DRAG_GUARD_JS, null)
+                if (!tab.priv) view.evaluateJavascript(LOGIN_CAPTURE_JS, null)
                 if (prefs.blockTrackers) view.evaluateJavascript(HIDE_JS, null)
                 tab.url = url
                 tab.title = view.title ?: ""
@@ -629,6 +639,7 @@ class MainActivity : BaseActivity() {
         }
         w.addJavascriptInterface(object {
             @JavascriptInterface fun blockRefresh(b: Boolean) { refreshBlocked = b }
+            @JavascriptInterface fun loginSubmitted(url: String, user: String, pass: String) { runOnUiThread { offerSaveLogin(tab, url, user, pass) } }
             @JavascriptInterface fun cosmetic(host: String, ids: String, classes: String, first: Int): String {
                 if (!prefs.blockTrackers) return ""
                 return try {
@@ -1112,6 +1123,27 @@ class MainActivity : BaseActivity() {
         findViewById<EditText>(R.id.findInput).setText("")
         bar.visibility = View.GONE
         (getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager).hideSoftInputFromWindow(bar.windowToken, 0)
+    }
+
+    // ---------- offer to save a login that was just submitted ----------
+    private fun offerSaveLogin(t: Tab, url: String, user: String, pass: String) {
+        if (t.priv || pass.isEmpty() || !Vault.exists(this)) return
+        Vault.tryAutoUnlock(this)
+        if (!Vault.unlocked()) return
+        val origin = Vault.originOf(url) ?: return
+        val existing = Vault.findByOrigin(origin).find { it.optString("username") == user }
+        if (existing != null && existing.optString("password") == pass) return
+        AlertDialog.Builder(this)
+            .setTitle(if (existing != null) "Update saved password?" else "Save password?")
+            .setMessage(Vault.hostOf(origin) + if (user.isNotBlank()) "\n" + user else "")
+            .setPositiveButton(if (existing != null) "Update" else "Save") { _, _ ->
+                try {
+                    Vault.upsert(this, existing?.optString("id"), origin, existing?.optString("name") ?: "", user, pass, existing?.optString("note") ?: "")
+                    VaultSync.runAsync(this) { }
+                    Toast.makeText(this, "Saved", Toast.LENGTH_SHORT).show()
+                } catch (e: Exception) { Toast.makeText(this, e.message ?: "Couldn't save", Toast.LENGTH_SHORT).show() }
+            }
+            .setNegativeButton("Not now", null).show()
     }
 
     // ---------- fill a saved login into the page ----------
