@@ -110,7 +110,7 @@ try { app.setPath('userData', profiles.dirFor(profileId)); } catch { /* keep the
 const gotLock = app.requestSingleInstanceLock(); // one running instance per profile
 if (!gotLock) app.quit();
 
-// Troubleshooting: MB_BISECT=switches,cdp,ua,webrequest (any of them, comma separated) turns that customisation off to find which one breaks a page
+// Troubleshooting: MB_BISECT=switches,cdp,ua,webrequest,blocker,headers (any of them, comma separated) turns that customisation off to find which one breaks a page
 const BIS = (process.env.MB_BISECT || '').split(',').map((x) => x.trim()).filter(Boolean);
 // Look like plain Chrome to websites: Google sign-in refuses user agents that say "Electron".
 if (app.userAgentFallback) {
@@ -3368,7 +3368,7 @@ function setupSession(ses) {
     } catch { /* details are optional */ }
     callback(-3); // -3 = use Chromium's normal verification result
   });
-  if (!BIS.includes('webrequest')) blocker.attach(ses, (wcId, url, type) => {
+  if (!BIS.includes('webrequest') && !BIS.includes('blocker')) blocker.attach(ses, (wcId, url, type) => {
     blockedCounts.set(wcId, (blockedCounts.get(wcId) || 0) + 1);
     try {
       const h = new URL(url).hostname;
@@ -3383,7 +3383,7 @@ function setupSession(ses) {
   const uaPlatHint = process.platform === 'win32' ? '"Windows"' : '"Linux"';
   const googlePattern = /^https?:\/\/([^/]*\.)?(google\.[a-z]{2,}|gmail\.com|googleapis\.com|gstatic\.com|googleusercontent\.com)\//i;
   const uaPlatVerHint = JSON.stringify(chromePlatformVersion());
-  if (!BIS.includes('webrequest')) ses.webRequest.onBeforeSendHeaders({ urls: ['<all_urls>'] }, (details, callback) => {
+  if (!BIS.includes('webrequest') && !BIS.includes('headers')) ses.webRequest.onBeforeSendHeaders({ urls: ['<all_urls>'] }, (details, callback) => {
     const h = details.requestHeaders;
     // DNT for all requests (mirrors blocker's removed handler)
     if (S().privacy?.doNotTrack) { h['DNT'] = '1'; h['Sec-GPC'] = '1'; }
