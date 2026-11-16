@@ -170,6 +170,53 @@ object Store {
         saveBookmarks()
     }
 
+
+    // ---- bookmark manager helpers ----
+    fun cleanPath(p: String): String = p.split('/').map { it.trim() }.filter { it.isNotEmpty() }.joinToString("/")
+
+    @Synchronized fun liveBookmarks(): List<Bookmark> = bookmarks.values.filter { !it.deleted }.map { it.copy() }
+
+    /** Deleted bookmarks stay restorable for 30 days. */
+    @Synchronized fun binList(): List<Bookmark> {
+        val cut = System.currentTimeMillis() - 30L * 86_400_000L
+        return bookmarks.values.filter { it.deleted && it.updated > cut }.sortedByDescending { it.updated }.map { it.copy() }
+    }
+
+    @Synchronized fun moveMany(urls: Collection<String>, folder: String) {
+        val now = System.currentTimeMillis(); val f = cleanPath(folder)
+        for (u in urls) bookmarks[u]?.let { if (!it.deleted) { it.folder = f; it.updated = now; it.dirty = true } }
+        saveBookmarks()
+    }
+
+    @Synchronized fun deleteMany(urls: Collection<String>) {
+        val now = System.currentTimeMillis()
+        for (u in urls) bookmarks[u]?.let { it.deleted = true; it.updated = now; it.dirty = true }
+        saveBookmarks()
+    }
+
+    @Synchronized fun restoreMany(urls: Collection<String>) {
+        val now = System.currentTimeMillis()
+        for (u in urls) bookmarks[u]?.let { it.deleted = false; it.updated = now; it.dirty = true }
+        saveBookmarks()
+    }
+
+    /** Renames or moves a folder with everything inside it (any depth). */
+    @Synchronized fun renameFolder(old: String, new: String) {
+        val now = System.currentTimeMillis(); val n = cleanPath(new)
+        for (b in bookmarks.values) if (!b.deleted && (b.folder == old || b.folder.startsWith("$old/"))) {
+            b.folder = cleanPath(n + b.folder.removePrefix(old)); b.updated = now; b.dirty = true
+        }
+        saveBookmarks()
+    }
+
+    @Synchronized fun deleteFolder(path: String) {
+        val now = System.currentTimeMillis()
+        for (b in bookmarks.values) if (!b.deleted && (b.folder == path || b.folder.startsWith("$path/"))) {
+            b.deleted = true; b.updated = now; b.dirty = true
+        }
+        saveBookmarks()
+    }
+
     @Synchronized fun folderOf(url: String): String = bookmarks[url]?.folder ?: ""
 
     // ---- sync helpers ----

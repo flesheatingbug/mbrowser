@@ -1257,7 +1257,7 @@ class MainActivity : BaseActivity() {
                     (getSystemService(INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager).showSoftInput(urlBar, 0) }
                 "newtab" -> { hideSwitcher(); newTab(null) }
                 "reload" -> cur()?.let { t -> if (!t.home) { if (progress.visibility == View.VISIBLE) t.web.stopLoading() else t.web.reload() } }
-                "bookmarks" -> picker.launch(Intent(this, ItemsActivity::class.java).putExtra("mode", "bookmarks"))
+                "bookmarks" -> picker.launch(Intent(this, BookmarksActivity::class.java))
                 "menu" -> showMenu(it)
             }
         }
@@ -1455,7 +1455,7 @@ class MainActivity : BaseActivity() {
         row(R.drawable.ic_add, "New tab", go { newTab(null) })
         row(R.drawable.ic_ghost, "New private tab", go { newTab(null, true) })
         divider()
-        row(R.drawable.ic_bookmarks, "Bookmarks", go { picker.launch(Intent(this, ItemsActivity::class.java).putExtra("mode", "bookmarks")) })
+        row(R.drawable.ic_bookmarks, "Bookmarks", go { picker.launch(Intent(this, BookmarksActivity::class.java)) })
         row(R.drawable.ic_history, "History", go { picker.launch(Intent(this, ItemsActivity::class.java).putExtra("mode", "history")) })
         row(R.drawable.ic_download, "Downloads", go { startActivity(Intent(this, ItemsActivity::class.java).putExtra("mode", "downloads")) })
         row(R.drawable.ic_devices, "Tabs from other devices", go { picker.launch(Intent(this, ItemsActivity::class.java).putExtra("mode", "devices")) })
