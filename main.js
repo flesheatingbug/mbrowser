@@ -2527,7 +2527,7 @@ function setupIpc() {
     const terms = String(o.q || '').toLowerCase().split(/\s+/).filter(Boolean);
     const from = Number(o.from) || 0;
     const to = Number(o.to) || Infinity;
-    const limit = Math.min(Math.max(Number(o.limit) || 300, 1), 1000);
+    const limit = Math.min(Math.max(Number(o.limit) || 300, 1), 20000);
     const out = [];
     for (let i = history.length - 1; i >= 0 && out.length < limit; i--) {
       const h = history[i];

@@ -16,6 +16,7 @@
   .h .t { flex:1; min-width:0; }
   .h .t a { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; cursor:pointer; }
   .h .t small { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .h input[type=checkbox] { flex:none; }
   .h button { padding:2px 9px; visibility:hidden; }
   .h:hover button { visibility:visible; }
   .more { text-align:center; margin:18px 0; }
@@ -26,34 +27,46 @@
   <h1>History</h1>
   <div class="bar">
     <input id="q" type="search" placeholder="Search history by title or address" autofocus>
+    <button id="binbtn">Recycle bin</button>
     <select id="range">
       <option value="0">All time</option>
+      <option value="hour">Last hour</option>
       <option value="today">Today</option>
       <option value="yesterday">Yesterday</option>
       <option value="week">Last 7 days</option>
       <option value="month">Last 30 days</option>
+      <option value="custom">Custom dates</option>
     </select>
+    <label class="muted" style="display:flex;gap:6px;align-items:center">From <input type="date" id="dfrom"></label>
+    <label class="muted" style="display:flex;gap:6px;align-items:center">to <input type="date" id="dto"></label>
   </div>
   <div class="bar">
-    <span class="muted" id="count"></span>
+    <label style="display:flex;gap:8px;align-items:center;cursor:pointer"><input type="checkbox" id="selpage"> <span id="selinfo" class="muted">Select all on this page</span></label>
+    <button id="delsel" class="danger" style="display:none">Delete selected</button>
     <span style="flex:1"></span>
+    <span class="muted" id="count"></span>
     <select id="del">
       <option value="">Delete…</option>
       <option value="hour">Last hour</option>
       <option value="today">Today</option>
       <option value="week">Last 7 days</option>
+      <option value="shown">Everything matching the search and filter</option>
       <option value="all">Everything</option>
     </select>
-    <button id="binbtn">Recycle bin</button>
   </div>
   <div id="list"></div>
   <div id="binview" style="display:none"></div>
-  <div class="more"><button id="more" style="display:none">Show more</button></div>
+  <div class="more" style="display:flex;gap:14px;align-items:center;justify-content:center">
+    <button id="prev">‹ Newer</button><span id="pagelabel" class="muted"></span><button id="next">Older ›</button>
+  </div>
 </div>
 <script>
   const $ = (id) => document.getElementById(id);
   const DAY = 864e5;
-  let limit = 300;
+  const PAGE = 30;
+  let page = 0;
+  let all = [];                 // every entry matching the search and filter
+  const selected = new Set();   // page addresses ticked, kept while you move between pages
   const startOfDay = (t) => { const d = new Date(t); d.setHours(0, 0, 0, 0); return d.getTime(); };
 
   // minimal context menu
@@ -84,10 +97,17 @@
 
   function range() {
     const v = $('range').value, now = Date.now(), today = startOfDay(now);
+    if (v === 'hour') return { from: now - 3600e3 };
     if (v === 'today') return { from: today };
     if (v === 'yesterday') return { from: today - DAY, to: today - 1 };
     if (v === 'week') return { from: today - 6 * DAY };
     if (v === 'month') return { from: today - 29 * DAY };
+    if (v === 'custom') {
+      const r = {};
+      if ($('dfrom').value) r.from = startOfDay(new Date($('dfrom').value + 'T00:00:00').getTime());
+      if ($('dto').value) r.to = startOfDay(new Date($('dto').value + 'T00:00:00').getTime()) + DAY - 1;
+      return r;
+    }
     return {};
   }
   const dayLabel = (t) => {
@@ -97,12 +117,22 @@
     return new Date(t).toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
   };
 
-  async function load() {
-    const r = await browser.historyQuery({ q: $('q').value, limit, ...range() });
+  async function load(keepPage) {
+    const r = await browser.historyQuery({ q: $('q').value, limit: 20000, ...range() });
+    all = r.items.filter((h) => /^https?:\/\//i.test(h.url));
+    const pages = Math.max(1, Math.ceil(all.length / PAGE));
+    page = keepPage ? Math.min(page, pages - 1) : 0;
+    const valid = new Set(all.map((h) => h.url));
+    for (const u of [...selected]) if (!valid.has(u)) selected.delete(u);
+    draw(r.total);
+  }
+
+  function draw(total) {
+    const pages = Math.max(1, Math.ceil(all.length / PAGE));
+    const slice = all.slice(page * PAGE, page * PAGE + PAGE);
     const list = $('list'); list.textContent = '';
     let day = '', group = null;
-    for (const h of r.items) {
-      if (!/^https?:\/\//i.test(h.url)) continue;
+    for (const h of slice) {
       const lbl = dayLabel(h.time);
       if (lbl !== day) {
         day = lbl;
@@ -111,6 +141,8 @@
         list.append(hd, group);
       }
       const row = document.createElement('div'); row.className = 'h';
+      const cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = selected.has(h.url);
+      cb.onchange = () => { if (cb.checked) selected.add(h.url); else selected.delete(h.url); sync(slice); };
       const tm = document.createElement('span'); tm.className = 'tm'; tm.textContent = new Date(h.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
       const t = document.createElement('div'); t.className = 't';
       const a = document.createElement('a'); a.href = h.url; a.textContent = h.title || h.url;
@@ -119,30 +151,64 @@
       const sm = document.createElement('small'); sm.className = 'muted'; sm.textContent = h.url;
       t.append(a, sm);
       const x = document.createElement('button'); x.className = 'danger'; x.textContent = 'Remove'; x.title = 'Remove this page from history';
-      x.onclick = async () => { await browser.historyDelete({ urls: [h.url] }); load(); };
-      row.append(tm, t, x);
-      row.oncontextmenu = (e) => { e.preventDefault(); showHistCtx(e.clientX, e.clientY, h.url, () => load()); };
+      x.onclick = async () => { selected.delete(h.url); await browser.historyDelete({ urls: [h.url] }); load(true); };
+      row.append(cb, tm, t, x);
+      row.oncontextmenu = (e) => { e.preventDefault(); showHistCtx(e.clientX, e.clientY, h.url, () => load(true)); };
       group.append(row);
     }
-    if (!r.items.length) list.innerHTML = '<p class="muted">Nothing found.</p>';
-    $('count').textContent = r.items.length + ' shown · ' + r.total + ' entries stored on this computer';
-    $('more').style.display = r.items.length >= limit ? '' : 'none';
+    if (!slice.length) list.innerHTML = '<p class="muted">Nothing found.</p>';
+    const first = all.length ? page * PAGE + 1 : 0;
+    $('count').textContent = first + '–' + (page * PAGE + slice.length) + ' of ' + all.length + ' · ' + total + ' stored on this computer';
+    $('pagelabel').textContent = 'Page ' + (page + 1) + ' of ' + pages;
+    $('prev').disabled = page === 0; $('next').disabled = page >= pages - 1;
+    sync(slice);
   }
 
-  $('q').oninput = () => { limit = 300; load(); };
-  $('range').onchange = () => { limit = 300; load(); };
-  $('more').onclick = () => { limit += 300; load(); };
+  // keeps the select-all box and the Delete selected button in step with what is ticked
+  function sync(slice) {
+    slice = slice || all.slice(page * PAGE, page * PAGE + PAGE);
+    const urls = slice.map((h) => h.url);
+    const n = urls.filter((u) => selected.has(u)).length;
+    $('selpage').checked = urls.length > 0 && n === urls.length;
+    $('selpage').indeterminate = n > 0 && n < urls.length;
+    $('selpage').disabled = !urls.length;
+    $('selinfo').textContent = selected.size ? selected.size + ' selected' : 'Select all on this page';
+    $('delsel').style.display = selected.size ? '' : 'none';
+    $('delsel').textContent = 'Delete ' + selected.size + ' selected';
+  }
+
+  $('selpage').onchange = () => {
+    const urls = all.slice(page * PAGE, page * PAGE + PAGE).map((h) => h.url);
+    for (const u of urls) { if ($('selpage').checked) selected.add(u); else selected.delete(u); }
+    draw(Number($('count').textContent.split('·')[1]) || all.length);
+  };
+  $('delsel').onclick = async () => {
+    if (!selected.size || !confirm('Delete ' + selected.size + ' selected pages from history? They go to the recycle bin for 30 days. This only affects this computer; entries already on the sync server are not removed.')) return;
+    await browser.historyDelete({ urls: [...selected] });
+    selected.clear(); load(true);
+  };
+  $('prev').onclick = () => { if (page > 0) { page--; draw(all.length); window.scrollTo(0, 0); } };
+  $('next').onclick = () => { page++; draw(all.length); window.scrollTo(0, 0); };
+  $('q').oninput = () => load();
+  $('range').onchange = () => load();
+  for (const id of ['dfrom', 'dto']) $(id).onchange = () => { $('range').value = 'custom'; load(); };
   $('del').onchange = async () => {
     const v = $('del').value; $('del').value = '';
     if (!v) return;
     const now = Date.now(), today = startOfDay(now);
+    if (v === 'shown') {
+      const urls = [...new Set(all.map((h) => h.url))];
+      if (!urls.length) return;
+      if (!confirm('Delete the ' + all.length + ' entries matching the current search and filter (all pages)? They go to the recycle bin for 30 days. This only affects this computer; entries already on the sync server are not removed.')) return;
+      await browser.historyDelete({ urls }); selected.clear(); load();
+      return;
+    }
     const spec = { hour: { from: now - 3600e3 }, today: { from: today }, week: { from: today - 6 * DAY }, all: { from: 0 } }[v];
     const label = { hour: 'the last hour', today: 'today', week: 'the last 7 days', all: 'all time' }[v];
     if (!confirm('Delete browsing history for ' + label + '? They go to the recycle bin for 30 days. This only affects this computer; entries already on the sync server are not removed.')) return;
     await browser.historyDelete(spec);
-    load();
+    selected.clear(); load();
   };
-
   // ---- recycle bin (removed history is kept for 30 days) ----
   let inBin = false;
   async function showBin() {
@@ -174,8 +240,8 @@
     $('binbtn').textContent = inBin ? 'Back to history' : 'Recycle bin';
     $('list').style.display = inBin ? 'none' : '';
     $('binview').style.display = inBin ? '' : 'none';
-    for (const id of ['q', 'range', 'del', 'count']) $(id).style.display = inBin ? 'none' : '';
-    if (inBin) { $('more').style.display = 'none'; showBin(); } else load();
+    for (const id of ['q', 'range', 'del', 'count', 'dfrom', 'dto', 'selpage', 'selinfo', 'delsel', 'prev', 'next', 'pagelabel']) { const e = $(id); const t = e.closest('label') || e; t.style.display = inBin ? 'none' : ''; }
+    if (inBin) showBin(); else load(true);
   };
   load();
 </script>
