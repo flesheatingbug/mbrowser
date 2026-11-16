@@ -1456,7 +1456,7 @@ class MainActivity : BaseActivity() {
         row(R.drawable.ic_ghost, "New private tab", go { newTab(null, true) })
         divider()
         row(R.drawable.ic_bookmarks, "Bookmarks", go { picker.launch(Intent(this, BookmarksActivity::class.java)) })
-        row(R.drawable.ic_history, "History", go { picker.launch(Intent(this, ItemsActivity::class.java).putExtra("mode", "history")) })
+        row(R.drawable.ic_history, "History", go { picker.launch(Intent(this, HistoryActivity::class.java)) })
         row(R.drawable.ic_download, "Downloads", go { startActivity(Intent(this, ItemsActivity::class.java).putExtra("mode", "downloads")) })
         row(R.drawable.ic_devices, "Tabs from other devices", go { picker.launch(Intent(this, ItemsActivity::class.java).putExtra("mode", "devices")) })
         row(R.drawable.ic_key, "Passwords", go { picker.launch(Intent(this, PasswordsActivity::class.java)) })

@@ -17,11 +17,15 @@ data class Bookmark(
 
 data class Visit(val url: String, val title: String, val time: Long, var dirty: Boolean = true)
 
+/** A history entry in the recycle bin. */
+data class BinVisit(val visit: Visit, val binTime: Long)
+
 /** Local bookmarks + history, kept as small JSON files. The same shapes the sync server uses. */
 object Store {
     private lateinit var dir: File
     private val bookmarks = LinkedHashMap<String, Bookmark>()
     private val history = ArrayList<Visit>()
+    private val historyBin = ArrayList<BinVisit>()
     private var loaded = false
     private const val MAX_HISTORY = 20000
 
@@ -39,6 +43,14 @@ object Store {
                         o.getString("url"), o.optString("title"), o.optString("folder"),
                         o.optLong("added"), o.optLong("updated"), o.optBoolean("deleted"), o.optBoolean("dirty"),
                     )
+                }
+            }
+            val hb = File(dir, "history-bin.json")
+            if (hb.exists()) {
+                val a = JSONArray(hb.readText()); val cut = System.currentTimeMillis() - 30L * 86_400_000L
+                for (i in 0 until a.length()) {
+                    val o = a.getJSONObject(i)
+                    if (o.optLong("binTime") > cut) historyBin.add(BinVisit(Visit(o.getString("url"), o.optString("title"), o.optLong("time"), false), o.optLong("binTime")))
                 }
             }
             val h = File(dir, "history.json")
@@ -118,14 +130,53 @@ object Store {
         saveHistory()
     }
 
+    // ---- history manager helpers (removing history only affects this phone; the server keeps no deletions) ----
+    private fun saveHistoryBin() {
+        try {
+            val a = JSONArray()
+            for (b in historyBin) a.put(JSONObject().put("url", b.visit.url).put("title", b.visit.title).put("time", b.visit.time).put("binTime", b.binTime))
+            File(dir, "history-bin.json").writeText(a.toString())
+        } catch (_: Exception) { }
+    }
+
+    private fun vkey(v: Visit) = v.url + "|" + v.time
+
+    @Synchronized fun historyBinList(): List<BinVisit> = historyBin.sortedByDescending { it.binTime }
+
+    /** Moves visits (keys are "url|time") to the recycle bin, kept 30 days. Returns how many were removed. */
+    @Synchronized fun removeVisits(keys: Set<String>): Int {
+        val gone = history.filter { vkey(it) in keys }
+        if (gone.isEmpty()) return 0
+        history.removeAll(gone.toSet())
+        val now = System.currentTimeMillis()
+        for (v in gone) historyBin.add(BinVisit(v.copy(dirty = false), now))
+        if (historyBin.size > 5000) historyBin.subList(0, historyBin.size - 5000).clear()
+        saveHistory(); saveHistoryBin()
+        return gone.size
+    }
+
+    @Synchronized fun restoreVisits(keys: Set<String>): Int {
+        val back = historyBin.filter { vkey(it.visit) in keys }
+        if (back.isEmpty()) return 0
+        historyBin.removeAll(back.toSet())
+        val have = history.map { vkey(it) }.toHashSet()
+        for (b in back) if (have.add(vkey(b.visit))) history.add(b.visit.copy(dirty = false))
+        history.sortBy { it.time }
+        saveHistory(); saveHistoryBin()
+        return back.size
+    }
+
+    @Synchronized fun emptyHistoryBin() { historyBin.clear(); saveHistoryBin() }
+
     @Synchronized fun historyList(): List<Visit> = history.sortedByDescending { it.time }
 
     @Synchronized fun clearHistory() { history.clear(); saveHistory() }
+    fun visitKey(v: Visit) = v.url + "|" + v.time
 
     /** Forgets all local bookmarks and history (used when the phone is pointed at a different server profile). */
     @Synchronized fun resetAll() {
-        bookmarks.clear(); history.clear()
-        saveBookmarks(); saveHistory()
+        bookmarks.clear(); history.clear(); historyBin.clear()
+        saveBookmarks(); saveHistory(); saveHistoryBin()
     }
 
     // ---- speed dial = bookmark folders (top-level folder name is the dial) ----
