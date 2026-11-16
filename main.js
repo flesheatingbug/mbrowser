@@ -864,7 +864,7 @@ function toggleBookmark() {
     ...bookmarkFolders,
   ])].sort();
   const key = thumbKey(url);
-  const inSpeedDial = (S().startPage.groups || []).some((g) => g.dials.some((d) => thumbKey(d.url) === key));
+  const inSpeedDial = dialUrls().some((u) => thumbKey(u) === key);
   showOverlay('bookmark', {
     url, title: wc.getTitle(),
     bookmarked: !!b, folder: b ? (b.folder || '') : '',
@@ -1750,6 +1750,7 @@ async function syncAll() {
         if (sr.applied.length) {
           afterSettingsChange();
           if (sr.applied.includes('profileMeta')) applyProfileMeta();
+          if (sr.applied.includes('startPage')) migrateDials();
         }
         // a profile picture chosen before sync existed was never put in the synced settings: send it once
         try {
@@ -1839,6 +1840,99 @@ function touchBookmarks() {
   for (const w of windows) { if (w.bmView) try { w.bmView.webContents.send('bookmarks:changed'); } catch { /* ignore */ } }
 }
 
+
+// ---------- speed dials live in the bookmarks ----------
+// Every tile is a bookmark in the top-level "Speed Dials" folder (the first dial group is that folder itself, further
+// groups are sub-folders named after them, and dial folders are sub-folders). Tile order = the bookmarks' "added" order.
+// They therefore sync with the server like any bookmark. The start page settings only keep the group ids and names.
+const SD_ROOT = 'Speed Dials';
+const cleanName = (s, fb) => String(s || fb || '').replace(/\s*\/\s*/g, '-').trim().slice(0, 60) || fb;
+function dialGroups() { return (S().startPage.groups || []); }
+function groupPath(groups, gi) { return gi === 0 ? SD_ROOT : SD_ROOT + SEP + cleanName(groups[gi].name, 'Group ' + (gi + 1)); }
+const liveBm = (b) => !b.deleted && !b.recycleBin;
+
+function readDials() {
+  const groups = dialGroups();
+  const otherNames = new Set(groups.slice(1).map((g, i) => groupPath(groups, i + 1)));
+  const folders = allFolderPaths();
+  const build = (path) => {
+    const subs = folders.filter((f) => f.startsWith(path + SEP) && !f.slice(path.length + SEP.length).includes(SEP) && !otherNames.has(f));
+    const out = subs.map((f) => ({ type: 'folder', title: f.slice(path.length + SEP.length), items: build(f) }));
+    for (const b of bookmarks.filter((x) => liveBm(x) && x.folder === path).sort((a, c) => (a.added || 0) - (c.added || 0))) out.push({ title: b.title || hostOf(b.url), url: b.url });
+    return out;
+  };
+  return groups.map((g, gi) => ({ ...JSON.parse(JSON.stringify(g)), dials: build(groupPath(groups, gi)) }));
+}
+const dialUrls = () => { const out = []; const w = (a) => { for (const d of a || []) { if (d.type === 'folder') w(d.items); else out.push(d.url); } }; readDials().forEach((g) => w(g.dials)); return out; };
+
+// Make the bookmarks match this dial tree (groups: [{id,name,dials:[…]}]).
+function writeDials(groups) {
+  const now = Date.now();
+  const want = new Map();     // url -> { title, folder, idx }
+  const folders = new Set();
+  const order = [];           // [{ folder, urls: [...] }]
+  const walk = (items, base) => {
+    const urls = [];
+    (items || []).forEach((d) => {
+      if (d && d.type === 'folder') { const p = base + SEP + cleanName(d.title, 'Folder'); folders.add(p); walk(d.items, p); }
+      else if (d && isWeb(d.url)) { if (!want.has(d.url)) { want.set(d.url, { title: String(d.title || '').slice(0, 900), folder: base }); urls.push(d.url); } }
+    });
+    order.push({ folder: base, urls });
+  };
+  groups.forEach((g, gi) => { const p = groupPath(groups, gi); if (gi > 0) folders.add(p); walk(g.dials, p); });
+  const byUrl = new Map(bookmarks.map((b) => [b.url, b]));
+  for (const [url, w] of want) {
+    let b = byUrl.get(url);
+    if (!b) { b = { url, title: w.title, folder: w.folder, added: now, updated: now }; bookmarks.push(b); byUrl.set(url, b); }
+    else {
+      const revive = !liveBm(b);
+      if (revive || b.title !== w.title || b.folder !== w.folder) { b.deleted = false; delete b.recycleBin; delete b.binTime; b.title = w.title || b.title; b.folder = w.folder; b.updated = now; }
+    }
+  }
+  // tile order: hand the same set of "added" times to the tiles in their new order
+  for (const { urls } of order) {
+    const recs = urls.map((u) => byUrl.get(u));
+    const times = recs.map((r) => r.added || now).sort((a, b) => a - b);
+    for (let i = 1; i < times.length; i++) if (times[i] <= times[i - 1]) times[i] = times[i - 1] + 1;
+    recs.forEach((r, i) => { if (r.added !== times[i]) { r.added = times[i]; r.updated = now; } });
+  }
+  // tiles that are no longer in the tree go to the recycle bin
+  for (const b of bookmarks) if (liveBm(b) && b.folder && inFolder(b.folder, SD_ROOT) && !want.has(b.url)) { b.recycleBin = true; b.binTime = now; b.updated = now; }
+  // empty dial folders
+  bookmarkFolders = bookmarkFolders.filter((f) => !inFolder(f, SD_ROOT) || f === SD_ROOT || folders.has(f) || bookmarks.some((b) => liveBm(b) && b.folder && inFolder(b.folder, f)));
+  for (const f of folders) if (!bookmarkFolders.includes(f)) bookmarkFolders.push(f);
+  saveFolders();
+  touchBookmarks();
+}
+
+// The group list without the tiles (what the start page settings keep).
+const stripDials = (groups) => (groups || []).map((g) => { const c = JSON.parse(JSON.stringify(g)); delete c.dials; return c; });
+
+// Old versions (and the other side of an old sync) kept the tiles inside the settings: move any into the bookmarks, once.
+function migrateDials() {
+  try {
+    const groups = dialGroups();
+    if (!groups.some((g) => Array.isArray(g.dials))) return;
+    const legacy = JSON.parse(JSON.stringify(groups));
+    const have = new Set(bookmarks.filter(liveBm).map((b) => b.url));
+    const cur = readDials();
+    legacy.forEach((g, gi) => {
+      const target = cur[gi] || cur[0];
+      const merge = (from, into) => {
+        for (const d of from || []) {
+          if (d.type === 'folder') {
+            let f = into.find((x) => x.type === 'folder' && x.title === d.title);
+            if (!f) { f = { type: 'folder', title: d.title, items: [] }; into.push(f); }
+            merge(d.items, f.items);
+          } else if (isWeb(d.url) && !have.has(d.url)) { into.push({ title: d.title, url: d.url }); have.add(d.url); }
+        }
+      };
+      if (target) merge(g.dials, target.dials);
+    });
+    writeDials(cur);
+    store.set('startPage.groups', stripDials(groups));
+  } catch (e) { console.error('migrateDials', e); }
+}
 
 // ---------- importing bookmarks ----------
 const detectedSources = new Map();
@@ -2560,9 +2654,13 @@ function setupIpc() {
   }, PAGE_ONLY);
 
   // internal my:// pages (and chrome)
-  handle('settings:get', () => JSON.parse(JSON.stringify(S())), BOTH);
+  handle('settings:get', () => { const o = JSON.parse(JSON.stringify(S())); try { o.startPage.groups = readDials(); } catch { /* keep */ } return o; }, BOTH);
   handle('settings:set', (_e, p, v) => {
-    try { applySetting(p, v); return true; } catch { return false; }
+    try {
+      if (p === 'startPage' && v && Array.isArray(v.groups)) { writeDials(v.groups); v = { ...v, groups: stripDials(v.groups) }; }
+      else if (p === 'startPage.groups' && Array.isArray(v)) { writeDials(v); v = stripDials(v); }
+      applySetting(p, v); return true;
+    } catch { return false; }
   }, BOTH);
   handle('themes:list', () => ({ presets: PRESETS, custom: S().appearance.customThemes, current: S().appearance.themeId }), BOTH);
   handle('commands:list', () => COMMANDS.map((c) => ({
@@ -3012,7 +3110,7 @@ const sniffMime = (b) => {
 function dialHosts() {
   const hosts = new Set();
   const walk = (items) => { for (const d of items || []) { if (d.type === 'folder') walk(d.items); else { try { hosts.add(new URL(d.url).host); } catch { /* skip */ } } } };
-  for (const g of S().startPage.groups || []) walk(g.dials);
+  for (const g of readDials()) walk(g.dials);
   return hosts;
 }
 
@@ -3283,7 +3381,7 @@ function maybeThumb(tab, force = false) {
   try { url = tab.wc.getURL(); } catch { return; }
   const key = thumbKey(url);
   if (!key) return;
-  const keys = new Set(S().startPage.groups.flatMap((g) => g.dials.map((d) => thumbKey(d.url))));
+  const keys = new Set(dialUrls().map((u) => thumbKey(u)));
   if (!keys.has(key)) return;
   const p = thumbFile(key);
   const last = thumbTimes.get(key) || (fs.existsSync(p) ? fs.statSync(p).mtimeMs : 0);
@@ -3371,13 +3469,12 @@ function captureThumbBg(url) {
 // returns true when added, false when it was already there
 function addSpeedDial(url, title) {
   if (!isWeb(url)) return false;
-  const sp = JSON.parse(JSON.stringify(S().startPage));
-  const gi = Math.max(0, sp.groups.findIndex((g) => g.id === sp.activeGroup));
   const key = thumbKey(url);
-  if (sp.groups.some((g) => g.dials.some((d) => thumbKey(d.url) === key))) return false;
-  sp.groups[gi].dials.push({ title: String(title || '').trim().slice(0, 80) || hostOf(url), url });
-  store.set('startPage', sp);
-  if (syncReady() && S().sync.settings !== false) syncSoon();
+  if (dialUrls().some((u) => thumbKey(u) === key)) return false;
+  const groups = readDials();
+  const gi = Math.max(0, groups.findIndex((g) => g.id === S().startPage.activeGroup));
+  groups[gi].dials.push({ title: String(title || '').trim().slice(0, 80) || hostOf(url), url });
+  writeDials(groups);
   return true;
 }
 
@@ -4010,6 +4107,7 @@ app.whenReady().then(async () => {
   historyBin = load('history-bin.json', []).filter((h) => Date.now() - (h.binTime || 0) < 30 * 864e5);
   notes = load('notes.json', []);
   bookmarkFolders = load('bookmark-folders.json', []);
+  migrateDials();   // speed dials used to live in the settings; they are bookmarks now
   vault = createVault(file('vault.json'));
 
   autoUnlockVault();

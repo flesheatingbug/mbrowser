@@ -877,6 +877,12 @@ document.addEventListener('click', (e) => {
   }
 });
 
+// the tiles are bookmarks: pick up changes made in the bookmark manager or by sync when you come back to this tab
+document.addEventListener('visibilitychange', async () => {
+  if (document.hidden || !SP) return;
+  try { const st = await browser.getSettings(); const cur = JSON.stringify(SP.groups.map((g) => g.dials)); const nw = JSON.stringify(st.startPage.groups.map((g) => g.dials)); if (cur !== nw && document.getElementById('panel-open') == null) { SP.groups = st.startPage.groups; render(); } } catch { /* ignore */ }
+});
+
 // --- init ---
 (async () => {
   try {

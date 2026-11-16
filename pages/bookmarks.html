@@ -120,8 +120,6 @@
   const FOLDER = '<svg viewBox="0 0 24 24"><path d="M3.5 7a2 2 0 0 1 2-2h4l2 2.5h7a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/></svg>';
   const ALL = '<svg viewBox="0 0 24 24"><path d="M7 4h10a1 1 0 0 1 1 1v15l-6-4-6 4V5a1 1 0 0 1 1-1z"/></svg>';
 
-  const SD_SEL = '\u0001speeddials';
-  let SPG = { groups: [] };   // live start page speed dials
   let D = { bookmarks: [], folders: [] };
   let binItems = [];
   let sel = null;          // null=all, ''=unsorted, BIN_SEL=recycle bin, otherwise folder path
@@ -179,56 +177,13 @@
   }
 
 
-  // ---- speed dials: the live tiles from the start page (folders are buttons you click into, like bookmark folders) ----
-  let sdIdx = [];   // path of folder indexes into the speed dial tree
-  const sdRoot = () => { const g = SPG.groups || []; return g.length > 1 ? g.map((x) => ({ type: 'folder', title: x.name || 'Speed dial', items: x.dials || (x.dials = []) })) : ((g[0] && (g[0].dials || (g[0].dials = []))) || []); };
-  function sdLevel() {
-    let arr = sdRoot(); const names = [];
-    for (const i of sdIdx) { const f = arr[i]; if (!f || f.type !== 'folder') { sdIdx = []; return { arr: sdRoot(), names: [] }; } names.push(f.title || 'Folder'); arr = f.items || (f.items = []); }
-    return { arr, names };
-  }
-  function sdCount() { let n = 0; const w = (a) => { for (const d of a || []) { if (d.type === 'folder') w(d.items); else n++; } }; (SPG.groups || []).forEach((g) => w(g.dials)); return n; }
-  function sdChips(subs) {
-    const { arr } = sdLevel();
-    arr.forEach((d, i) => {
-      if (d.type !== 'folder') return;
-      const c = el('div', 'chip'); c.append(el('span', null, '📁 ' + (d.title || 'Folder') + ' (' + (function n(a) { return (a || []).reduce((t, x) => t + (x.type === 'folder' ? n(x.items) : 1), 0); })(d.items) + ')'));
-      c.onclick = () => { sdIdx.push(i); render(); };
-      subs.append(c);
-    });
-  }
-  function renderSpeedDials(list) {
-    const q = $('q').value.toLowerCase().split(/\s+/).filter(Boolean);
-    const { arr } = sdLevel();
-    let shown = 0;
-    const saveSp = async () => { await browser.setSetting('startPage', SPG); load(); };
-    const matches = (d) => !q.length || q.every((t) => ((d.title || '') + ' ' + d.url).toLowerCase().includes(t));
-    const dials = q.length ? (function flat(a) { return a.flatMap((d) => d.type === 'folder' ? flat(d.items || []) : [d]); })(sdRoot()) : arr.filter((d) => d.type !== 'folder');
-    for (const d of dials) {
-      if (!matches(d)) continue;
-      const holder = q.length ? null : arr;
-      const row = el('div', 'row');
-      const fi = el('div', 'fi', (d.title || d.url).replace(/^https?:\/\/(www\.)?/, '').charAt(0).toUpperCase());
-      const t = el('div', 't'); const a = el('a'); a.href = d.url; a.textContent = d.title || d.url;
-      t.append(a, el('small', 'muted', d.url));
-      row.append(fi, t);
-      const acts = el('div', 'acts');
-      const rm = el('button', 'danger', 'Remove from speed dial'); rm.onclick = async () => {
-        if (!confirm('Remove "' + (d.title || d.url) + '" from the speed dial?')) return;
-        const rem = (a) => { const i = a.indexOf(d); if (i >= 0) { a.splice(i, 1); return true; } return a.some((x) => x.type === 'folder' && rem(x.items || [])); };
-        (SPG.groups || []).some((g) => rem(g.dials || []));
-        await saveSp();
-      };
-      acts.append(rm); row.append(acts); list.append(row); shown++;
-    }
-    if (!shown && !arr.some((d) => d.type === 'folder' && !q.length)) list.append(el('div', 'empty', 'No speed dials' + (q.length ? ' match.' : ' here yet. Add some from the start page.')));
-  }
+  const SD_ROOT = 'Speed Dials';
+  const sdCount = () => D.bookmarks.filter((b) => b.folder === SD_ROOT || b.folder.startsWith(SD_ROOT + SEP)).length;
 
   async function load() {
     D = await browser.bookmarksAll();
     const bd = await browser.bookmarksRecycleBin();
     binItems = bd.bookmarks || [];
-    try { SPG = (await browser.getSettings()).startPage || { groups: [] }; } catch { /* keep old */ }
     render();
   }
 
@@ -252,7 +207,7 @@
     const row = el('div', 'node' + (sel === value ? ' on' : ''));
     const ic = el('span'); ic.innerHTML = icon;
     row.append(el('span', 'caret'), ic, el('span', 'nm', label), el('span', 'ct', String(count)));
-    row.onclick = () => { sel = value; if (value === SD_SEL) sdIdx = []; picked.clear(); render(); };
+    row.onclick = () => { sel = value; picked.clear(); render(); };
     if (value === '') wireDrop(row, '');
     return row;
   }
@@ -283,7 +238,7 @@
 
   // ---- list ----
   function visible() {
-    if (sel === BIN_SEL || sel === SD_SEL) return [];
+    if (sel === BIN_SEL) return [];
     const terms = $('q').value.toLowerCase().split(/\s+/).filter(Boolean);
     let items = D.bookmarks.filter((b) => {
       if (terms.length) { const s = (b.title + ' ' + b.url + ' ' + b.folder).toLowerCase(); return terms.every((t) => s.includes(t)); }
@@ -304,10 +259,8 @@
     } else if (sel === null) {
       addPnSeg('All bookmarks');
       // show root folders as chips in panel nav
-      if (!$('q').value.trim()) { pn.append(el('span', null, ' ')); addPnSeg('⚡ Speed dials', () => { sel = SD_SEL; picked.clear(); render(); }); }
-      if (!$('q').value.trim()) D.folders.filter((f) => !f.includes(SEP)).forEach((f) => { pn.append(el('span', null, ' ')); addPnSeg('📁 ' + leaf(f), () => { sel = f; open.add(f); picked.clear(); render(); }); });
-    } else if (sel === SD_SEL) {
-      addPnSeg('All', () => { sel = null; picked.clear(); render(); }); addPnSep(); addPnSeg('Speed dials');
+      if (!$('q').value.trim()) { pn.append(el('span', null, ' ')); addPnSeg('⚡ Speed dials', () => { sel = SD_ROOT; open.add(SD_ROOT); picked.clear(); render(); }); }
+      if (!$('q').value.trim()) D.folders.filter((f) => !f.includes(SEP) && f !== SD_ROOT).forEach((f) => { pn.append(el('span', null, ' ')); addPnSeg('📁 ' + leaf(f), () => { sel = f; open.add(f); picked.clear(); render(); }); });
     } else if (sel === '') {
       addPnSeg('All', () => { sel = null; picked.clear(); render(); }); addPnSep(); addPnSeg('Unsorted');
     } else {
@@ -326,8 +279,8 @@
     const tree = $('tree'); tree.textContent = '';
     tree.append(special('All bookmarks', ALL, null, D.bookmarks.length));
     tree.append(special('Unsorted', FOLDER, '', D.bookmarks.filter((b) => !b.folder).length));
-    tree.append(special('Speed dials', FOLDER, SD_SEL, sdCount()));
-    D.folders.filter((f) => !f.includes(SEP)).forEach((f) => tree.append(treeNode(f, 0)));
+    tree.append(special('Speed dials', FOLDER, SD_ROOT, sdCount()));
+    D.folders.filter((f) => !f.includes(SEP) && f !== SD_ROOT).forEach((f) => tree.append(treeNode(f, 0)));
     // recycle bin entry
     const binRow = el('div', 'node bin-node' + (sel === BIN_SEL ? ' on' : ''));
     binRow.style.paddingLeft = '8px';
@@ -344,10 +297,6 @@
     else if (searching) crumb.append(el('span', null, 'Search results'));
     else if (sel === null) crumb.append(el('span', null, 'All bookmarks'));
     else if (sel === '') crumb.append(el('span', null, 'Unsorted'));
-    else if (sel === SD_SEL) {
-      crumb.append(el('span', null, ['Speed dials'].concat(sdLevel().names).join('  ›  ')));
-      if (sdIdx.length) { const up = el('button', '', 'Up'); up.onclick = () => { sdIdx.pop(); render(); }; crumb.append(up); }
-    }
     else {
       crumb.append(el('span', null, sel.split(SEP).join('  ›  ')));
       const mk = (t, fn, cls) => { const b = el('button', cls||'', t); b.onclick = fn; crumb.append(b); };
@@ -362,7 +311,7 @@
 
     // sub folder chips
     const subs = $('subs'); subs.textContent = '';
-    if (!searching && sel !== null && sel !== '' && sel !== BIN_SEL && sel !== SD_SEL) {
+    if (!searching && sel !== null && sel !== '' && sel !== BIN_SEL) {
       D.folders.filter((f) => parentOf(f) === sel).forEach((f) => {
         const c = el('div', 'chip'); const i = el('span'); i.innerHTML = FOLDER; i.firstChild.style.cssText = 'width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2';
         c.append(i, el('span', null, leaf(f) + ' (' + countIn(f) + ')'));
@@ -371,9 +320,8 @@
         subs.append(c);
       });
     }
-    if (!searching && sel === SD_SEL) sdChips(subs);
     if (!searching && sel === null) {
-      D.folders.filter((f) => !f.includes(SEP)).forEach((f) => {
+      D.folders.filter((f) => !f.includes(SEP) && f !== SD_ROOT).forEach((f) => {
         const c = el('div', 'chip');
         c.append(el('span', null, '📁 ' + leaf(f) + ' (' + countIn(f) + ')'));
         c.onclick = () => { sel = f; open.add(f); render(); };
@@ -385,12 +333,11 @@
     // recycle bin bar
     $('binbar').classList.toggle('on', sel === BIN_SEL);
     $('bincnt').textContent = binItems.length + ' item(s) in recycle bin';
-    $('add').style.display = (sel === BIN_SEL || sel === SD_SEL) ? 'none' : '';
-    $('sort').style.display = (sel === BIN_SEL || sel === SD_SEL) ? 'none' : '';
+    $('add').style.display = sel === BIN_SEL ? 'none' : '';
+    $('sort').style.display = sel === BIN_SEL ? 'none' : '';
 
     // list
     const list = $('list'); list.textContent = '';
-    if (sel === SD_SEL) { renderSpeedDials(list); bulk(); return; }
     if (sel === BIN_SEL) {
       if (!binItems.length) { list.append(el('div', 'empty', 'The recycle bin is empty.')); bulk(); return; }
       const sortedBin = [...binItems].sort((a, b) => (b.binTime || 0) - (a.binTime || 0));
