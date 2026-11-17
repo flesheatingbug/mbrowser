@@ -41,7 +41,7 @@ object Store {
                 for (i in 0 until a.length()) {
                     val o = a.getJSONObject(i)
                     bookmarks[o.getString("url")] = Bookmark(
-                        o.getString("url"), o.optString("title"), o.optString("folder"),
+                        o.getString("url"), o.optString("title"), cleanPath(o.optString("folder")),
                         o.optLong("added"), o.optLong("updated"), o.optBoolean("deleted"), o.optBoolean("dirty"), o.optBoolean("bin"),
                     )
                 }

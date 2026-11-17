@@ -210,7 +210,7 @@ class MainActivity : BaseActivity() {
             // while typing the right-hand side offers voice and QR search instead of bookmark and reload
             findViewById<View>(R.id.btnMic).visibility = if (focused) View.VISIBLE else View.GONE
             findViewById<View>(R.id.btnQr).visibility = if (focused) View.VISIBLE else View.GONE
-            btnStar.visibility = if (focused) View.GONE else View.VISIBLE
+            btnStar.visibility = View.GONE
             btnReload.visibility = if (focused) View.GONE else View.VISIBLE
             if (focused) { showEngines(); showSuggestions(""); pullHistoryForSuggestions() } else { engineOverride = null; findViewById<View>(R.id.engineStrip).visibility = View.GONE; findViewById<View>(R.id.suggestScroll).visibility = View.GONE }
         }
@@ -218,7 +218,7 @@ class MainActivity : BaseActivity() {
             val t = cur()
             if (t != null && !t.home) { if (progress.visibility == View.VISIBLE) t.web.stopLoading() else t.web.reload() }
         }
-        btnStar.setOnClickListener { toggleBookmark() }
+        btnStar.visibility = View.GONE
         buildBottomBar()
 
         findViewById<View>(R.id.switcherNew).setOnClickListener { hideSwitcher(); newTab(null, switcherMode == 1) }
@@ -1192,6 +1192,86 @@ class MainActivity : BaseActivity() {
     }
 
     // ---------- bookmarks / menu ----------
+    // ---------- add page to… (speed dial, bookmarks, home screen) ----------
+    private fun addPageTo() {
+        val t = cur() ?: return
+        if (t.home || t.url.isEmpty()) return
+        val title = t.title.ifBlank { Thumbs.hostOf(t.url) }
+        val names = arrayOf("Speed dial", "Bookmarks", "Home screen")
+        androidx.appcompat.app.AlertDialog.Builder(this).setTitle("Add page to").setItems(names) { _, w ->
+            when (w) {
+                0 -> addToDialChoice(t, title)
+                1 -> addToBookmarkFolder(t, title)
+                else -> addToHomeScreen(t, title)
+            }
+        }.show()
+    }
+
+    private fun addToDialChoice(t: Tab, title: String) {
+        val g = Settings.value("startPage").optJSONArray("groups")
+        val ids = ArrayList<String>(); val labels = ArrayList<String>()
+        if (g != null) for (i in 0 until g.length()) {
+            val o = g.getJSONObject(i); ids.add(o.optString("id")); labels.add(o.optString("name").ifBlank { "Speed dial ${i + 1}" })
+        }
+        if (ids.isEmpty()) { Toast.makeText(this, "No speed dial to add to", Toast.LENGTH_SHORT).show(); return }
+        fun add(id: String, label: String) {
+            Settings.addToGroup(id, title, t.url); tab_thumbFor(t)
+            Toast.makeText(this, "Added to $label", Toast.LENGTH_SHORT).show()
+            if (cur()?.home == true) startPage.refresh()
+        }
+        if (ids.size == 1) { add(ids[0], labels[0]); return }
+        androidx.appcompat.app.AlertDialog.Builder(this).setTitle("Which speed dial?").setItems(labels.toTypedArray()) { _, w -> add(ids[w], labels[w]) }.show()
+    }
+
+    private fun addToBookmarkFolder(t: Tab, title: String) {
+        val set = sortedSetOf<String>(String.CASE_INSENSITIVE_ORDER)
+        for (b in Store.liveBookmarks()) {
+            if (b.folder == Dials.ROOT || b.folder.startsWith(Dials.ROOT + "/")) continue   // those folders are the speed dials
+            var p = b.folder
+            while (p.isNotEmpty()) { set.add(p); p = p.substringBeforeLast('/', "") }
+        }
+        val folders = set.toList()
+        val labels = ArrayList<String>(); labels.add("Bookmarks (top level)"); labels.addAll(folders); labels.add("＋ New folder…")
+        fun save(folder: String) {
+            Store.upsert(t.url, title, Store.cleanPath(folder))
+            tab_thumbFor(t)
+            Toast.makeText(this, "Bookmarked" + if (folder.isNotEmpty()) " in $folder" else "", Toast.LENGTH_SHORT).show()
+        }
+        androidx.appcompat.app.AlertDialog.Builder(this).setTitle("Which folder?").setItems(labels.toTypedArray()) { _, w ->
+            when (w) {
+                0 -> save("")
+                labels.size - 1 -> promptFields(this, "New folder", listOf("Folder name (use / for a sub-folder)"), listOf(""), "Create") { v -> if (v[0].isNotEmpty()) save(v[0]) }
+                else -> save(folders[w - 1])
+            }
+        }.setNegativeButton("Cancel", null).show()
+    }
+
+    private fun addToHomeScreen(t: Tab, title: String) {
+        if (!androidx.core.content.pm.ShortcutManagerCompat.isRequestPinShortcutSupported(this)) {
+            Toast.makeText(this, "Your launcher can't add shortcuts", Toast.LENGTH_LONG).show(); return
+        }
+        val host = Thumbs.hostOf(t.url)
+        val src = Thumbs.icon(this, host) ?: DialIcons.get(this, host)
+        val size = dp(96)
+        val bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+        val c = android.graphics.Canvas(bmp)
+        val p = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+        p.color = android.graphics.Color.HSVToColor(floatArrayOf(Math.floorMod(host.hashCode(), 360).toFloat(), 0.45f, 0.5f))
+        c.drawRoundRect(0f, 0f, size.toFloat(), size.toFloat(), size * 0.22f, size * 0.22f, p)
+        if (src != null) {
+            val pad = size * 0.18f
+            c.drawBitmap(src, null, android.graphics.RectF(pad, pad, size - pad, size - pad), android.graphics.Paint(android.graphics.Paint.FILTER_BITMAP_FLAG))
+        } else {
+            p.color = android.graphics.Color.WHITE; p.textSize = size * 0.5f; p.textAlign = android.graphics.Paint.Align.CENTER; p.isFakeBoldText = true
+            c.drawText((title.firstOrNull { it.isLetterOrDigit() }?.uppercaseChar() ?: '•').toString(), size / 2f, size * 0.66f, p)
+        }
+        val open = Intent(this, MainActivity::class.java).setAction(Intent.ACTION_VIEW).setData(Uri.parse(t.url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+        val info = androidx.core.content.pm.ShortcutInfoCompat.Builder(this, "page-" + t.url.hashCode())
+            .setShortLabel(title.take(24)).setLongLabel(title.take(60))
+            .setIcon(androidx.core.graphics.drawable.IconCompat.createWithBitmap(bmp)).setIntent(open).build()
+        androidx.core.content.pm.ShortcutManagerCompat.requestPinShortcut(this, info, null)
+    }
+
     private fun toggleBookmark() {
         val t = cur() ?: return
         if (t.home || t.url.isEmpty()) return
@@ -1579,7 +1659,7 @@ class MainActivity : BaseActivity() {
         circle(R.drawable.ic_back, "Back", t != null && !t.home) { goBack() }
         circle(R.drawable.ic_home, "Home", true) { goHome() }
         circle(R.drawable.ic_forward, "Forward", onPage && t!!.web.canGoForward()) { t?.let { if (it.web.canGoForward()) it.web.goForward() } }
-        circle(R.drawable.ic_star, "Bookmark this page", onPage) { toggleBookmark() }
+        circle(R.drawable.ic_star, "Add page to…", onPage) { addPageTo() }
         circle(R.drawable.ic_reload, "Reload", onPage) { t?.web?.reload() }
         card.addView(quick, LinearLayout.LayoutParams(-1, -2).also { it.bottomMargin = dp(6) })
 
@@ -1622,11 +1702,7 @@ class MainActivity : BaseActivity() {
         row(R.drawable.ic_key, "Fill saved login", go { fillLogin() })
         row(R.drawable.ic_share, "Share page", need { tab -> startActivity(Intent.createChooser(
             Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, tab.url), "Share")) })
-        row(R.drawable.ic_add, "Add to speed dial", need { tab ->
-            Settings.addToGroup(prefs.currentDial, tab.title.ifBlank { Thumbs.hostOf(tab.url) }, tab.url)
-            tab_thumbFor(tab)
-            Toast.makeText(this, "Added to speed dial", Toast.LENGTH_SHORT).show()
-        })
+        row(R.drawable.ic_add, "Add page to…", need { _ -> addPageTo() })
         divider()
         row(R.drawable.ic_sync, "Sync now", go {
             // not signed in to a server yet: go to where that's set up
