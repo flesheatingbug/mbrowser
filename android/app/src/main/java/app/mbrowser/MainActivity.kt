@@ -624,6 +624,7 @@ class MainActivity : BaseActivity() {
     }
 
     private fun onPageScroll(y: Int, oldY: Int) {
+        if (!prefs.hideBarsOnScroll) { setBars(true); return }
         if (android.os.SystemClock.uptimeMillis() - barsToggledAt < 600) return   // ignore the page resizing as the bars move
         if (y <= dp(8)) { setBars(true); return }
         val dy = y - oldY

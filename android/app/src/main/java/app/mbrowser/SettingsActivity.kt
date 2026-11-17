@@ -325,6 +325,7 @@ class SettingsActivity : BaseActivity() {
         choiceRow("Text size", listOf("Small (80%)", "Normal (100%)", "Large (120%)", "Extra large (150%)"),
             { listOf(80, 100, 120, 150).indexOf(prefs.textZoom).coerceAtLeast(1) },
             { prefs.textZoom = listOf(80, 100, 120, 150)[it] })
+        switchRow("Hide bars while scrolling", "The address bar and toolbar slide away as you read down a page", { prefs.hideBarsOnScroll }, { prefs.hideBarsOnScroll = it })
         switchRow("Pull down to refresh", "Off if it gets in the way of pages with their own drag gestures", { prefs.pullRefresh }, { prefs.pullRefresh = it })
         choiceRow("Identify as", UserAgents.MODES.map { it.second }, { UserAgents.MODES.indexOfFirst { it.first == prefs.uaMode }.coerceAtLeast(0) },
             { prefs.uaMode = UserAgents.MODES[it].first; toast("Applied to open tabs when you return to the browser") })

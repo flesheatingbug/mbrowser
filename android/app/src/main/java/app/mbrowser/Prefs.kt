@@ -154,6 +154,9 @@ class Prefs(ctx: Context) {
     var appIcon: String
         get() = str("appIcon", "classic")
         set(v) = put("appIcon", v)
+    var hideBarsOnScroll: Boolean
+        get() = bool("hideBarsOnScroll", true)
+        set(v) = putB("hideBarsOnScroll", v)
     var pullRefresh: Boolean
         get() = bool("pullRefresh", true)
         set(v) = putB("pullRefresh", v)
