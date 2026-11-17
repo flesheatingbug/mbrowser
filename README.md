@@ -1,8 +1,28 @@
-![mbrowser — Browse Your Way. Your Data. Your Server.](assets/banner.png)
+<p align="center">
+  <img src="assets/banner.png" alt="mbrowser — Browse Your Way. Your Data. Your Server." width="100%">
+</p>
 
-# mbrowser
+<h1 align="center">mbrowser</h1>
 
-A Chromium-based browser built on Electron that syncs your bookmarks, history, tabs, passwords, and settings to **your own self-hosted server** — no third-party cloud required.
+<p align="center">
+  <b>A fast, private browser for Linux, Windows and Android that syncs to a server you own.</b><br>
+  Bookmarks, speed dials, history, open tabs, passwords and settings follow you everywhere, with no third-party cloud.
+</p>
+
+<p align="center">
+  <a href="https://github.com/flesheatingbug/mbrowser/actions/workflows/build.yml"><img alt="Desktop build" src="https://github.com/flesheatingbug/mbrowser/actions/workflows/build.yml/badge.svg"></a>
+  <a href="https://github.com/flesheatingbug/mbrowser/actions/workflows/android.yml"><img alt="Android build" src="https://github.com/flesheatingbug/mbrowser/actions/workflows/android.yml/badge.svg"></a>
+  <a href="https://github.com/flesheatingbug/mbrowser/releases"><img alt="Releases" src="https://img.shields.io/github/v/release/flesheatingbug/mbrowser?include_prereleases&label=release"></a>
+</p>
+
+---
+
+## Why mbrowser
+
+- **Your data stays yours.** Sync goes to a small Docker server you host. Nothing is sent to anyone else, and there is no telemetry.
+- **One browser, three platforms.** A desktop browser (Electron) for Linux and Windows, and a native Android app, all kept in step.
+- **A start page you can arrange.** Visual speed dials with folders, several pages, wallpapers and drag-and-drop, the same on every device.
+- **Built-in privacy.** Ad and tracker blocking, an encrypted password vault and private windows are part of the browser, not add-ons.
 
 ---
 
@@ -13,21 +33,84 @@ A Chromium-based browser built on Electron that syncs your bookmarks, history, t
 | 🐧 **Linux** (AppImage) | [mbrowser-linux.AppImage](https://github.com/flesheatingbug/mbrowser/releases/download/latest-desktop/mbrowser-linux.AppImage) |
 | 🪟 **Windows** (Installer) | [mbrowser-windows-setup.exe](https://github.com/flesheatingbug/mbrowser/releases/download/latest-desktop/mbrowser-windows-setup.exe) |
 | 🤖 **Android** (APK) | [mbrowser.apk](https://github.com/flesheatingbug/mbrowser/releases/download/latest-apk/mbrowser.apk) |
+| 🐳 **Sync server** (Docker) | [Setup guide](#sync-server--docker-setup-dockge--portainer--compose) |
 
-> **Android**: Enable *Install from unknown sources* in your device settings, then open the APK to install.
+> **Pre-release builds:** the `next` branch publishes newer builds to the `pre-desktop` and `pre-apk` releases.
+> **Android:** enable *Install from unknown sources* in your device settings, then open the APK to install.
 
 ---
 
 ## Features
 
-- **Speed dial start page** — multiple dials, folders, background images, synced across devices
-- **Bookmark manager** — folders, recycle bin, Vivaldi-style context menus, speed dial integration
-- **Password vault** — AES-256-GCM encrypted, stored on your own server; Cards and Addresses autofill
-- **History & Notes** — full history view, recycle bin, notes synced across devices
-- **Profiles** — separate browser instances with their own data, avatars, and settings
-- **Side panel** — bookmarks, history, downloads, notes in a persistent panel
-- **Privacy** — built-in ad/tracker blocker, private windows, no telemetry
-- **Self-hosted sync** — bookmarks, history, tabs, passwords, settings, all encrypted in transit
+### Start page and speed dials
+- Several **speed dial pages** shown as tabs, with **folders and sub-folders**, kept in the same order on every device
+- **Rearrange** by touch-and-hold and drag: tiles move out of the way, hold over a tile to make a folder, drop onto a page tab to move it. On Android the tiles wobble while you rearrange, like a phone home screen
+- **Folder pop-up** with search on desktop and a pop-up on Android
+- Cards or icon-only look, choose the number of columns, show or hide titles and the add button, background colour or one of **23 wallpapers**
+- A compact **add bar** to type an address and add it in one step; deleted tiles go to a recycle bin
+- **Add page to…** on Android: add the open page to any speed dial, to a bookmark folder, or to the **home screen**, and keep it in more than one place if you want
+
+### Bookmarks, history and notes
+- **Bookmark manager** (`Ctrl+Shift+O`): folder tree, search, sort, drag and drop, multi-select, edit, move and delete, plus a **recycle bin** that keeps items for 30 days
+- Import from other browsers and password managers
+- Full **history** view with search and a recycle bin
+- **Notes** that sync across devices
+- A **side panel** for bookmarks, history, downloads, notes and your own web panels
+
+### Passwords
+- **Encrypted vault** (AES-256-GCM): protect it with a master password that works on every device, or with a device key that keeps it on one computer
+- **Logins, cards and addresses** with autofill; logins have names and folders
+- A key icon in the address bar fills saved logins, on desktop and Android
+- Imports from Bitwarden, Chrome and Vivaldi, LastPass, 1Password and KeePass
+
+### Privacy and security
+- **Ad and tracker blocker** using EasyList, EasyPrivacy and uBlock filter lists, with element hiding and a per-site allow list
+- **Private windows and tabs** with separate storage, Do Not Track and Global Privacy Control
+- Certificate details in the address bar, and a warning page for invalid certificates
+- No telemetry
+
+### Browsing
+- **Search engine badge** in the address bar: click it to switch the engine for this search
+- **Translate** a page or selected text, **find in page**, zoom, and a status bar with tab count and time
+- **Desktop site** mode remembered per site, and a browser identity setting for sites that are picky about browsers
+- Downloads manager with a right-click menu: open, show in folder, copy address, restart, pause and remove
+- **Tabs from other devices**, kept in sync
+- Tab bar on top or on the left, a customisable toolbar and customisable keyboard shortcuts
+- **Quick commands** (`F2`) to find any action by name
+
+### Look and feel
+- **14 themes** (including Midnight, Nord, Dracula, Solarized and a high-contrast one) and custom themes, or follow the system
+- Several app icons to choose from, slim themed scrollbars and a rounded, framed page area
+- First-run **setup wizard** to connect to a server or start standalone, pick a theme and search engine, and choose how the vault is protected
+
+### Profiles
+- Separate **profiles**, each in its own window with its own data, avatar and settings
+- Choose a default profile, reopen the last one on launch, or reset a profile or the whole app
+
+### Android
+- A native app, not a wrapper: address bar with **voice and QR search**, tabs, a bottom toolbar and a full menu
+- **Hides the address bar and toolbar** as you scroll down fast, and brings them back when you scroll up (can be turned off in settings)
+- **Long-press** links and images for a menu: open in a new or private tab, copy, share and image options
+- Speed dials fill the width when you rotate the phone
+- Pull to refresh, find in page, translation, desktop site and passwords all built in
+
+### Sync server
+- A small, dependency-free **Python and SQLite** server that runs in Docker, with a **web interface**
+- Accounts and API keys, with keys that can be shown and copied
+- Syncs **bookmarks, history, open tabs, notes, settings, speed dial layout and the encrypted vault**, with conflict handling so two devices never overwrite each other silently
+- Backup and restore of your data
+
+---
+
+## How it works
+
+```
+  Linux / Windows (Electron)  ──┐
+                                ├──  HTTPS  ──▶  your sync server (Docker, SQLite)
+  Android (native Kotlin)     ──┘
+```
+
+Everything is encrypted in transit, and the password vault is encrypted on your device before it is sent, so the server only ever stores ciphertext for it.
 
 ---
 
