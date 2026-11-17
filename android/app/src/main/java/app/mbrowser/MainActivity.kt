@@ -506,6 +506,8 @@ class MainActivity : BaseActivity() {
 
     override fun onPause() {
         saveTabs()
+        // a page is playing audio: keep it going while the screen is off or another app is in front
+        if ((getSystemService(AUDIO_SERVICE) as android.media.AudioManager).isMusicActive) PlaybackService.start(this)
         super.onPause()
     }
 
@@ -1778,6 +1780,7 @@ class MainActivity : BaseActivity() {
 
     override fun onResume() {
         super.onResume()
+        PlaybackService.stopper = { runOnUiThread { tabs.forEach { it.web.evaluateJavascript("document.querySelectorAll('audio,video').forEach(function(m){try{m.pause()}catch(e){}})", null) } } }
         applyLogo()
         if (barSignature != Toolbars.keys(prefs).joinToString(",")) buildBottomBar()
         applyWallpaper()
