@@ -1,5 +1,10 @@
 // Preload for every web page tab: the `browser` API for my:// pages
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, webFrame } = require('electron');
+
+// slim scrollbars on web pages, injected before the first paint (no flash of the old ones)
+if (location.protocol === 'http:' || location.protocol === 'https:') {
+  try { webFrame.insertCSS('::-webkit-scrollbar{width:12px;height:12px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:rgba(128,128,128,.4);border-radius:10px;border:3px solid transparent;background-clip:content-box;min-height:36px}::-webkit-scrollbar-thumb:hover{background:rgba(128,128,128,.7);background-clip:content-box}::-webkit-scrollbar-corner{background:transparent}'); } catch { /* ignore */ }
+}
 
 if (location.protocol === 'my:') {
   const invoke = (ch) => (...a) => ipcRenderer.invoke(ch, ...a);

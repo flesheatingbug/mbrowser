@@ -393,7 +393,11 @@ function layout() {
   }
   cur.statusView.setBounds(bottom ? { x: 0, y: height - STATUS_H, width, height: STATUS_H } : zero);
   cur.contentRect = c;
-  try { const bg = themeVars().bg; if (bg && cur.win._gapBg !== bg) { cur.win._gapBg = bg; cur.win.setBackgroundColor(bg); } } catch { /* ignore */ }
+  try {
+    const bg = themeVars().bg;
+    if (cur.bgView) { cur.bgView.setBounds({ x: 0, y: 0, width, height }); if (bg && cur.win._gapBg !== bg) cur.bgView.setBackgroundColor(bg); }
+    if (bg && cur.win._gapBg !== bg) { cur.win._gapBg = bg; cur.win.setBackgroundColor(bg); }
+  } catch { /* ignore */ }
   const activeT = cur.tabs.get(cur.activeId);
   if (activeT) activeT.view.setBounds(c);
   if (cur.overlayMode) cur.overlay.setBounds(overlayBounds(cur.overlayMode));
@@ -3604,6 +3608,8 @@ function createWindow(opts = {}) {
   w.tabbarView = chromeView({ part: 'tabs' });
   w.toolbarView = chromeView({ part: 'toolbar' });
   w.statusView = chromeView({ part: 'status' });
+  w.bgView = new WebContentsView();
+  w.win.contentView.addChildView(w.bgView);
   w.win.contentView.addChildView(w.tabbarView);
   w.win.contentView.addChildView(w.toolbarView);
   w.win.contentView.addChildView(w.statusView);
