@@ -626,7 +626,6 @@ class MainActivity : BaseActivity() {
         customView = null
         (window.decorView as FrameLayout).removeView(v)
         customCallback?.onCustomViewHidden(); customCallback = null
-        requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
         androidx.core.view.WindowInsetsControllerCompat(window, window.decorView).show(androidx.core.view.WindowInsetsCompat.Type.systemBars())
     }
 
@@ -755,7 +754,6 @@ class MainActivity : BaseActivity() {
                 customView = view; customCallback = callback
                 (window.decorView as FrameLayout).addView(view, FrameLayout.LayoutParams(-1, -1))
                 view.setBackgroundColor(android.graphics.Color.BLACK)
-                requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
                 androidx.core.view.WindowInsetsControllerCompat(window, window.decorView).let {
                     it.systemBarsBehavior = androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
                     it.hide(androidx.core.view.WindowInsetsCompat.Type.systemBars())
