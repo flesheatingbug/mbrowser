@@ -643,6 +643,11 @@ class MainActivity : BaseActivity() {
         }
     }
 
+    override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
+        super.onConfigurationChanged(newConfig)
+        if (::startPage.isInitialized) startPage.refresh()
+    }
+
     private fun newTab(url: String?, priv: Boolean = false): Tab {
         val w = WebView(this)
         w.setOnScrollChangeListener { v, _, y, _, oy -> if (tabs.getOrNull(current)?.web === v) onPageScroll(y, oy) }

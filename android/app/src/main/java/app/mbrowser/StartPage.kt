@@ -149,6 +149,14 @@ class StartPage(
         grid.post { refresh() }
     }
 
+    /** Columns for the current screen: the chosen count is for portrait, and turning the phone sideways fits more tiles of the same size. */
+    private fun effCols(): Int {
+        val base = prefs.dialCols.coerceIn(2, 5)
+        val dm = act.resources.displayMetrics
+        val ratio = dm.widthPixels.toFloat() / minOf(dm.widthPixels, dm.heightPixels)
+        return Math.round(base * ratio).coerceIn(base, 12)
+    }
+
     fun resetPath() { path.clear(); popup?.let { it.setOnDismissListener(null); it.dismiss() }; popup = null; popupGrid = null }
 
     /** Goes up one folder. Returns false when already at the top. */
@@ -240,7 +248,7 @@ class StartPage(
 
         val items = ArrayList<Any>(itemsOf(sp, cur, emptyList()))
         if (prefs.showAdd || reorder) items.add(ADD)
-        val cols = prefs.dialCols.coerceIn(2, 5)
+        val cols = effCols()
         grid.layoutManager = GridLayoutManager(act, cols)
         grid.adapter = Adapter(items, cols, cur, sp.optBoolean("thumbnails", true), emptyList())
         updatePopup(sp, cur)
@@ -514,7 +522,7 @@ class StartPage(
         popupBack?.visibility = if (path.size > 1) View.VISIBLE else View.GONE
         val items = ArrayList<Any>(itemsOf(sp, cur, path))
         if (prefs.showAdd || reorder) items.add(ADD)
-        val cols = prefs.dialCols.coerceIn(2, 5)
+        val cols = effCols()
         popupGrid?.layoutManager = GridLayoutManager(act, cols)
         popupGrid?.adapter = Adapter(items, cols, cur, sp.optBoolean("thumbnails", true), ArrayList(path))
     }
