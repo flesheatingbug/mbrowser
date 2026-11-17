@@ -1207,36 +1207,48 @@ class MainActivity : BaseActivity() {
         }.show()
     }
 
-    private fun addToDialChoice(t: Tab, title: String) {
-        val g = Settings.value("startPage").optJSONArray("groups")
-        val ids = ArrayList<String>(); val labels = ArrayList<String>()
-        if (g != null) for (i in 0 until g.length()) {
-            val o = g.getJSONObject(i); ids.add(o.optString("id")); labels.add(o.optString("name").ifBlank { "Speed dial ${i + 1}" })
-        }
-        if (ids.isEmpty()) { Toast.makeText(this, "No speed dial to add to", Toast.LENGTH_SHORT).show(); return }
-        fun add(id: String, label: String) {
-            Settings.addToGroup(id, title, t.url); tab_thumbFor(t)
+    /** Saves the page as a bookmark in [folder]. A page is one bookmark, so if it is already kept somewhere else, ask before moving it. */
+    private fun placePage(t: Tab, title: String, folder: String, label: String) {
+        val here = Store.cleanPath(folder)
+        val ex = Store.liveBookmarks().firstOrNull { it.url == t.url }
+        fun save() {
+            Store.upsert(t.url, title, here); tab_thumbFor(t)
             Toast.makeText(this, "Added to $label", Toast.LENGTH_SHORT).show()
             if (cur()?.home == true) startPage.refresh()
         }
-        if (ids.size == 1) { add(ids[0], labels[0]); return }
-        androidx.appcompat.app.AlertDialog.Builder(this).setTitle("Which speed dial?").setItems(labels.toTypedArray()) { _, w -> add(ids[w], labels[w]) }.show()
+        when {
+            ex == null -> save()
+            Store.cleanPath(ex.folder) == here -> Toast.makeText(this, "Already in $label", Toast.LENGTH_SHORT).show()
+            else -> {
+                val where = Store.cleanPath(ex.folder).removePrefix(Dials.ROOT + "/").ifEmpty { "your bookmarks" }
+                androidx.appcompat.app.AlertDialog.Builder(this).setTitle("Already saved")
+                    .setMessage("This page is already in “$where”. A page can only be in one place, so adding it to $label moves it.")
+                    .setPositiveButton("Move it") { _, _ -> save() }.setNegativeButton("Cancel", null).show()
+            }
+        }
+    }
+
+    private fun addToDialChoice(t: Tab, title: String) {
+        val g = Settings.raw("startPage").optJSONArray("groups")
+        val labels = ArrayList<String>()
+        if (g != null) for (i in 0 until g.length()) labels.add(g.getJSONObject(i).optString("name").ifBlank { "Speed dial ${i + 1}" })
+        if (labels.isEmpty()) { Toast.makeText(this, "No speed dial to add to", Toast.LENGTH_SHORT).show(); return }
+        fun add(i: Int) { val path = Dials.pathFor(i) ?: return; placePage(t, title, path, labels[i]) }
+        if (labels.size == 1) { add(0); return }
+        androidx.appcompat.app.AlertDialog.Builder(this).setTitle("Which speed dial?").setItems(labels.toTypedArray()) { _, w -> add(w) }.show()
     }
 
     private fun addToBookmarkFolder(t: Tab, title: String) {
         val set = sortedSetOf<String>(String.CASE_INSENSITIVE_ORDER)
         for (b in Store.liveBookmarks()) {
-            if (b.folder == Dials.ROOT || b.folder.startsWith(Dials.ROOT + "/")) continue   // those folders are the speed dials
-            var p = b.folder
+            val f = Store.cleanPath(b.folder)
+            if (f == Dials.ROOT || f.startsWith(Dials.ROOT + "/")) continue   // those folders are the speed dials
+            var p = f
             while (p.isNotEmpty()) { set.add(p); p = p.substringBeforeLast('/', "") }
         }
         val folders = set.toList()
         val labels = ArrayList<String>(); labels.add("Bookmarks (top level)"); labels.addAll(folders); labels.add("＋ New folder…")
-        fun save(folder: String) {
-            Store.upsert(t.url, title, Store.cleanPath(folder))
-            tab_thumbFor(t)
-            Toast.makeText(this, "Bookmarked" + if (folder.isNotEmpty()) " in $folder" else "", Toast.LENGTH_SHORT).show()
-        }
+        fun save(folder: String) = placePage(t, title, folder, if (folder.isEmpty()) "bookmarks" else "bookmarks / $folder")
         androidx.appcompat.app.AlertDialog.Builder(this).setTitle("Which folder?").setItems(labels.toTypedArray()) { _, w ->
             when (w) {
                 0 -> save("")

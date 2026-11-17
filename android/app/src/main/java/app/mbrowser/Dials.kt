@@ -22,6 +22,12 @@ object Dials {
     private fun keyOf(o: JSONObject) = if (isFolder(o)) "f:" + o.optString("title") else "u:" + o.optString("url")
     private fun parents(p: String): List<String> { val parts = p.split('/'); return (1..parts.size).map { parts.take(it).joinToString("/") } }
 
+    /** The bookmark folder that holds the tiles of speed dial page [i] (0 is the first page). */
+    fun pathFor(i: Int): String? {
+        val groups = Settings.raw("startPage").optJSONArray("groups") ?: return null
+        return if (i in 0 until groups.length()) groupPath(groups, i) else null
+    }
+
     /** The saved tile order: its own synced settings group (older versions kept it inside the start page group). */
     private fun savedLayout(sp: JSONObject): JSONObject {
         val own = Settings.raw("dialLayout").optJSONObject("layout")
