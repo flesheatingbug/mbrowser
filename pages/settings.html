@@ -719,6 +719,22 @@
       }
       return;
     }
+    if (cur === 'general') {
+      const st = await browser.defaultStatus().catch(() => null);
+      if (st && st.supported) {
+        const row = el('div', 'btn-row'); row.style.cssText = 'align-items:center;margin-bottom:18px;';
+        const label = el('span', null, st.isDefault ? 'mbrowser is your default browser.' : 'mbrowser is not your default browser.');
+        const btn = el('button', null, 'Make default browser');
+        if (st.isDefault) btn.style.display = 'none';
+        const note = el('span', 'msg', '');
+        btn.onclick = async () => {
+          await browser.defaultSet().catch(() => null);
+          note.textContent = 'Windows opened Default apps. Choose mbrowser under Web browser.';
+        };
+        row.append(label, btn, note);
+        m.append(row);
+      }
+    }
     if (cur === 'sync') syncAuthSection(m);
     (FIELDS[cur] || []).forEach((d) => m.append(field(d)));
     if (cur === 'startpage') m.append(el('p', 'muted', 'Add, edit, group and reorder speed dials on the start page itself. Drag a tile to reorder it, or drop it on a group tab to move it.'));

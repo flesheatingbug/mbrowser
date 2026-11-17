@@ -171,9 +171,16 @@ const tabByWc = new Map();     // tab webContents id -> tab
 const tabById = new Map();     // tab id -> tab
 let cur = null;
 const use = (w) => { if (w) cur = w; };
-app.on('second-instance', () => {
+// Web addresses handed to us on the command line (a link clicked in another app when mbrowser is the default browser)
+const launchUrls = (argv) => (argv || []).slice(1).filter((a) => /^https?:\/\//i.test(a));
+
+app.on('second-instance', (_e, argv) => {
   const w = [...windows][0];
-  if (w && w.win) { try { if (w.win.isMinimized()) w.win.restore(); w.win.focus(); } catch { /* ignore */ } }
+  if (w && w.win) {
+    try { if (w.win.isMinimized()) w.win.restore(); w.win.focus(); } catch { /* ignore */ }
+    use(w);
+    for (const u of launchUrls(argv)) { try { newTab(u); } catch { /* ignore */ } }
+  }
 });
 
 const S = () => store.get();
@@ -3050,6 +3057,17 @@ function setupIpc() {
     }
   }, BOTH);
   handle('app:build-number', () => BUILD_NUMBER, BOTH);
+  // default browser: Windows lists mbrowser under Settings > Default apps (registered by the installer); the user confirms there
+  handle('default:status', () => ({
+    supported: process.platform === 'win32',
+    isDefault: process.platform === 'win32' && app.isDefaultProtocolClient('http') && app.isDefaultProtocolClient('https'),
+  }), BOTH);
+  handle('default:set', () => {
+    if (process.platform !== 'win32') return { ok: false };
+    try { app.setAsDefaultProtocolClient('http'); app.setAsDefaultProtocolClient('https'); } catch { /* the settings page below still works */ }
+    shell.openExternal('ms-settings:defaultapps').catch(() => { /* ignore */ });
+    return { ok: true, isDefault: app.isDefaultProtocolClient('http') && app.isDefaultProtocolClient('https') };
+  }, BOTH);
   handle('app:versions', () => ({ electron: process.versions.electron, chrome: process.versions.chrome }), BOTH);
   handle('app:update-info', async () => {
     if (!getAutoUpdater()) return { currentBuild: BUILD_NUMBER, releaseUrl: RELEASE_URL };
@@ -3564,9 +3582,12 @@ function addCurrentToSpeedDial() {
 // ---------- windows ----------
 function startupTabs() {
   const g = S().general;
+  const given = launchUrls(process.argv);
+  if (given.length && g.startup !== 'restore') { given.forEach((u) => newTab(u)); return; }
   if (g.startup === 'restore') {
     const sess = load('session.json', { tabs: [] });
-    if (sess.tabs.length) sess.tabs.forEach((t) => newTab(t.url, { pinned: t.pinned })); else newTab(START);
+    if (sess.tabs.length) sess.tabs.forEach((t) => newTab(t.url, { pinned: t.pinned })); else if (!given.length) newTab(START);
+    given.forEach((u) => newTab(u));
   } else if (g.startup === 'home') newTab(g.homepage);
   else newTab(START);
 }

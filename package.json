@@ -58,6 +58,7 @@
       "perMachine": false,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
+      "include": "build/installer.nsh",
       "artifactName": "mbrowser-windows-setup.exe"
     },
     "extraResources": [
