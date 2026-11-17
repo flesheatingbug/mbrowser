@@ -630,7 +630,7 @@ class MainActivity : BaseActivity() {
         if (dy > 0) {
             if (scrollAcc < 0) scrollAcc = 0
             scrollAcc += dy
-            if (scrollAcc > dp(80)) setBars(false)
+            if (scrollAcc > dp(200)) setBars(false)
         } else if (dy < 0) {
             if (scrollAcc > 0) scrollAcc = 0
             scrollAcc += dy
