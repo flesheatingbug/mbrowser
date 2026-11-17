@@ -612,6 +612,7 @@ class MainActivity : BaseActivity() {
     private var barsHidden = false
     private var scrollAcc = 0
     private var barsToggledAt = 0L
+    private var lastScrollAt = 0L
 
     private fun setBars(show: Boolean) {
         if (show != barsHidden) return
@@ -628,10 +629,13 @@ class MainActivity : BaseActivity() {
         if (android.os.SystemClock.uptimeMillis() - barsToggledAt < 600) return   // ignore the page resizing as the bars move
         if (y <= dp(8)) { setBars(true); return }
         val dy = y - oldY
+        val now = android.os.SystemClock.uptimeMillis()
+        val dt = (now - lastScrollAt).coerceAtLeast(1L); lastScrollAt = now
+        val speed = Math.abs(dy) * 1000f / dt / resources.displayMetrics.density   // dp per second
         if (dy > 0) {
             if (scrollAcc < 0) scrollAcc = 0
-            scrollAcc += dy
-            if (scrollAcc > dp(200)) setBars(false)
+            // only a fast scroll hides the bars: slow reading leaves them where they are
+            if (speed > 1100f) { scrollAcc += dy; if (scrollAcc > dp(70)) setBars(false) } else scrollAcc = 0
         } else if (dy < 0) {
             if (scrollAcc > 0) scrollAcc = 0
             scrollAcc += dy
