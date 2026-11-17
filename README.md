@@ -31,6 +31,26 @@ A Chromium-based browser built on Electron that syncs your bookmarks, history, t
 
 ---
 
+## Screenshots
+
+### Desktop — first run
+
+The setup wizard opens the first time you start mbrowser. Connect to your sync server or start standalone, pick a theme and search engine, and choose how the password vault is protected.
+
+| Welcome | Sync server |
+|---|---|
+| ![Welcome](docs/screenshots/desktop-setup-1-welcome.png) | ![Sync server](docs/screenshots/desktop-setup-2-sync.png) |
+
+| Theme and search engine | Profile and password vault |
+|---|---|
+| ![Theme](docs/screenshots/desktop-setup-3-theme.png) | ![Profile](docs/screenshots/desktop-setup-4-profile.png) |
+
+### Desktop — default start page
+
+![Desktop start page](docs/screenshots/desktop-start-page.png)
+
+---
+
 ## Installing on Linux
 
 ### AppImage (recommended)
