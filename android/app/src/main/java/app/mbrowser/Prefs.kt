@@ -177,6 +177,9 @@ class Prefs(ctx: Context) {
     /** Sites the user chose to view as desktop ("d") or as mobile ("m") regardless of the default. */
     fun siteMode(host: String): String? = p.getString("siteMode:" + host, null)
     fun setSiteMode(host: String, mode: String?) { if (host.isBlank()) return; p.edit().apply { if (mode == null) remove("siteMode:" + host) else putString("siteMode:" + host, mode) }.apply() }
+    /** Sites where the ad and tracker blocker is switched off (some players stop when their ad requests are blocked). */
+    fun blockerOff(host: String): Boolean = host.isNotBlank() && p.getBoolean("blockerOff:" + host.removePrefix("www."), false)
+    fun setBlockerOff(host: String, off: Boolean) { if (host.isBlank()) return; p.edit().apply { if (off) putBoolean("blockerOff:" + host.removePrefix("www."), true) else remove("blockerOff:" + host.removePrefix("www.")) }.apply() }
     var desktopSite: Boolean
         get() = bool("desktopSite", false)
         set(v) = putB("desktopSite", v)

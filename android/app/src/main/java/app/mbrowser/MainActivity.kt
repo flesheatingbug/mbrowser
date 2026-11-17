@@ -686,7 +686,7 @@ class MainActivity : BaseActivity() {
             }
 
             override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
-                if (prefs.blockTrackers && !request.isForMainFrame &&
+                if (prefs.blockTrackers && !request.isForMainFrame && !prefs.blockerOff(Thumbs.hostOf(tab.url)) &&
                     AdBlock.shouldBlock(request.url.toString(), Thumbs.hostOf(tab.url), requestType(request))) {
                     return WebResourceResponse("text/plain", "utf-8", ByteArrayInputStream(ByteArray(0)))
                 }
@@ -1712,6 +1712,10 @@ class MainActivity : BaseActivity() {
         row(R.drawable.ic_key, "Passwords", go { picker.launch(Intent(this, PasswordsActivity::class.java)) })
         divider()
         row(R.drawable.ic_desktop, (if (t?.desktop == true) "✓ " else "") + "Desktop site (remembered per site)", need { tab -> tab.desktop = !tab.desktop; if (!tab.home) prefs.setSiteMode(Thumbs.hostOf(tab.url), if (tab.desktop) "d" else "m"); applyUa(tab); tab.web.reload() })
+        if (t != null && !t.home && prefs.blockTrackers) {
+            val off = prefs.blockerOff(Thumbs.hostOf(t.url))
+            row(R.drawable.ic_shield, if (off) "Ads and trackers: allowed on this site" else "Ads and trackers: blocked on this site", need { tab -> prefs.setBlockerOff(Thumbs.hostOf(tab.url), !off); tab.web.reload() })
+        }
         row(R.drawable.ic_search, "Find on this page", need { openFind() })
         row(R.drawable.ic_translate, "Translate page", need { tab -> newTab(Translate.pageUrl(tab.url, prefs.translateLang)) })
         row(R.drawable.ic_translate, "Translate selected text", go {
