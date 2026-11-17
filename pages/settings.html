@@ -96,6 +96,7 @@
     privacy: [
       { path: 'privacy.blockTrackers', label: 'Block ads and trackers', type: 'toggle', help: 'Blocks third-party requests to a built-in list of known ad and tracking domains. Click the shield in the toolbar to allow a single site.' },
       { path: 'privacy.doNotTrack', label: 'Send “Do Not Track” and Global Privacy Control', type: 'toggle' },
+      { path: 'privacy.passkeys', label: 'Allow passkeys and security keys', type: 'toggle', help: 'Off by default: sites fall back to a password, so Windows does not pop up a passkey or security key window while you sign in. Turn on if you sign in with a passkey. Applies to tabs you open afterwards.' },
       { path: 'privacy.customBlocklist', label: 'Extra domains to block', type: 'textarea', help: 'One domain per line. Subdomains are included.' },
       { path: 'privacy.allowSites', label: 'Sites where blocking is off', type: 'lines', help: 'One hostname per line.' },
       { path: 'privacy.certExceptions', label: 'Sites with accepted certificate errors', type: 'lines', help: 'Hostnames you chose to open despite an untrusted (e.g. self-signed) certificate. One per line; delete a line to stop trusting it.' },

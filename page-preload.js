@@ -6,6 +6,30 @@ if (location.protocol === 'http:' || location.protocol === 'https:') {
   try { webFrame.insertCSS('::-webkit-scrollbar{width:12px;height:12px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:rgba(128,128,128,.4);border-radius:10px;border:3px solid transparent;background-clip:content-box;min-height:36px}::-webkit-scrollbar-thumb:hover{background:rgba(128,128,128,.7);background-clip:content-box}::-webkit-scrollbar-corner{background:transparent}'); } catch { /* ignore */ }
 }
 
+// Passkeys and security keys: when switched off, sites are told they are not available, so they fall back to a password
+// instead of making Windows show its "Sign in with a passkey" window.
+if ((location.protocol === 'http:' || location.protocol === 'https:') && process.argv.includes('--mb-passkeys=0')) {
+  try {
+    contextBridge.executeInMainWorld({
+      func: () => {
+        try {
+          const deny = () => Promise.reject(new DOMException('The operation either timed out or was not allowed.', 'NotAllowedError'));
+          const c = navigator.credentials;
+          if (c) {
+            const g = c.get.bind(c); const cr = c.create.bind(c);
+            Object.defineProperty(c, 'get', { value: (o) => (o && o.publicKey ? deny() : g(o)), configurable: true, writable: true });
+            Object.defineProperty(c, 'create', { value: (o) => (o && o.publicKey ? deny() : cr(o)), configurable: true, writable: true });
+          }
+          if (window.PublicKeyCredential) {
+            PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable = () => Promise.resolve(false);
+            PublicKeyCredential.isConditionalMediationAvailable = () => Promise.resolve(false);
+          }
+        } catch { /* ignore */ }
+      },
+    });
+  } catch { /* ignore */ }
+}
+
 if (location.protocol === 'my:') {
   const invoke = (ch) => (...a) => ipcRenderer.invoke(ch, ...a);
   contextBridge.exposeInMainWorld('browser', {

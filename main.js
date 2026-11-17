@@ -645,6 +645,7 @@ function createView(isPrivate) {
       nodeIntegrationInSubFrames: true,
       webviewTag: true,
       preload: BIS.includes('preload') ? undefined : path.join(__dirname, 'page-preload.js'),
+      additionalArguments: [S().privacy.passkeys ? '--mb-passkeys=1' : '--mb-passkeys=0'],
       partition: isPrivate ? 'private' : undefined,
     },
   });
