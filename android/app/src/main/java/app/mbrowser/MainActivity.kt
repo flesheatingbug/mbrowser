@@ -1207,23 +1207,30 @@ class MainActivity : BaseActivity() {
         }.show()
     }
 
-    /** Saves the page as a bookmark in [folder]. A page is one bookmark, so if it is already kept somewhere else, ask before moving it. */
+    /** Saves the page as a bookmark in [folder]. If it is already kept somewhere else, offer to move it or keep it in both places. */
     private fun placePage(t: Tab, title: String, folder: String, label: String) {
         val here = Store.cleanPath(folder)
-        val ex = Store.liveBookmarks().firstOrNull { it.url == t.url }
-        fun save() {
-            Store.upsert(t.url, title, here); tab_thumbFor(t)
-            Toast.makeText(this, "Added to $label", Toast.LENGTH_SHORT).show()
+        val base = t.url.trimEnd('#')
+        val same = Store.liveBookmarks().filter { it.url.trimEnd('#') == base }
+        fun done(msg: String) {
+            tab_thumbFor(t); Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
             if (cur()?.home == true) startPage.refresh()
         }
         when {
-            ex == null -> save()
-            Store.cleanPath(ex.folder) == here -> Toast.makeText(this, "Already in $label", Toast.LENGTH_SHORT).show()
+            same.any { Store.cleanPath(it.folder) == here } -> Toast.makeText(this, "Already in $label", Toast.LENGTH_SHORT).show()
+            same.isEmpty() -> { Store.upsert(base, title, here); done("Added to $label") }
             else -> {
-                val where = Store.cleanPath(ex.folder).removePrefix(Dials.ROOT + "/").ifEmpty { "your bookmarks" }
+                val where = Store.cleanPath(same[0].folder).removePrefix(Dials.ROOT + "/").ifEmpty { "your bookmarks" }
                 androidx.appcompat.app.AlertDialog.Builder(this).setTitle("Already saved")
-                    .setMessage("This page is already in “$where”. A page can only be in one place, so adding it to $label moves it.")
-                    .setPositiveButton("Move it") { _, _ -> save() }.setNegativeButton("Cancel", null).show()
+                    .setMessage("This page is already in “$where”. Keep it there as well as in $label, or move it?")
+                    .setPositiveButton("Keep in both") { _, _ ->
+                        // bookmarks are kept by address, so the second copy is the same address ending in an empty #
+                        val taken = Store.liveBookmarks().map { it.url }.toSet()
+                        var u = base + "#"; while (u in taken) u += "#"
+                        Store.upsert(u, title, here); done("Added to $label (also kept in $where)")
+                    }
+                    .setNeutralButton("Move it") { _, _ -> Store.upsert(same[0].url, title, here); done("Moved to $label") }
+                    .setNegativeButton("Cancel", null).show()
             }
         }
     }

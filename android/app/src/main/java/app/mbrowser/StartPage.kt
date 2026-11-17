@@ -610,6 +610,19 @@ class StartPage(
             h.thumb.layoutParams = tlp; h.letter.layoutParams = llp
         }
 
+        private val wob = java.util.WeakHashMap<View, android.animation.ObjectAnimator>()
+
+        /** Tiles wobble a little while rearranging, so it is clear the mode is on (like the iPhone home screen). */
+        private fun wobble(v: View, on: Boolean) {
+            wob.remove(v)?.cancel(); v.rotation = 0f
+            if (!on) return
+            val seed = Math.abs(System.identityHashCode(v))
+            val a = android.animation.ObjectAnimator.ofFloat(v, "rotation", -1.7f, 1.7f)
+            a.duration = 105L + seed % 55; a.startDelay = (seed % 100).toLong()
+            a.repeatCount = android.animation.ObjectAnimator.INFINITE; a.repeatMode = android.animation.ObjectAnimator.REVERSE
+            wob[v] = a; a.start()
+        }
+
         private fun bind(h: RecyclerView.ViewHolder, pos: Int) {
             if (h is AddVH) {
                 val pill = h.itemView.findViewById<TextView>(R.id.addPill)
@@ -637,6 +650,7 @@ class StartPage(
                 return
             }
             h as CardVH
+            wobble(h.itemView, reorder)
             val d = items[pos] as Dial
             val host = Thumbs.hostOf(d.url)
             val label = d.title.ifBlank { host.ifEmpty { d.url } }
