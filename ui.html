@@ -99,6 +99,18 @@
   /* hide toolbar buttons per settings */
   .tb-hidden { display:none !important; }
 
+  /* ---- default browser bar ---- */
+  #default-bar { display:none; align-items:center; gap:8px; padding:0 10px; height:34px;
+    background:color-mix(in srgb, var(--accent) 12%, var(--active)); border-top:1px solid color-mix(in srgb, var(--accent) 25%, transparent);
+    font-size:13px; color:var(--fg); }
+  #default-bar.show { display:flex; }
+  #default-bar .df-msg { flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  #default-bar button { border:0; border-radius:6px; cursor:pointer; font-size:12px; padding:3px 10px; font-family:inherit; background:transparent; color:var(--muted); }
+  #default-bar button:hover { background:var(--tab); color:var(--fg); }
+  #default-bar #df-set { background:var(--accent); color:var(--onaccent); }
+  #default-bar #df-set:hover { opacity:.85; background:var(--accent); color:var(--onaccent); }
+  #default-bar #df-close { font-size:16px; min-width:24px; }
+
   /* ---- translate bar ---- */
   #translate-bar { display:none; align-items:center; gap:8px; padding:0 10px; height:34px;
     background:color-mix(in srgb, var(--accent) 12%, var(--active)); border-top:1px solid color-mix(in srgb, var(--accent) 25%, transparent);
@@ -241,6 +253,12 @@
     <button id="profile" title="Profiles"><span id="pchip"></span></button>
     <div id="dl-bar"></div>
   </div>
+  <div id="default-bar">
+    <span class="df-msg">mbrowser is not your default browser.</span>
+    <button id="df-set">Set as default</button>
+    <button id="df-never">Don’t ask again</button>
+    <button id="df-close" title="Dismiss">✕</button>
+  </div>
   <div id="translate-bar">
     <span class="tl-msg" id="tl-msg">This page is in a different language</span>
     <button id="tl-btn">Translate</button>
@@ -326,6 +344,9 @@
   $('star').onclick = () => api.toggleBookmark();
   $('shield').onclick = () => api.toggleShield();
   $('profile').onclick = () => api.profileMenu();
+  $('df-set').onclick = () => api.defaultBarSet();
+  $('df-never').onclick = () => api.defaultBarNever();
+  $('df-close').onclick = () => api.defaultBarClose();
   $('tl-btn').onclick = () => api.translatePage();
   $('tl-close').onclick = () => api.translateDismiss();
 
@@ -600,6 +621,7 @@
     }
     $('st-tabs').textContent = s.tabCount + (s.tabCount === 1 ? ' tab' : ' tabs');
 
+    $('default-bar').classList.toggle('show', !!s.defaultBarVisible && part === 'toolbar');
     // translate bar
     const tlBar = $('translate-bar');
     if (s.translateBarVisible && part === 'toolbar') {

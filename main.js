@@ -147,7 +147,7 @@ protocol.registerSchemesAsPrivileged([
 const START = 'my://start';
 const GAP = 6; // border left and right of the page
 const SCROLL_CSS = '::-webkit-scrollbar{width:12px;height:12px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:rgba(128,128,128,.4);border-radius:10px;border:3px solid transparent;background-clip:content-box;min-height:36px}::-webkit-scrollbar-thumb:hover{background:rgba(128,128,128,.7);background-clip:content-box}::-webkit-scrollbar-corner{background:transparent}';
-const TAB_H = 38, TOOL_H = 50, TRANSLATE_H = 34, SIDE_W = 220, STATUS_H = 32, PANEL_HEAD = 46;
+const TAB_H = 38, TOOL_H = 50, TRANSLATE_H = 34, DEFAULT_H = 34, SIDE_W = 220, STATUS_H = 32, PANEL_HEAD = 46;
 const MOBILE_UA = 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36';
 
 let store, blocker, vault;
@@ -345,6 +345,26 @@ function newTabUrl() {
   return START;
 }
 
+// ---------- default browser notice (Windows) ----------
+function setDefaultBrowser() {
+  if (process.platform !== 'win32') return { ok: false };
+  try { app.setAsDefaultProtocolClient('http'); app.setAsDefaultProtocolClient('https'); } catch { /* the settings page below still works */ }
+  _dfc.t = 0;
+  // Windows 11 opens the page for this app; Windows 10 ignores the part after the ? and shows Default apps
+  shell.openExternal('ms-settings:defaultapps?registeredAppUser=mbrowser').catch(() => { /* ignore */ });
+  return { ok: true };
+}
+let _dfc = { t: 0, isDefault: true };
+function isDefaultBrowser() {
+  if (Date.now() - _dfc.t > 4000) {
+    try { _dfc.isDefault = app.isDefaultProtocolClient('http') && app.isDefaultProtocolClient('https'); } catch { _dfc.isDefault = true; }
+    _dfc.t = Date.now();
+  }
+  return _dfc.isDefault;
+}
+const defaultBarWanted = () => process.platform === 'win32' && app.isPackaged && S().general.askDefaultBrowser !== false
+  && !!cur && !cur.defaultBarClosed && !isDefaultBrowser();
+
 // ---------- layout ----------
 function layout() {
   if (!cur || !cur.win || !cur.toolbarView) return;
@@ -354,7 +374,8 @@ function layout() {
   const bottom = !full && S().appearance.statusBar ? STATUS_H : 0;
   const t = activeTab();
   const tlH = !full && t && t.detectedLang && t.detectedLang !== app.getLocale().split('-')[0].toLowerCase() && !cur.translateDismissed ? TRANSLATE_H : 0;
-  const toolH = TOOL_H + tlH;
+  const dfH = !full && defaultBarWanted() ? DEFAULT_H : 0;
+  const toolH = TOOL_H + tlH + dfH;
   let c;
   if (full) {
     cur.toolbarView.setBounds(zero); cur.tabbarView.setBounds(zero);
@@ -454,6 +475,7 @@ function stateFor() {
     engine: (() => { const e = engineById(S().search.default) || {}; let host = ''; try { host = new URL(e.url.replace('%s', 'x')).origin; } catch { /* none */ } return { name: e.name || '', origin: host }; })(),
     detectedLang: (t && t.detectedLang) || '',
     systemLang: app.getLocale().split('-')[0].toLowerCase(),
+    defaultBarVisible: !cur.win.isFullScreen() && defaultBarWanted(),
     translateBarVisible: !!(t && t.detectedLang && t.detectedLang !== app.getLocale().split('-')[0].toLowerCase() && !cur.translateDismissed),
     theme: themeVars(),
     blocked: wc ? blockedCounts.get(wc.id) || 0 : 0,
@@ -2129,6 +2151,9 @@ function setupIpc() {
   on('zoom:reset', () => zoom(0));
   on('zoom:set', (_e, pct) => { const wc = activeWc(); if (!wc) return; wc.setZoomFactor(Math.min(3, Math.max(0.3, Number(pct) / 100))); pushState(); });
   on('translate:page', () => translateTab(null));
+  on('defaultbar:set', () => { setDefaultBrowser(); }, BOTH);
+  on('defaultbar:close', () => { cur.defaultBarClosed = true; layout(); pushState(); }, BOTH);
+  on('defaultbar:never', () => { store.set('general.askDefaultBrowser', false); layout(); pushAll(true); }, BOTH);
   on('translate:dismiss', () => { cur.translateDismissed = true; layout(); pushState(); });
   ipcMain.on('page:lang', (e, lang) => {
     const t = tabByWc.get(e.sender.id); if (!t) return;
@@ -3060,14 +3085,9 @@ function setupIpc() {
   // default browser: Windows lists mbrowser under Settings > Default apps (registered by the installer); the user confirms there
   handle('default:status', () => ({
     supported: process.platform === 'win32',
-    isDefault: process.platform === 'win32' && app.isDefaultProtocolClient('http') && app.isDefaultProtocolClient('https'),
+    isDefault: process.platform === 'win32' && (_dfc.t = 0, isDefaultBrowser()),
   }), BOTH);
-  handle('default:set', () => {
-    if (process.platform !== 'win32') return { ok: false };
-    try { app.setAsDefaultProtocolClient('http'); app.setAsDefaultProtocolClient('https'); } catch { /* the settings page below still works */ }
-    shell.openExternal('ms-settings:defaultapps').catch(() => { /* ignore */ });
-    return { ok: true, isDefault: app.isDefaultProtocolClient('http') && app.isDefaultProtocolClient('https') };
-  }, BOTH);
+  handle('default:set', () => setDefaultBrowser(), BOTH);
   handle('app:versions', () => ({ electron: process.versions.electron, chrome: process.versions.chrome }), BOTH);
   handle('app:update-info', async () => {
     if (!getAutoUpdater()) return { currentBuild: BUILD_NUMBER, releaseUrl: RELEASE_URL };
@@ -4225,6 +4245,7 @@ app.whenReady().then(async () => {
   createWindow({ first: true });
 
   setInterval(syncAll, 60 * 1000);
+  if (process.platform === 'win32') setInterval(() => { const was = _dfc.isDefault; _dfc.t = 0; if (isDefaultBrowser() !== was) { layout(); pushAll(true); } }, 4000);
 
   // Wire up electron-updater events, then check ~60s after launch
   initAutoUpdater();
