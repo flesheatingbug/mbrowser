@@ -262,6 +262,7 @@ class MainActivity : BaseActivity() {
             override fun handleOnBackPressed() {
                 val t = cur()
                 when {
+                    customView != null -> exitFullScreen()
                     switcher.visibility == View.VISIBLE -> hideSwitcher()
                     findViewById<View>(R.id.findBar).visibility == View.VISIBLE -> closeFind()
                     t != null && t.home && startPage.up() -> Unit
@@ -616,6 +617,19 @@ class MainActivity : BaseActivity() {
     private var barsToggledAt = 0L
     private var lastScrollAt = 0L
 
+    // ---- fullscreen video ----
+    private var customView: View? = null
+    private var customCallback: WebChromeClient.CustomViewCallback? = null
+
+    private fun exitFullScreen() {
+        val v = customView ?: return
+        customView = null
+        (window.decorView as FrameLayout).removeView(v)
+        customCallback?.onCustomViewHidden(); customCallback = null
+        requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+        androidx.core.view.WindowInsetsControllerCompat(window, window.decorView).show(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+    }
+
     private fun setBars(show: Boolean) {
         if (show != barsHidden) return
         barsHidden = !show; scrollAcc = 0; barsToggledAt = android.os.SystemClock.uptimeMillis()
@@ -735,6 +749,19 @@ class MainActivity : BaseActivity() {
         }, "mbNative")
         w.setOnTouchListener { _, ev -> if (ev.actionMasked == MotionEvent.ACTION_DOWN) refreshBlocked = false; false }
         w.webChromeClient = object : WebChromeClient() {
+            // the fullscreen button of a video player (YouTube and others)
+            override fun onShowCustomView(view: View, callback: CustomViewCallback) {
+                if (customView != null) { callback.onCustomViewHidden(); return }
+                customView = view; customCallback = callback
+                (window.decorView as FrameLayout).addView(view, FrameLayout.LayoutParams(-1, -1))
+                view.setBackgroundColor(android.graphics.Color.BLACK)
+                requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+                androidx.core.view.WindowInsetsControllerCompat(window, window.decorView).let {
+                    it.systemBarsBehavior = androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                    it.hide(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+                }
+            }
+            override fun onHideCustomView() { exitFullScreen() }
             override fun onProgressChanged(view: WebView, newProgress: Int) {
                 if (tab === cur()) { progress.progress = newProgress; pillFill.set(newProgress) }
             }

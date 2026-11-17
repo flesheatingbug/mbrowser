@@ -709,6 +709,15 @@ function wire(tab) {
   // every event runs in the context of the window that currently owns the tab
   const h = (fn) => (...a) => { use(tab.owner); fn(...a); };
   wc.on('page-title-updated', h(() => pushState()));
+  // a video's fullscreen button (YouTube and others): fill the whole window, and give it back afterwards
+  wc.on('enter-html-full-screen', h(() => {
+    if (!cur.win.isFullScreen()) { cur.htmlFsOwn = true; cur.win.setFullScreen(true); }
+    layout();
+  }));
+  wc.on('leave-html-full-screen', h(() => {
+    if (cur.htmlFsOwn) { cur.htmlFsOwn = false; cur.win.setFullScreen(false); }
+    layout();
+  }));
   wc.on('did-start-loading', h(() => { tab.status = 'Connecting…'; tab.detectedLang = ''; cur.translateDismissed = false; pushState(); }));
   wc.on('did-stop-loading', h(() => { tab.status = ''; pushState(); maybeThumb(tab); }));
   wc.on('did-finish-load', h(() => {
