@@ -608,8 +608,39 @@ class MainActivity : BaseActivity() {
             .setItems(labels.toTypedArray()) { _, i -> acts[i]() }.show()
     }
 
+    // ---- hide the top and bottom bars while reading, like most mobile browsers ----
+    private var barsHidden = false
+    private var scrollAcc = 0
+    private var barsToggledAt = 0L
+
+    private fun setBars(show: Boolean) {
+        if (show != barsHidden) return
+        barsHidden = !show; scrollAcc = 0; barsToggledAt = android.os.SystemClock.uptimeMillis()
+        val content = findViewById<android.view.ViewGroup>(R.id.content)
+        android.transition.TransitionManager.beginDelayedTransition(content, android.transition.ChangeBounds().setDuration(160))
+        val v = if (show) View.VISIBLE else View.GONE
+        findViewById<View>(R.id.topBar).visibility = v
+        findViewById<View>(R.id.bottomBar).visibility = v
+    }
+
+    private fun onPageScroll(y: Int, oldY: Int) {
+        if (android.os.SystemClock.uptimeMillis() - barsToggledAt < 600) return   // ignore the page resizing as the bars move
+        if (y <= dp(8)) { setBars(true); return }
+        val dy = y - oldY
+        if (dy > 0) {
+            if (scrollAcc < 0) scrollAcc = 0
+            scrollAcc += dy
+            if (scrollAcc > dp(80)) setBars(false)
+        } else if (dy < 0) {
+            if (scrollAcc > 0) scrollAcc = 0
+            scrollAcc += dy
+            if (scrollAcc < -dp(48)) setBars(true)
+        }
+    }
+
     private fun newTab(url: String?, priv: Boolean = false): Tab {
         val w = WebView(this)
+        w.setOnScrollChangeListener { v, _, y, _, oy -> if (tabs.getOrNull(current)?.web === v) onPageScroll(y, oy) }
         var isolated = false
         if (priv) {
             // a separate cookie jar and storage for private tabs, where this device's WebView supports it
@@ -651,6 +682,7 @@ class MainActivity : BaseActivity() {
             }
 
             override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
+                if (tabs.getOrNull(current)?.web === view) setBars(true)
                 if (url.startsWith("about:")) return
                 // a site you set to desktop or mobile keeps that choice; others follow the default
                 val wantDesktop = when (prefs.siteMode(Thumbs.hostOf(url))) { "d" -> true; "m" -> false; else -> prefs.desktopSite }
@@ -833,7 +865,7 @@ class MainActivity : BaseActivity() {
     }
 
     private fun switchTo(i: Int) {
-        closeFind()
+        closeFind(); setBars(true)
         current = i.coerceIn(0, tabs.size - 1)
         render()
     }
