@@ -661,7 +661,7 @@ setInterval(tick,700);addEventListener('scroll',tick,{passive:true});tick()})()"
                 url = Caster.clean(url)
                 c.send(Caster.Media(url, title.ifBlank { Thumbs.hostOf(tab.url) }, Caster.typeFor(url, video), pos, live, tab.url, tab.web.settings.userAgentString ?: ""))
                 // the phone stops playing it, the TV takes over
-                tab.web.evaluateJavascript("document.querySelectorAll('video,audio').forEach(function(m){try{m.pause()}catch(e){}})", null)
+                tab.web.evaluateJavascript("document.querySelectorAll('video,audio').forEach(function(m){try{m.pause();m.removeAttribute('src');m.srcObject=null;m.load()}catch(e){}})", null)
             }
         }
         if (c.connected) {

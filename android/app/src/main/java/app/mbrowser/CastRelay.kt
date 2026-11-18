@@ -75,20 +75,32 @@ class CastRelay(@Volatile var userAgent: String) {
             if (parts[0] == "OPTIONS") { val h = StringBuilder("HTTP/1.1 204 No Content\r\n"); cors(h); h.append("Connection: close\r\n\r\n"); out.write(h.toString().toByteArray()); return }
             val target = android.net.Uri.parse("http://x" + parts[1]).getQueryParameter("u")
             if (target == null) { out.write("HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n".toByteArray()); return }
-            val c = URL(target).openConnection() as HttpURLConnection
-            c.connectTimeout = 10000; c.readTimeout = 30000; c.instanceFollowRedirects = true
-            c.setRequestProperty("User-Agent", userAgent)
-            c.setRequestProperty("Accept", "*/*")
-            c.setRequestProperty("Accept-Language", "en-US,en;q=0.9")
-            if (referer.isNotEmpty()) {
-                c.setRequestProperty("Referer", referer)
-                try { val u = URI(referer); c.setRequestProperty("Origin", "${u.scheme}://${u.authority}") } catch (_: Exception) { }
+            fun open(): HttpURLConnection {
+                val x = URL(target).openConnection() as HttpURLConnection
+                x.connectTimeout = 10000; x.readTimeout = 30000; x.instanceFollowRedirects = true
+                x.setRequestProperty("User-Agent", userAgent)
+                x.setRequestProperty("Accept", "*/*")
+                x.setRequestProperty("Accept-Language", "en-US,en;q=0.9")
+                if (referer.isNotEmpty()) {
+                    x.setRequestProperty("Referer", referer)
+                    try { val u = URI(referer); x.setRequestProperty("Origin", "${u.scheme}://${u.authority}") } catch (_: Exception) { }
+                }
+                CookieManager.getInstance().getCookie(target)?.let { x.setRequestProperty("Cookie", it) }
+                if (range != null) x.setRequestProperty("Range", range)
+                return x
             }
-            CookieManager.getInstance().getCookie(target)?.let { c.setRequestProperty("Cookie", it) }
-            if (range != null) c.setRequestProperty("Range", range)
-            val code = c.responseCode
-            note("site answered $code for ${short(target)}")
-            if (code >= 400) note("  said: " + (try { c.errorStream?.readBytes()?.toString(Charsets.UTF_8)?.take(100)?.replace(Regex("\\s+"), " ") } catch (_: Exception) { null } ?: "(nothing)"))
+            var c = open()
+            var code = c.responseCode
+            var tries = 0
+            // some sites allow one viewer per stream; the page was just playing it, so wait for that session to end
+            while (code == 403 && tries < 5) {
+                val msg = try { c.errorStream?.readBytes()?.toString(Charsets.UTF_8) ?: "" } catch (_: Exception) { "" }
+                note("site answered 403 for ${short(target)}: " + msg.take(60).replace(Regex("\\s+"), " "))
+                if (!msg.contains("duplicat", true)) break
+                tries++; Thread.sleep(2000)
+                c = open(); code = c.responseCode
+            }
+            note("site answered $code for ${short(target)}" + if (tries > 0) " after $tries retries" else "")
             val body: InputStream? = if (code >= 400) c.errorStream else c.inputStream
             val ctype = c.contentType ?: ""
             val isPlaylist = target.substringBefore('?').endsWith(".m3u8", true) || ctype.contains("mpegurl", true)
