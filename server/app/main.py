@@ -37,6 +37,16 @@ class Config:
         # Home-network tunnel: lets a signed-in browser reach devices on THIS network (router, NAS...) from anywhere.
         # Off unless you turn it on. It only ever connects to private addresses.
         self.tunnel = env.get('ALLOW_TUNNEL', 'false').lower() in ('1', 'true', 'yes')
+        # Optional: limit the tunnel to these networks / addresses, e.g. TUNNEL_ALLOW=192.168.1.0/24,192.168.2.10
+        # (empty = any private address). Strongly recommended, so it cannot reach other containers on this host.
+        self.tunnel_allow = []
+        for part in env.get('TUNNEL_ALLOW', '').split(','):
+            part = part.strip()
+            if part:
+                try:
+                    self.tunnel_allow.append(ipaddress.ip_network(part, strict=False))
+                except ValueError:
+                    print('TUNNEL_ALLOW: ignoring "%s" (not an address or network)' % part)
 
 
 class Ctx:
@@ -262,7 +272,7 @@ class Req:
         return self._json
 
 
-def _tunnel_target(host, port):
+def _tunnel_target(host, port, allow=()):
     """Resolve host and make sure every address is on a private network (never loopback, link-local or public)."""
     try:
         infos = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
@@ -273,6 +283,8 @@ def _tunnel_target(host, port):
         ip = ipaddress.ip_address(sa[0].split('%')[0])
         if ip.is_loopback or ip.is_link_local or ip.is_unspecified or ip.is_multicast or not ip.is_private:
             raise ApiError(403, 'The tunnel only reaches devices on private home-network addresses (%s is not one).' % ip)
+        if allow and not any(ip in n for n in allow):
+            raise ApiError(403, 'That address (%s) is not in this server\'s TUNNEL_ALLOW list.' % ip)
         addrs.append((fam, sa))
     if not addrs:
         raise ApiError(502, 'The server could not find "%s" on its network.' % host)
@@ -338,7 +350,7 @@ class Handler(BaseHTTPRequestHandler):
         host = host.strip('[]')
         if not host or not port_s.isdigit() or not (0 < int(port_s) < 65536):
             raise ApiError(400, 'X-Target must look like host:port.')
-        fam, sa = _tunnel_target(host, int(port_s))
+        fam, sa = _tunnel_target(host, int(port_s), ctx.cfg.tunnel_allow)
         up = socket.socket(fam, socket.SOCK_STREAM)
         up.settimeout(8)
         try:

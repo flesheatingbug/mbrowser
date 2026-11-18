@@ -17,6 +17,7 @@ services:
       - TRUST_PROXY=${TRUST_PROXY:-true}
       - SESSION_DAYS=${SESSION_DAYS:-7}
       - ALLOW_TUNNEL=${ALLOW_TUNNEL:-false}
+      - TUNNEL_ALLOW=${TUNNEL_ALLOW:-}
     volumes:
       - ${CONFIG_PATH:-./config}:/config
     ports:

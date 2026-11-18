@@ -240,6 +240,7 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
         setContentView(R.layout.activity_main)
         prefs = Prefs(this)
         Store.init(this)
+        HomeNet.apply(this, prefs)
         setupEdgeToEdge()
 
         urlBar = findViewById(R.id.urlBar)
@@ -1328,7 +1329,11 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
         val s = input.trim()
         if (s.isEmpty()) return ""
         if (Regex("^[a-zA-Z][a-zA-Z0-9+.-]*://").containsMatchIn(s)) return s
-        if (!s.contains(' ') && (s.contains('.') || s.startsWith("localhost"))) return "https://$s"
+        if (!s.contains(' ') && (s.contains('.') || s.startsWith("localhost"))) {
+            // routers and other home devices are normally plain http
+            val host = s.substringBefore('/').substringBefore('?').substringBefore('#').substringBefore(':')
+            return (if (HomeNet.isHomeHost(host) || host.startsWith("localhost")) "http://" else "https://") + s
+        }
         val e = engineOverride ?: Settings.defaultEngine()
         return e.url.replace("%s", java.net.URLEncoder.encode(s, "UTF-8"))
     }
@@ -1916,6 +1921,10 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
                 .setPositiveButton("Copy") { _, _ -> (getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager).setPrimaryClip(android.content.ClipData.newPlainText("blocked", text)) }
                 .setNegativeButton("Close", null).show()
         })
+        if (prefs.syncConfigured) row(R.drawable.ic_devices, if (prefs.homeNetwork) "Home network: ON (tap to turn off)" else "Home network: off (tap to turn on)", go {
+            if (prefs.homeNetwork) { HomeNet.turnOff(this, prefs); Toast.makeText(this, "Home network off", Toast.LENGTH_SHORT).show() }
+            else HomeNet.turnOn(this, prefs) { err -> Toast.makeText(this, err ?: "Home network on: home addresses now open on your home network", Toast.LENGTH_LONG).show() }
+        })
         if (prefs.beta && t != null && !t.home) row(R.drawable.ic_devices, if (caster?.connected == true) "Casting…" else "Cast media from this page…", need { tab -> castAction(tab) })
         row(R.drawable.ic_search, "Find on this page", need { openFind() })
         row(R.drawable.ic_translate, "Translate page", need { tab -> newTab(Translate.pageUrl(tab.url, prefs.translateLang)) })
@@ -1987,6 +1996,7 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
         super.onResume()
         PlaybackService.stopper = { runOnUiThread { tabs.forEach { it.web.evaluateJavascript("document.querySelectorAll('audio,video').forEach(function(m){try{m.pause()}catch(e){}})", null) } } }
         applyLogo()
+        HomeNet.apply(this, prefs)
         if (barSignature != Toolbars.keys(prefs).joinToString(",")) buildBottomBar()
         applyWallpaper()
         if (appliedUa != prefs.uaMode) {

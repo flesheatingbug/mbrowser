@@ -34,6 +34,9 @@ services:
       # through this server. Anyone holding a sync key can then reach your LAN, so guard keys.
       # Behind Nginx Proxy Manager turn on "Websockets support" for the proxy host.
       - ALLOW_TUNNEL=false
+      # Strongly recommended with the tunnel: only these networks/addresses are reachable (comma separated).
+      # Leave empty and every private address is reachable, including other containers on this Docker host.
+      - TUNNEL_ALLOW=
 
       # days a web-UI login stays valid
       - SESSION_DAYS=7

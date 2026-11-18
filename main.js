@@ -1041,6 +1041,14 @@ function lockWindow(w) {
     chromeOwner.set(w.lockView.webContents.id, w);
     w.lockView.webContents.loadFile(path.join(__dirname, 'lock.html'), { query: { frameless: w.frameless ? '1' : '0' } });
   }
+  try { w.lockView.setBackgroundColor('#0a0e1f'); } catch { /* older Electron */ }
+  if (!w.lockEvents) {
+    w.lockEvents = true;
+    // when a minimised window comes back, the cover must already be on top before the first frame is drawn
+    for (const ev of ['minimize', 'restore', 'show', 'focus', 'maximize', 'unmaximize', 'enter-full-screen', 'leave-full-screen', 'resize']) {
+      w.win.on(ev, () => enforceLockFor(w));
+    }
+  }
   w.win.contentView.addChildView(w.lockView);
   enforceLockFor(w);
   for (const t of w.tabs.values()) {

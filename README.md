@@ -83,6 +83,11 @@
 - Several app icons to choose from, slim themed scrollbars and a rounded, framed page area
 - First-run **setup wizard** to connect to a server or start standalone, pick a theme and search engine, and choose how the vault is protected
 
+### Home network mode
+- Type `192.168.1.1`, `router.lan` or `nas:8080` and it opens **your home network's** router or NAS, from anywhere, on desktop and Android. Everything else browses normally from where you are.
+- It works through your own sync server: the browser opens an authenticated tunnel to the server, which connects to the device. Nothing goes through anyone else's service.
+- Switch it on in the status bar (desktop), the menu or Settings (Android). It needs `ALLOW_TUNNEL=true` on the server; see the security notes in [Sync server setup](#environment-variables).
+
 ### Profiles
 - Separate **profiles**, each in its own window with its own data, avatar and settings
 - Choose a default profile, reopen the last one on launch, or reset a profile or the whole app
@@ -258,7 +263,16 @@ The web interface and API will be available at **http://your-server:4242**.
 | `ADMIN_PASSWORD` | *(blank)* | Auto-create first admin on first run |
 | `TRUST_PROXY` | `true` | Trust `X-Forwarded-For` from a reverse proxy |
 | `SESSION_DAYS` | `7` | Web login session lifetime |
-| `ALLOW_TUNNEL` | `false` | Beta: lets the desktop browser's Home network mode reach private LAN addresses through the server (needs Websockets support on Nginx Proxy Manager) |
+| `ALLOW_TUNNEL` | `false` | Lets Home network mode (desktop and Android) reach private LAN addresses through the server (needs Websockets support on Nginx Proxy Manager) |
+| `TUNNEL_ALLOW` | _(empty)_ | Limit the tunnel to these networks, e.g. `192.168.1.0/24,192.168.2.10`. Empty = any private address. Recommended |
+
+### Home network mode: security
+It is off unless you set `ALLOW_TUNNEL=true`. What protects it, and what to know:
+- Every tunnel needs a valid sync key, and only reaches **private** addresses (192.168.x.x, 10.x.x.x, 172.16-31.x.x, fc00::/7). Never public addresses, localhost or link-local, so it cannot be used as an open proxy to the internet.
+- Whoever holds a sync key can reach your LAN through the server while the tunnel is on, so treat keys like VPN credentials and delete keys for lost devices.
+- Set `TUNNEL_ALLOW` to the networks you actually want (for example your router and NAS). Without it, "private" also includes other containers on the server's Docker networks.
+- Use HTTPS to your server so the browser-to-server leg is encrypted. The server-to-device leg is whatever the device speaks (usually plain http on your LAN).
+- While the mode is on, the small local proxy listens on `127.0.0.1`, so other programs on the same computer or phone could use it too. It adds no way into your LAN beyond what your sync key already allows, but it is why the mode is off by default.
 
 ### Behind Nginx Proxy Manager
 

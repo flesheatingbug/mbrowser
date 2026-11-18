@@ -326,6 +326,16 @@ class SettingsActivity : BaseActivity() {
             { listOf(80, 100, 120, 150).indexOf(prefs.textZoom).coerceAtLeast(1) },
             { prefs.textZoom = listOf(80, 100, 120, 150)[it] })
         switchRow("Beta features", "Shows features still being tested, such as casting to a TV. Off by default", { prefs.beta }, { prefs.beta = it })
+        var homeSw: SwitchCompat? = null
+        var reverting = false
+        homeSw = switchRow("Home network", "Addresses on a home network (192.168.x.x, router.lan, a bare name like nas) open on YOUR home network through your sync server, wherever you are. Everything else goes direct. The server needs ALLOW_TUNNEL=true", { prefs.homeNetwork }, { on ->
+            if (!reverting) {
+                if (on) HomeNet.turnOn(this) { err ->
+                    if (err != null) { toast(err); reverting = true; homeSw?.isChecked = false; reverting = false }
+                    else toast("Home network is on")
+                } else HomeNet.turnOff(this, prefs)
+            }
+        })
         switchRow("Hide bars while scrolling", "The address bar and toolbar slide away as you read down a page", { prefs.hideBarsOnScroll }, { prefs.hideBarsOnScroll = it })
         switchRow("Pull down to refresh", "Off if it gets in the way of pages with their own drag gestures", { prefs.pullRefresh }, { prefs.pullRefresh = it })
         choiceRow("Identify as", UserAgents.MODES.map { it.second }, { UserAgents.MODES.indexOfFirst { it.first == prefs.uaMode }.coerceAtLeast(0) },
@@ -663,7 +673,7 @@ class SettingsActivity : BaseActivity() {
         }
     }
 
-    private fun switchRow(title: String, sub: String?, get: () -> Boolean, set: (Boolean) -> Unit) {
+    private fun switchRow(title: String, sub: String?, get: () -> Boolean, set: (Boolean) -> Unit): SwitchCompat {
         val (r, _) = rowView(title, sub)
         val sw = SwitchCompat(this)
         sw.isChecked = get()
@@ -677,6 +687,7 @@ class SettingsActivity : BaseActivity() {
         r.addView(col, LinearLayout.LayoutParams(0, -2, 1f))
         r.addView(sw)
         r.setOnClickListener { sw.toggle() }
+        return sw
     }
 
     private fun choiceRow(title: String, options: List<String>, get: () -> Int, set: (Int) -> Unit) {
