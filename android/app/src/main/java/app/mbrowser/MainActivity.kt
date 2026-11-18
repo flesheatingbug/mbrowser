@@ -659,7 +659,7 @@ setInterval(tick,700);addEventListener('scroll',tick,{passive:true});tick()})()"
                     Toast.makeText(this, "Nothing castable here. Start the video or audio first. Sites with protected content can't be cast; use Cast screen in Android's quick settings instead.", Toast.LENGTH_LONG).show(); return@evaluateJavascript
                 }
                 url = Caster.clean(url)
-                c.send(Caster.Media(url, title.ifBlank { Thumbs.hostOf(tab.url) }, Caster.typeFor(url, video), pos, live))
+                c.send(Caster.Media(url, title.ifBlank { Thumbs.hostOf(tab.url) }, Caster.typeFor(url, video), pos, live, tab.url))
                 // the phone stops playing it, the TV takes over
                 tab.web.evaluateJavascript("document.querySelectorAll('video,audio').forEach(function(m){try{m.pause()}catch(e){}})", null)
             }

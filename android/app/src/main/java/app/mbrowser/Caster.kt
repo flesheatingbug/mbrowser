@@ -25,11 +25,12 @@ class McCastOptions : OptionsProvider {
 
 /** Sends the video or audio a page is playing to a Chromecast or Google TV. */
 class Caster(private val act: AppCompatActivity) {
-    class Media(val url: String, val title: String, val type: String, val positionMs: Long, val live: Boolean)
+    class Media(val url: String, val title: String, val type: String, val positionMs: Long, val live: Boolean, val referer: String = "")
 
     // null when Google Play Services is missing on the phone
     private val cast: CastContext? = try { CastContext.getSharedInstance(act) } catch (_: Throwable) { null }
     private var pending: Media? = null
+    private var relay: CastRelay? = null
     var last: Media? = null
         private set
     private var watching: RemoteMediaClient? = null
@@ -63,7 +64,7 @@ class Caster(private val act: AppCompatActivity) {
 
     init { cast?.sessionManager?.addSessionManagerListener(listener, CastSession::class.java) }
 
-    fun release() { cast?.sessionManager?.removeSessionManagerListener(listener, CastSession::class.java) }
+    fun release() { relay?.stop(); cast?.sessionManager?.removeSessionManagerListener(listener, CastSession::class.java) }
 
     /** Casts [m]: straight away if a device is connected, otherwise after the user picks one. */
     fun send(m: Media) {
@@ -83,7 +84,10 @@ class Caster(private val act: AppCompatActivity) {
         val audio = m.type.startsWith("audio")
         val md = MediaMetadata(if (audio) MediaMetadata.MEDIA_TYPE_MUSIC_TRACK else MediaMetadata.MEDIA_TYPE_MOVIE)
         md.putString(MediaMetadata.KEY_TITLE, m.title)
-        val info = MediaInfo.Builder(m.url).setContentType(m.type)
+        val r = relay ?: CastRelay(android.webkit.WebSettings.getDefaultUserAgent(act)).also { relay = it }
+        r.referer = m.referer
+        val src = try { r.wrap(m.url) } catch (_: Exception) { null } ?: m.url   // fall back to the plain address
+        val info = MediaInfo.Builder(src).setContentType(m.type)
             .setStreamType(if (m.live) MediaInfo.STREAM_TYPE_LIVE else MediaInfo.STREAM_TYPE_BUFFERED)
             .setMetadata(md).build()
         last = m
