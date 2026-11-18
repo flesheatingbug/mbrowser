@@ -664,7 +664,19 @@ setInterval(tick,700);addEventListener('scroll',tick,{passive:true});tick()})()"
         }
         if (c.connected) {
             androidx.appcompat.app.AlertDialog.Builder(this).setTitle("Casting to " + c.deviceName)
-                .setItems(arrayOf("Cast this page's media", "Stop casting")) { _, w -> if (w == 0) cast() else c.stop() }.show()
+                .setItems(arrayOf("Cast this page's media", "Stop casting", "Show what was sent")) { _, w ->
+                    when (w) {
+                        0 -> cast()
+                        1 -> c.stop()
+                        else -> {
+                            val l = c.last
+                            androidx.appcompat.app.AlertDialog.Builder(this).setTitle("Last cast")
+                                .setMessage(if (l == null) "Nothing sent yet." else "${l.type}${if (l.live) " (live)" else ""}\n\n${l.url}")
+                                .setPositiveButton("Copy") { _, _ -> (getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager).setPrimaryClip(android.content.ClipData.newPlainText("cast", l?.url ?: "")) }
+                                .setNegativeButton("Close", null).show()
+                        }
+                    }
+                }.show()
         } else cast()
     }
 

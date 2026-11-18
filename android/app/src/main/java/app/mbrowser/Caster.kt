@@ -6,6 +6,8 @@ import androidx.appcompat.app.AppCompatActivity
 import com.google.android.gms.cast.MediaInfo
 import com.google.android.gms.cast.MediaLoadRequestData
 import com.google.android.gms.cast.MediaMetadata
+import com.google.android.gms.cast.MediaStatus
+import com.google.android.gms.cast.framework.media.RemoteMediaClient
 import com.google.android.gms.cast.framework.CastContext
 import com.google.android.gms.cast.CastMediaControlIntent
 import com.google.android.gms.cast.framework.CastOptions
@@ -28,6 +30,16 @@ class Caster(private val act: AppCompatActivity) {
     // null when Google Play Services is missing on the phone
     private val cast: CastContext? = try { CastContext.getSharedInstance(act) } catch (_: Throwable) { null }
     private var pending: Media? = null
+    var last: Media? = null
+        private set
+    private var watching: RemoteMediaClient? = null
+    private val watcher = object : RemoteMediaClient.Callback() {
+        override fun onStatusUpdated() {
+            val st = watching?.mediaStatus ?: return
+            if (st.playerState == MediaStatus.PLAYER_STATE_IDLE && st.idleReason == MediaStatus.IDLE_REASON_ERROR)
+                Toast.makeText(act, "The device started loading it but couldn't play the stream. Tap the cast row, then \"Show what was sent\".", Toast.LENGTH_LONG).show()
+        }
+    }
 
     val available: Boolean get() = cast != null
     private val session: CastSession? get() = cast?.sessionManager?.currentCastSession
@@ -74,6 +86,8 @@ class Caster(private val act: AppCompatActivity) {
         val info = MediaInfo.Builder(m.url).setContentType(m.type)
             .setStreamType(if (m.live) MediaInfo.STREAM_TYPE_LIVE else MediaInfo.STREAM_TYPE_BUFFERED)
             .setMetadata(md).build()
+        last = m
+        watching?.unregisterCallback(watcher); watching = rc; rc.registerCallback(watcher)
         val name = s.castDevice?.friendlyName ?: "your device"
         Toast.makeText(act, "Sending to $name…", Toast.LENGTH_SHORT).show()
         rc.load(MediaLoadRequestData.Builder().setMediaInfo(info).setAutoplay(true).setCurrentTime(if (m.live) 0 else m.positionMs).build())
