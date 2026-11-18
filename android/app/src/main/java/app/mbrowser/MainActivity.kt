@@ -682,12 +682,14 @@ setInterval(tick,700);addEventListener('scroll',tick,{passive:true});tick()})()"
 
     // ---- fullscreen video ----
     private var customView: View? = null
+    private var fsCastBtn: View? = null
     private var customCallback: WebChromeClient.CustomViewCallback? = null
 
     private fun exitFullScreen() {
         val v = customView ?: return
         customView = null
         (window.decorView as FrameLayout).removeView(v)
+        fsCastBtn?.let { (window.decorView as FrameLayout).removeView(it) }; fsCastBtn = null
         customCallback?.onCustomViewHidden(); customCallback = null
         androidx.core.view.WindowInsetsControllerCompat(window, window.decorView).show(androidx.core.view.WindowInsetsCompat.Type.systemBars())
     }
@@ -820,6 +822,18 @@ setInterval(tick,700);addEventListener('scroll',tick,{passive:true});tick()})()"
                 customView = view; customCallback = callback
                 (window.decorView as FrameLayout).addView(view, FrameLayout.LayoutParams(-1, -1))
                 view.setBackgroundColor(android.graphics.Color.BLACK)
+                if (caster?.available != false) {
+                    val d = resources.displayMetrics.density
+                    val b = android.widget.ImageButton(this@MainActivity).apply {
+                        setImageResource(R.drawable.ic_cast)
+                        background = android.graphics.drawable.GradientDrawable().apply { shape = android.graphics.drawable.GradientDrawable.OVAL; setColor(0x99000000.toInt()) }
+                        setPadding((10 * d).toInt(), (10 * d).toInt(), (10 * d).toInt(), (10 * d).toInt())
+                        contentDescription = "Cast"
+                        setOnClickListener { cur()?.let { castAction(it) } }
+                    }
+                    (window.decorView as FrameLayout).addView(b, FrameLayout.LayoutParams((44 * d).toInt(), (44 * d).toInt(), android.view.Gravity.TOP or android.view.Gravity.END).apply { topMargin = (16 * d).toInt(); marginEnd = (16 * d).toInt() })
+                    fsCastBtn = b
+                }
                 androidx.core.view.WindowInsetsControllerCompat(window, window.decorView).let {
                     it.systemBarsBehavior = androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
                     it.hide(androidx.core.view.WindowInsetsCompat.Type.systemBars())
