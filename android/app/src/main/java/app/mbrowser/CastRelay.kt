@@ -18,7 +18,7 @@ import java.util.concurrent.Executors
  * no cross-origin permission), so it fetches them from here and the phone fetches them from the site the way the
  * browser would. HLS playlists are rewritten so every segment also comes through here.
  */
-class CastRelay(private val userAgent: String) {
+class CastRelay(@Volatile var userAgent: String) {
     @Volatile var referer: String = ""
     private var server: ServerSocket? = null
     private val events = java.util.concurrent.ConcurrentLinkedDeque<String>()
@@ -78,6 +78,8 @@ class CastRelay(private val userAgent: String) {
             val c = URL(target).openConnection() as HttpURLConnection
             c.connectTimeout = 10000; c.readTimeout = 30000; c.instanceFollowRedirects = true
             c.setRequestProperty("User-Agent", userAgent)
+            c.setRequestProperty("Accept", "*/*")
+            c.setRequestProperty("Accept-Language", "en-US,en;q=0.9")
             if (referer.isNotEmpty()) {
                 c.setRequestProperty("Referer", referer)
                 try { val u = URI(referer); c.setRequestProperty("Origin", "${u.scheme}://${u.authority}") } catch (_: Exception) { }
@@ -86,6 +88,7 @@ class CastRelay(private val userAgent: String) {
             if (range != null) c.setRequestProperty("Range", range)
             val code = c.responseCode
             note("site answered $code for ${short(target)}")
+            if (code >= 400) note("  said: " + (try { c.errorStream?.readBytes()?.toString(Charsets.UTF_8)?.take(100)?.replace(Regex("\\s+"), " ") } catch (_: Exception) { null } ?: "(nothing)"))
             val body: InputStream? = if (code >= 400) c.errorStream else c.inputStream
             val ctype = c.contentType ?: ""
             val isPlaylist = target.substringBefore('?').endsWith(".m3u8", true) || ctype.contains("mpegurl", true)

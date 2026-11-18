@@ -25,7 +25,7 @@ class McCastOptions : OptionsProvider {
 
 /** Sends the video or audio a page is playing to a Chromecast or Google TV. */
 class Caster(private val act: AppCompatActivity) {
-    class Media(val url: String, val title: String, val type: String, val positionMs: Long, val live: Boolean, val referer: String = "")
+    class Media(val url: String, val title: String, val type: String, val positionMs: Long, val live: Boolean, val referer: String = "", val ua: String = "")
 
     // null when Google Play Services is missing on the phone
     private val cast: CastContext? = try { CastContext.getSharedInstance(act) } catch (_: Throwable) { null }
@@ -87,6 +87,7 @@ class Caster(private val act: AppCompatActivity) {
         md.putString(MediaMetadata.KEY_TITLE, m.title)
         val r = relay ?: CastRelay(android.webkit.WebSettings.getDefaultUserAgent(act)).also { relay = it }
         r.referer = m.referer
+        if (m.ua.isNotEmpty()) r.userAgent = m.ua
         val src = try { r.wrap(m.url) } catch (_: Exception) { null } ?: m.url   // fall back to the plain address
         val info = MediaInfo.Builder(src).setContentType(m.type)
             .setStreamType(if (m.live) MediaInfo.STREAM_TYPE_LIVE else MediaInfo.STREAM_TYPE_BUFFERED)
