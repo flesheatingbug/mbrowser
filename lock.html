@@ -9,6 +9,7 @@
   #pw-row { display:none; flex-direction:column; align-items:center; gap:10px; }
   #pw { width:240px; padding:11px 14px; border-radius:12px; border:1px solid #4a4a52; background:#232327; color:#eee; font-size:15px; text-align:center; outline:none; user-select:text; }
   #pw:focus { border-color:#7f8cff; }
+  #nopw { display:none; font-size:13px; color:#8d8d97; max-width:340px; text-align:center; }
   #msg { height:18px; font-size:13px; color:#e58b8b; }
   .shake { animation:shake .3s; } @keyframes shake { 25%{transform:translateX(-7px)} 75%{transform:translateX(7px)} }
   #win { position:fixed; top:0; right:0; display:none; }
@@ -17,6 +18,7 @@
 <body>
   <div id="win"><button id="wmin" title="Minimise">&#8211;</button><button id="wmax" title="Maximise">&#9633;</button><button id="wclose" class="x" title="Close">&#10005;</button></div>
   <button id="unlock" title="Unlock"></button>
+  <div id="nopw">No lock password is set, so anyone can unlock this. Set one in Settings &rarr; Privacy.</div>
   <div id="pw-row"><input id="pw" type="password" placeholder="Password" autocomplete="off"><div id="msg"></div></div>
 <script>
   const $ = (id) => document.getElementById(id);
@@ -28,6 +30,7 @@
   async function init() {
     hasPw = (await api.lockInfo()).hasPassword;
     $('pw-row').style.display = hasPw ? 'flex' : 'none';
+    $('nopw').style.display = hasPw ? 'none' : 'block';
     $('unlock').title = hasPw ? 'Enter the password to unlock' : 'Unlock';
     $('pw').value = ''; $('msg').textContent = '';
     if (hasPw) $('pw').focus();

@@ -166,6 +166,7 @@
     m.append(add);
   }
 
+  let lockNote = '';
   async function lockSection(m) {
     m.append(el('h2', null, 'Lock screen'));
     m.append(el('p', 'muted', 'The lock button in the status bar (or Ctrl+Shift+L) covers every window of this profile with a blank screen and pauses media. With no password, one click unlocks it. A password keeps casual onlookers out; it does not encrypt your data on disk. It is kept on this computer only and is never synced.'));
@@ -174,10 +175,12 @@
     const cur = el('input'); cur.type = 'password'; cur.placeholder = 'Current password'; cur.style.display = has ? '' : 'none';
     const nw = el('input'); nw.type = 'password'; nw.placeholder = has ? 'New password (leave empty to remove)' : 'Choose a lock password';
     const go = el('button', null, has ? 'Change or remove password' : 'Set password');
-    const msg = el('p', 'muted');
+    const msg = el('p', 'muted', lockNote); lockNote = '';
     go.onclick = async () => {
-      const r = await browser.lockSet(cur.value, nw.value);
-      if (!r.ok) { msg.textContent = r.error || 'Could not save'; return; }
+      if (!has && !nw.value) { msg.textContent = 'Type the password you want in the second box first.'; return; }
+      const r = await browser.lockSet(cur.value, nw.value).catch((e) => ({ ok: false, error: String(e && e.message || e) }));
+      if (!r || !r.ok) { msg.textContent = (r && r.error) || 'Could not save the password.'; return; }
+      lockNote = nw.value ? 'Password saved. The lock screen will now ask for it.' : 'Password removed. One click now unlocks.';
       render();
     };
     box.append(cur, nw, go, msg); m.append(box);
