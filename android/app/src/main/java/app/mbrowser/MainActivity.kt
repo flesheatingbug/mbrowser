@@ -1892,7 +1892,7 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
         val open = tabs.filter { !it.home && !it.priv }.map { it.url to it.title }
         Sync.runAsync(this, { open }) { msg ->
             ui.post {
-                if (verbose || msg != "Synced") Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
+                if (verbose || (msg != "Synced" && msg != Sync.OFFLINE)) Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
                 if (prefs.themeId != appliedTheme) { recreate(); return@post }   // a theme that came down from the server
                 applyLogo()
                 if (barSignature != Toolbars.keys(prefs).joinToString(",")) buildBottomBar()

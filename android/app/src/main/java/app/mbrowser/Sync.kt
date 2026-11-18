@@ -9,13 +9,18 @@ import java.util.concurrent.Executors
 object Sync {
     private val pool = Executors.newSingleThreadExecutor()
     private const val PAGE = 5000
+    const val OFFLINE = "Server not reachable. Your changes are kept and will sync when it is back."
+
+    /** True when the server simply can't be reached (off, no network, or a proxy in front of it answering 502/503/504). */
+    private fun unreachable(e: Exception): Boolean =
+        e is java.io.IOException && (e !is ApiException || e.code in setOf(502, 503, 504, 521, 522, 523, 524))
 
     /** Runs a sync in the background; onDone is called on the calling thread's main looper via the callback owner. */
     fun runAsync(ctx: Context, tabs: () -> List<Pair<String, String>>, onDone: (String) -> Unit) {
         val app = ctx.applicationContext
         val openTabs = tabs()   // read on the UI thread
         pool.execute {
-            val msg = try { run(app, openTabs) } catch (e: Exception) { "Sync failed: ${e.message}" }
+            val msg = try { run(app, openTabs) } catch (e: Exception) { if (unreachable(e)) OFFLINE else "Sync failed: ${e.message}" }
             onDone(msg)
         }
     }
