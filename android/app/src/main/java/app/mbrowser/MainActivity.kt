@@ -688,11 +688,6 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
     private var customView: View? = null
     private var fsCastBtn: View? = null
     private var fsWake: (() -> Unit)? = null   // shows the fullscreen cast button again for a moment
-
-    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
-        if (ev.actionMasked == MotionEvent.ACTION_DOWN) fsWake?.invoke()
-        return super.dispatchTouchEvent(ev)
-    }
     private var customCallback: WebChromeClient.CustomViewCallback? = null
 
     private fun exitFullScreen() {
@@ -1138,6 +1133,7 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
 
     override fun dispatchTouchEvent(ev: android.view.MotionEvent): Boolean {
         if (::switcher.isInitialized && switcher.visibility == View.VISIBLE) switcherSwipes.onTouchEvent(ev)
+        if (ev.actionMasked == MotionEvent.ACTION_DOWN) fsWake?.invoke()
         return super.dispatchTouchEvent(ev)
     }
 
