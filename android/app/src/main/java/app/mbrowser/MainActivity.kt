@@ -155,6 +155,62 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
         r.data?.getStringExtra("url")?.let { newTab(it) }
     }
 
+    // ---- file upload buttons on web pages: camera, photos and the file browser ----
+    private var fileCallback: android.webkit.ValueCallback<Array<android.net.Uri>>? = null
+    private var cameraFile: java.io.File? = null
+    private var afterCameraPermission: (() -> Unit)? = null
+
+    private val cameraPerm = registerForActivityResult(ActivityResultContracts.RequestPermission()) {
+        afterCameraPermission?.invoke(); afterCameraPermission = null
+    }
+    private val fileResult = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { r ->
+        val cb = fileCallback ?: return@registerForActivityResult
+        fileCallback = null
+        var out: Array<android.net.Uri>? = null
+        if (r.resultCode == RESULT_OK) {
+            val d = r.data
+            out = if (d?.data == null && d?.clipData == null)   // the camera wrote straight into our file
+                cameraFile?.takeIf { it.length() > 0 }?.let { arrayOf(androidx.core.content.FileProvider.getUriForFile(this, "$packageName.files", it)) }
+            else WebChromeClient.FileChooserParams.parseResult(r.resultCode, d)
+        }
+        cb.onReceiveValue(out)
+    }
+
+    private fun showFileChooser(cb: android.webkit.ValueCallback<Array<android.net.Uri>>, params: WebChromeClient.FileChooserParams): Boolean {
+        fileCallback?.onReceiveValue(null)
+        fileCallback = cb; cameraFile = null
+        val perm = android.Manifest.permission.CAMERA
+        fun go() {
+            val accept = params.acceptTypes.filter { it.isNotBlank() }.map { it.lowercase() }
+            val wantsImage = accept.isEmpty() || accept.any { it.contains("image") || it.contains("*/*") || it == ".jpg" || it == ".jpeg" || it == ".png" }
+            val wantsVideo = accept.any { it.contains("video") }
+            val cam = androidx.core.content.ContextCompat.checkSelfPermission(this, perm) == android.content.pm.PackageManager.PERMISSION_GRANTED
+            val extra = mutableListOf<Intent>()
+            try {
+                if (cam && wantsImage) {
+                    val f = java.io.File(java.io.File(cacheDir, "camera").apply { mkdirs() }, "IMG_" + System.currentTimeMillis() + ".jpg")
+                    cameraFile = f
+                    val uri = androidx.core.content.FileProvider.getUriForFile(this, "$packageName.files", f)
+                    extra += Intent(android.provider.MediaStore.ACTION_IMAGE_CAPTURE).putExtra(android.provider.MediaStore.EXTRA_OUTPUT, uri)
+                        .addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION or Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        .also { it.clipData = android.content.ClipData.newRawUri("", uri) }
+                }
+                if (cam && wantsVideo) extra += Intent(android.provider.MediaStore.ACTION_VIDEO_CAPTURE)
+                if (params.isCaptureEnabled && extra.isNotEmpty()) { fileResult.launch(extra[0]); return }
+                val chooser = Intent.createChooser(params.createIntent(), params.title ?: "Choose a file")
+                if (extra.isNotEmpty()) chooser.putExtra(Intent.EXTRA_INITIAL_INTENTS, extra.toTypedArray())
+                fileResult.launch(chooser)
+            } catch (e: Exception) {
+                fileCallback?.onReceiveValue(null); fileCallback = null
+                Toast.makeText(this, "Couldn't open the file chooser", Toast.LENGTH_SHORT).show()
+            }
+        }
+        val declared = try { packageManager.getPackageInfo(packageName, android.content.pm.PackageManager.GET_PERMISSIONS).requestedPermissions?.contains(perm) == true } catch (_: Exception) { false }
+        val granted = androidx.core.content.ContextCompat.checkSelfPermission(this, perm) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        if (declared && !granted) { afterCameraPermission = { go() }; cameraPerm.launch(perm) } else go()
+        return true
+    }
+
     private val voice = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { r ->
         val s = r.data?.getStringArrayListExtra(android.speech.RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()
         if (r.resultCode == RESULT_OK && !s.isNullOrBlank()) { urlBar.setText(s); navigate(s) }
@@ -862,6 +918,7 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
                 }
             }
             override fun onHideCustomView() { exitFullScreen() }
+            override fun onShowFileChooser(view: WebView, cb: android.webkit.ValueCallback<Array<android.net.Uri>>, params: FileChooserParams): Boolean = showFileChooser(cb, params)
             override fun onProgressChanged(view: WebView, newProgress: Int) {
                 if (tab === cur()) { progress.progress = newProgress; pillFill.set(newProgress) }
             }
