@@ -154,6 +154,11 @@ class Prefs(ctx: Context) {
     var appIcon: String
         get() = str("appIcon", "classic")
         set(v) = put("appIcon", v)
+    /** Features still being tested (casting, for now). Off unless switched on in settings. */
+    var beta: Boolean
+        get() = bool("beta", false)
+        set(v) = putB("beta", v)
+
     var hideBarsOnScroll: Boolean
         get() = bool("hideBarsOnScroll", true)
         set(v) = putB("hideBarsOnScroll", v)

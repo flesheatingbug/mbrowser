@@ -61,6 +61,7 @@
       { path: 'general.browserId', label: 'Identify as', type: 'select', options: [['auto', 'Automatic: Firefox on Google sites, Chrome elsewhere (recommended)'], ['chrome', 'Chrome everywhere'], ['firefox', 'Firefox everywhere'], ['safari', 'Safari'], ['none', 'mbrowser / Electron (no spoofing)']], help: 'Some sites show “unsupported browser” banners otherwise. Restart the browser after changing this. With Firefox or Safari nothing is faked: the browser simply says it is that browser.' },
       { path: 'general.autoUpdate', label: 'Check for updates automatically', type: 'toggle', help: 'Looks every few hours and shows a notice in the status bar. Turn off to only check from the menu.' },
       { path: 'general.askDefaultBrowser', label: 'Ask to make mbrowser the default browser (Windows)', type: 'toggle', help: 'Shows a notice under the toolbar while another browser is the default.' },
+      { path: 'general.beta', label: 'Beta features', type: 'toggle', help: 'Shows features that are still being tested, such as Extensions. Off by default and only for this computer. Turning it off hides them again.' },
       { path: 'general.newTab', label: 'New tab page', type: 'select', options: [['start', 'Start page'], ['home', 'Homepage'], ['blank', 'Blank page']] },
       { path: 'pages.defaultZoom', label: 'Default page zoom (%)', type: 'number', min: 30, max: 300, help: 'Applies to newly opened tabs.' },
     ],
@@ -136,7 +137,7 @@
   const TB_ITEMS = [['back', 'Back'], ['forward', 'Forward'], ['reload', 'Reload'], ['address', 'Address bar'], ['shield', 'Tracker blocker'], ['downloads', 'Downloads'], ['star', 'Bookmark star'], ['profile', 'Profile']];
   const TB_EXTRA = [['key', 'Saved logins key (inside the address bar)'], ['siteinfo', 'Site information (inside the address bar)']];
   async function extensionsSection(m) {
-    m.append(el('p', 'muted', 'Experimental. Load an unpacked Chrome extension (a folder containing manifest.json). Only part of the Chrome extension API exists in this browser: content scripts and simple extensions usually work; extensions that rely on a background service worker, blocking network requests or toolbar popups may not. Extensions apply to normal tabs, not private ones. Turning one off may need a restart to take full effect.'));
+    m.append(el('p', 'muted', 'Beta. Install an extension from the Chrome Web Store (paste its link), or load an unpacked one (a folder containing manifest.json). Only part of the Chrome extension API exists in this browser: content scripts and simple extensions usually work; extensions that rely on a background service worker, blocking network requests or toolbar popups may not. Extensions apply to normal tabs, not private ones. Turning one off may need a restart to take full effect.'));
     const box = el('div'); m.append(box);
     const msg = el('p', 'muted'); m.append(msg);
     function draw(list) {
@@ -155,6 +156,11 @@
       }
     }
     draw(await browser.extensionsList());
+    const store = el('div'); store.style.cssText = 'display:flex;gap:8px;margin:10px 0';
+    const link = el('input'); link.type = 'text'; link.placeholder = 'Chrome Web Store link or extension id'; link.style.flex = '1';
+    const inst = el('button', null, 'Install');
+    inst.onclick = async () => { inst.disabled = true; msg.textContent = 'Downloading…'; const r = await browser.extensionsAddStore(link.value); inst.disabled = false; msg.textContent = r.error || (r.list.length ? 'Done.' : ''); if (!r.error) link.value = ''; draw(r.list); };
+    store.append(link, inst); m.append(store);
     const add = el('button', null, 'Add unpacked extension…');
     add.onclick = async () => { const r = await browser.extensionsAdd(); msg.textContent = r.error || ''; draw(r.list); };
     m.append(add);
@@ -586,10 +592,12 @@
 
   async function render() {
     S = await browser.getSettings();
+    if (cur === 'extensions' && !S.general.beta) cur = 'general';
     const nav = $('nav');
     nav.querySelectorAll('button').forEach((b) => b.remove());
     for (const [id, name] of CATS) {
       if (id === 'server' && !S.sync.server) continue;
+      if (id === 'extensions' && !S.general.beta) continue;
       const active = !searchQuery && id === cur;
       const b = el('button', active ? 'on' : '', name);
       b.onclick = () => { cur = id; searchQuery = ''; $('settings-search').value = ''; location.hash = id; render(); };

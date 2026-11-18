@@ -2057,6 +2057,8 @@ function importBookmarks(items) {
 // Stored per computer (the folders are on this machine): [{ path, enabled, name, id? }]
 let extList = [];
 const loadedExt = new Map();   // path -> extension id
+const betaOn = () => !!S().general.beta;
+const { extractCrx, storeId, crxUrl } = require('./lib/crx');
 function readExtManifest(dir) {
   try {
     const m = JSON.parse(fs.readFileSync(path.join(dir, 'manifest.json'), 'utf8'));
@@ -2064,6 +2066,7 @@ function readExtManifest(dir) {
   } catch { return null; }
 }
 async function loadExtensions(ses) {
+  if (!betaOn()) return;   // extensions are a beta feature
   for (const e of extList) {
     if (!e.enabled || loadedExt.has(e.path)) continue;
     try {
@@ -2092,6 +2095,7 @@ function applySetting(p, value) {
 }
 
 function afterSettingsChange(p) {
+  if (!p || p === 'general.beta') loadExtensions(session.defaultSession).catch(() => {});
   if (!p || p === 'general.browserId') for (const ses of uaSessions) { try { ses.setUserAgent(uaForMode(S().general.browserId)); } catch { /* ignore */ } }
   applyThemeSource();
   rebuildShortcuts();
@@ -2728,6 +2732,7 @@ function setupIpc() {
   // extensions
   handle('extensions:list', () => extView(), PAGE_ONLY);
   handle('extensions:add', async () => {
+    if (!betaOn()) return { list: extView(), error: 'Turn on Beta features in General first.' };
     const r = await dialog.showOpenDialog({ title: 'Choose an unpacked extension folder (the one with manifest.json)', properties: ['openDirectory'] });
     if (r.canceled || !r.filePaths[0]) return { list: extView() };
     const dir = r.filePaths[0];
@@ -2738,6 +2743,33 @@ function setupIpc() {
     await loadExtensions(session.defaultSession);
     const e = extList.find((x) => x.path === dir);
     return { list: extView(), error: e && e.error ? 'Could not load it: ' + e.error : '' };
+  }, PAGE_ONLY);
+  // install straight from the Chrome Web Store: a store link or the 32-letter id
+  handle('extensions:addStore', async (_e, text) => {
+    if (!betaOn()) return { list: extView(), error: 'Turn on Beta features in General first.' };
+    const id = storeId(text);
+    if (!id) return { list: extView(), error: 'Paste the extension\u2019s Chrome Web Store link (or its 32-letter id).' };
+    try {
+      const r = await net.fetch(crxUrl(id, process.versions.chrome));
+      if (!r.ok) throw new Error('The store answered ' + r.status + ' (the extension may not exist or may not be downloadable)');
+      const buf = Buffer.from(await r.arrayBuffer());
+      const dir = path.join(app.getPath('userData'), 'extensions', id);
+      const old = extList.find((x) => x.path === dir);
+      if (old && loadedExt.has(dir)) { try { session.defaultSession.removeExtension(loadedExt.get(dir)); } catch { /* restart */ } loadedExt.delete(dir); }
+      fs.rmSync(dir, { recursive: true, force: true });
+      extractCrx(buf, dir);
+      const mf = readExtManifest(dir);
+      if (!mf) throw new Error('The package has no readable manifest');
+      if (mf.name.startsWith('__MSG_')) { try { const loc = JSON.parse(fs.readFileSync(path.join(dir, '_locales', 'en', 'messages.json'), 'utf8')); const k = mf.name.slice(6, -2); const hit = Object.keys(loc).find((x) => x.toLowerCase() === k.toLowerCase()); if (hit) mf.name = String(loc[hit].message).slice(0, 80); } catch { /* keep the raw name */ } }
+      extList = extList.filter((x) => x.path !== dir);
+      extList.push({ path: dir, enabled: true, store: id, ...mf });
+      saveExt();
+      await loadExtensions(session.defaultSession);
+      const e = extList.find((x) => x.path === dir);
+      return { list: extView(), error: e && e.error ? 'Installed, but it could not start: ' + e.error : '' };
+    } catch (err) {
+      return { list: extView(), error: 'Could not install: ' + String(err && err.message || err).slice(0, 200) };
+    }
   }, PAGE_ONLY);
   handle('extensions:toggle', async (_e, p, on) => {
     const e = extList.find((x) => x.path === p);
@@ -2755,6 +2787,7 @@ function setupIpc() {
     const e = extList.find((x) => x.path === p);
     if (e && loadedExt.has(p)) { try { session.defaultSession.removeExtension(loadedExt.get(p)); } catch { /* restart */ } loadedExt.delete(p); }
     extList = extList.filter((x) => x.path !== p);
+    if (e && e.store) { try { fs.rmSync(p, { recursive: true, force: true }); } catch { /* ignore */ } }   // a store install lives in our own folder
     saveExt();
     return extView();
   }, PAGE_ONLY);

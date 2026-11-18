@@ -82,6 +82,7 @@ class MainActivity : BaseActivity() {
       document.addEventListener('keydown',function(e){if(e.key==='Enter')grab();},true);})();"""
     // a small cast button floated over the video that is playing
     private val CAST_JS = """(function(){if(window.__mbCast)return;window.__mbCast=1;
+var until=0;function wake(){until=Date.now()+3000;tick()}
 var b=document.createElement('div');b.setAttribute('aria-label','Cast');
 b.style.cssText='position:fixed;z-index:2147483647;display:none;width:40px;height:40px;border-radius:20px;background:rgba(0,0,0,.6);align-items:center;justify-content:center;touch-action:manipulation';
 b.innerHTML='<svg width="22" height="22" viewBox="0 0 24 24" fill="#fff"><path d="M21 3H3c-1.1 0-2 .9-2 2v3h2V5h18v14h-7v2h7c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM1 18v3h3c0-1.66-1.34-3-3-3zm0-4v2c2.76 0 5 2.24 5 5h2c0-3.87-3.13-7-7-7zm0-4v2c4.97 0 9 4.03 9 9h2c0-6.08-4.93-11-11-11z"/></svg>';
@@ -92,9 +93,10 @@ function tick(){var best=null,ba=0;[].forEach.call(document.querySelectorAll('vi
  var r=v.getBoundingClientRect();if(r.width<160||r.height<90||v.ended)return;
  if(r.bottom<0||r.top>innerHeight||r.right<0||r.left>innerWidth)return;
  var a=r.width*r.height;if(a>ba){ba=a;best=r}});
- if(!best||document.fullscreenElement){b.style.display='none';return}
+ if(!best||document.fullscreenElement||Date.now()>until){b.style.display='none';return}
  b.style.display='flex';b.style.top=Math.max(8,best.top+8)+'px';b.style.left=Math.max(8,Math.min(innerWidth-48,best.right-48))+'px'}
-setInterval(tick,700);addEventListener('scroll',tick,{passive:true});tick()})()"""
+setInterval(tick,500);['touchstart','pointerdown','mousemove'].forEach(function(t){addEventListener(t,wake,{passive:true,capture:true})});
+document.addEventListener('play',wake,true);document.addEventListener('pause',wake,true);addEventListener('scroll',tick,{passive:true});tick()})()"""
     private val DRAG_GUARD_JS = """(function(){if(window.__mbRef)return;window.__mbRef=1;
       function bad(e){for(var n=e;n&&n.nodeType===1;n=n.parentElement){var t=n.tagName;
         if(t==='VIDEO'||t==='AUDIO'||t==='CANVAS'||n.draggable)return true;
@@ -685,13 +687,19 @@ setInterval(tick,700);addEventListener('scroll',tick,{passive:true});tick()})()"
     // ---- fullscreen video ----
     private var customView: View? = null
     private var fsCastBtn: View? = null
+    private var fsWake: (() -> Unit)? = null   // shows the fullscreen cast button again for a moment
+
+    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+        if (ev.actionMasked == MotionEvent.ACTION_DOWN) fsWake?.invoke()
+        return super.dispatchTouchEvent(ev)
+    }
     private var customCallback: WebChromeClient.CustomViewCallback? = null
 
     private fun exitFullScreen() {
         val v = customView ?: return
         customView = null
         (window.decorView as FrameLayout).removeView(v)
-        fsCastBtn?.let { (window.decorView as FrameLayout).removeView(it) }; fsCastBtn = null
+        fsCastBtn?.let { (window.decorView as FrameLayout).removeView(it) }; fsCastBtn = null; fsWake = null
         customCallback?.onCustomViewHidden(); customCallback = null
         androidx.core.view.WindowInsetsControllerCompat(window, window.decorView).show(androidx.core.view.WindowInsetsCompat.Type.systemBars())
     }
@@ -802,7 +810,7 @@ setInterval(tick,700);addEventListener('scroll',tick,{passive:true});tick()})()"
                 view.evaluateJavascript(DRAG_GUARD_JS, null)
                 if (!tab.priv) view.evaluateJavascript(LOGIN_CAPTURE_JS, null)
                 if (prefs.blockTrackers) view.evaluateJavascript(HIDE_JS, null)
-                if (caster?.available != false) view.evaluateJavascript(CAST_JS, null)
+                if (prefs.beta && caster?.available != false) view.evaluateJavascript(CAST_JS, null)
                 tab.url = url
                 tab.title = view.title ?: ""
                 if (!tab.priv) Store.addVisit(url, tab.title)
@@ -830,7 +838,7 @@ setInterval(tick,700);addEventListener('scroll',tick,{passive:true});tick()})()"
                 customView = view; customCallback = callback
                 (window.decorView as FrameLayout).addView(view, FrameLayout.LayoutParams(-1, -1))
                 view.setBackgroundColor(android.graphics.Color.BLACK)
-                if (caster?.available != false) {
+                if (prefs.beta && caster?.available != false) {
                     val d = resources.displayMetrics.density
                     val b = android.widget.ImageButton(this@MainActivity).apply {
                         setImageResource(R.drawable.ic_cast)
@@ -841,6 +849,10 @@ setInterval(tick,700);addEventListener('scroll',tick,{passive:true});tick()})()"
                     }
                     (window.decorView as FrameLayout).addView(b, FrameLayout.LayoutParams((44 * d).toInt(), (44 * d).toInt(), android.view.Gravity.TOP or android.view.Gravity.END).apply { topMargin = (16 * d).toInt(); marginEnd = (16 * d).toInt() })
                     fsCastBtn = b
+                    val hide = Runnable { fsCastBtn?.animate()?.alpha(0f)?.setDuration(250)?.withEndAction { fsCastBtn?.visibility = View.GONE }?.start() }
+                    fun wake() { b.animate().cancel(); b.visibility = View.VISIBLE; b.alpha = 1f; b.removeCallbacks(hide); b.postDelayed(hide, 3000) }
+                    fsWake = { wake() }
+                    wake()
                 }
                 androidx.core.view.WindowInsetsControllerCompat(window, window.decorView).let {
                     it.systemBarsBehavior = androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
@@ -1829,7 +1841,7 @@ setInterval(tick,700);addEventListener('scroll',tick,{passive:true});tick()})()"
             val off = prefs.blockerOff(Thumbs.hostOf(t.url))
             row(R.drawable.ic_shield, if (off) "Ads and trackers: allowed on this site" else "Ads and trackers: blocked on this site", need { tab -> prefs.setBlockerOff(Thumbs.hostOf(tab.url), !off); tab.web.reload() })
         }
-        if (t != null && !t.home) row(R.drawable.ic_devices, if (caster?.connected == true) "Casting…" else "Cast media from this page…", need { tab -> castAction(tab) })
+        if (prefs.beta && t != null && !t.home) row(R.drawable.ic_devices, if (caster?.connected == true) "Casting…" else "Cast media from this page…", need { tab -> castAction(tab) })
         row(R.drawable.ic_search, "Find on this page", need { openFind() })
         row(R.drawable.ic_translate, "Translate page", need { tab -> newTab(Translate.pageUrl(tab.url, prefs.translateLang)) })
         row(R.drawable.ic_translate, "Translate selected text", go {

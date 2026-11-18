@@ -80,6 +80,7 @@ if (location.protocol === 'my:') {
     relaunch: invoke('app:relaunch'),
     extensionsList: invoke('extensions:list'),
     extensionsAdd: invoke('extensions:add'),
+    extensionsAddStore: invoke('extensions:addStore'),
     extensionsToggle: invoke('extensions:toggle'),
     extensionsRemove: invoke('extensions:remove'),
     profilesUpdate: invoke('profiles:update'),
