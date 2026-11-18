@@ -53,6 +53,8 @@ dependencies {
     implementation("androidx.recyclerview:recyclerview:1.3.2")
     implementation("androidx.swiperefreshlayout:swiperefreshlayout:1.1.0")
     implementation("androidx.webkit:webkit:1.12.1")
+    implementation("com.google.android.gms:play-services-cast-framework:21.5.0")
+    implementation("androidx.mediarouter:mediarouter:1.7.0")
     implementation("androidx.work:work-runtime:2.9.1")
     implementation("com.journeyapps:zxing-android-embedded:4.3.0")
     implementation("org.bouncycastle:bcprov-jdk18on:1.78.1")

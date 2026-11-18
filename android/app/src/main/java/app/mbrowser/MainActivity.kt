@@ -66,6 +66,7 @@ class MainActivity : BaseActivity() {
         var desktop = false
         var priv = false                // private tab: no history, thumbnails or syncing
         var isolated = false            // private tab with its own separate cookies and storage
+        @Volatile var lastMedia: String? = null   // the last stream or media file the page asked for, for casting
     }
 
     // Tells the app when a touch starts on a video, player, slider or scrolled inner list, so pulling down there does not refresh the page.
@@ -519,6 +520,7 @@ class MainActivity : BaseActivity() {
     }
 
     override fun onDestroy() {
+        caster?.release()
         (getSystemService(NOTIFICATION_SERVICE) as android.app.NotificationManager).cancel(NOTICE_ID)
         tabs.forEach { it.web.destroy() }
         super.onDestroy()
@@ -617,6 +619,40 @@ class MainActivity : BaseActivity() {
     private var barsToggledAt = 0L
     private var lastScrollAt = 0L
 
+    // ---- casting ----
+    private var caster: Caster? = null
+
+    private fun castAction(tab: Tab) {
+        val c = caster ?: Caster(this).also { caster = it }
+        if (!c.available) { Toast.makeText(this, "Casting needs Google Play Services", Toast.LENGTH_LONG).show(); return }
+        fun cast() {
+            tab.web.evaluateJavascript(
+                "(function(){var e=[].slice.call(document.querySelectorAll('video,audio'));var p=e.filter(function(x){return !x.paused&&!x.ended})[0]||e[0];" +
+                "if(!p)return '';return JSON.stringify({s:p.currentSrc||p.src||'',t:p.currentTime||0,l:!isFinite(p.duration),v:p.tagName=='VIDEO',n:document.title});})()") { raw ->
+                var url = ""; var pos = 0L; var live = false; var video = true; var title = tab.title
+                try {
+                    val s = org.json.JSONTokener(raw ?: "").nextValue() as? String
+                    if (!s.isNullOrEmpty()) {
+                        val o = org.json.JSONObject(s)
+                        url = o.optString("s"); pos = (o.optDouble("t", 0.0) * 1000).toLong(); live = o.optBoolean("l"); video = o.optBoolean("v", true)
+                        title = o.optString("n").ifBlank { title }
+                    }
+                } catch (_: Exception) { /* fall back to the last stream the page asked for */ }
+                if (url.isEmpty() || url.startsWith("blob:")) { url = tab.lastMedia ?: ""; if (url.isNotEmpty() && !Caster.looksLikeMedia(url)) url = "" ; if (tab.lastMedia != null) { pos = 0; live = url.contains(".m3u8", true) } }
+                if (url.isEmpty() || !(url.startsWith("http://") || url.startsWith("https://"))) {
+                    Toast.makeText(this, "Nothing castable here. Start the video or audio first. Sites with protected content can't be cast; use Cast screen in Android's quick settings instead.", Toast.LENGTH_LONG).show(); return@evaluateJavascript
+                }
+                c.send(Caster.Media(url, title.ifBlank { Thumbs.hostOf(tab.url) }, Caster.typeFor(url, video), pos, live))
+                // the phone stops playing it, the TV takes over
+                tab.web.evaluateJavascript("document.querySelectorAll('video,audio').forEach(function(m){try{m.pause()}catch(e){}})", null)
+            }
+        }
+        if (c.connected) {
+            androidx.appcompat.app.AlertDialog.Builder(this).setTitle("Casting to " + c.deviceName)
+                .setItems(arrayOf("Cast this page's media", "Stop casting")) { _, w -> if (w == 0) cast() else c.stop() }.show()
+        } else cast()
+    }
+
     // ---- fullscreen video ----
     private var customView: View? = null
     private var customCallback: WebChromeClient.CustomViewCallback? = null
@@ -699,6 +735,7 @@ class MainActivity : BaseActivity() {
             }
 
             override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
+                if (Caster.looksLikeMedia(request.url.toString())) tab.lastMedia = request.url.toString()
                 if (prefs.blockTrackers && !request.isForMainFrame && !prefs.blockerOff(Thumbs.hostOf(tab.url)) &&
                     AdBlock.shouldBlock(request.url.toString(), Thumbs.hostOf(tab.url), requestType(request))) {
                     return WebResourceResponse("text/plain", "utf-8", ByteArrayInputStream(ByteArray(0)))
@@ -1741,6 +1778,7 @@ class MainActivity : BaseActivity() {
             val off = prefs.blockerOff(Thumbs.hostOf(t.url))
             row(R.drawable.ic_shield, if (off) "Ads and trackers: allowed on this site" else "Ads and trackers: blocked on this site", need { tab -> prefs.setBlockerOff(Thumbs.hostOf(tab.url), !off); tab.web.reload() })
         }
+        if (t != null && !t.home) row(R.drawable.ic_devices, if (caster?.connected == true) "Casting…" else "Cast media from this page…", need { tab -> castAction(tab) })
         row(R.drawable.ic_search, "Find on this page", need { openFind() })
         row(R.drawable.ic_translate, "Translate page", need { tab -> newTab(Translate.pageUrl(tab.url, prefs.translateLang)) })
         row(R.drawable.ic_translate, "Translate selected text", go {
