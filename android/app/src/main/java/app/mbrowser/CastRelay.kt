@@ -21,6 +21,11 @@ import java.util.concurrent.Executors
 class CastRelay(private val userAgent: String) {
     @Volatile var referer: String = ""
     private var server: ServerSocket? = null
+    private val events = java.util.concurrent.ConcurrentLinkedDeque<String>()
+    /** The most recent things that happened, newest last, for the "Show what was sent" screen. */
+    fun log(): String = events.joinToString("\n").ifEmpty { "The TV hasn't asked the phone for anything yet." }
+    private fun note(s: String) { events.add(s); while (events.size > 12) events.pollFirst() }
+    private fun short(u: String) = try { val x = URI(u); x.host + x.path.takeLast(28) } catch (_: Exception) { u.take(40) }
     private val pool = Executors.newCachedThreadPool()
 
     private fun localIp(): String? {
@@ -62,6 +67,7 @@ class CastRelay(private val userAgent: String) {
             sock.soTimeout = 30000
             val inp = BufferedInputStream(sock.getInputStream()); val out = sock.getOutputStream()
             val req = readLine(inp) ?: return
+            note("TV asked: ${req.take(60)}")
             var range: String? = null
             while (true) { val l = readLine(inp) ?: break; if (l.isEmpty()) break; if (l.startsWith("Range:", true)) range = l.substringAfter(':').trim() }
             val parts = req.split(' ')
@@ -79,6 +85,7 @@ class CastRelay(private val userAgent: String) {
             CookieManager.getInstance().getCookie(target)?.let { c.setRequestProperty("Cookie", it) }
             if (range != null) c.setRequestProperty("Range", range)
             val code = c.responseCode
+            note("site answered $code for ${short(target)}")
             val body: InputStream? = if (code >= 400) c.errorStream else c.inputStream
             val ctype = c.contentType ?: ""
             val isPlaylist = target.substringBefore('?').endsWith(".m3u8", true) || ctype.contains("mpegurl", true)
@@ -105,7 +112,8 @@ class CastRelay(private val userAgent: String) {
                 body?.copyTo(out)
             }
             out.flush()
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            note("failed: ${e.javaClass.simpleName} ${e.message ?: ""}".take(120))
         } finally { try { sock.close() } catch (_: Exception) { } }
     }
 

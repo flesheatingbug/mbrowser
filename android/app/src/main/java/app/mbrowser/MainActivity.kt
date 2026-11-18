@@ -673,7 +673,7 @@ setInterval(tick,700);addEventListener('scroll',tick,{passive:true});tick()})()"
                         else -> {
                             val l = c.last
                             androidx.appcompat.app.AlertDialog.Builder(this).setTitle("Last cast")
-                                .setMessage(if (l == null) "Nothing sent yet." else "${l.type}${if (l.live) " (live)" else ""}\n\n${l.url}")
+                                .setMessage(if (l == null) "Nothing sent yet." else "${l.type}${if (l.live) " (live)" else ""}\n\n${l.url}\n\n--- phone relay ---\n${c.relayLog()}")
                                 .setPositiveButton("Copy") { _, _ -> (getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager).setPrimaryClip(android.content.ClipData.newPlainText("cast", l?.url ?: "")) }
                                 .setNegativeButton("Close", null).show()
                         }

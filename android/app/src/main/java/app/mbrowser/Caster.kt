@@ -31,6 +31,7 @@ class Caster(private val act: AppCompatActivity) {
     private val cast: CastContext? = try { CastContext.getSharedInstance(act) } catch (_: Throwable) { null }
     private var pending: Media? = null
     private var relay: CastRelay? = null
+    fun relayLog(): String = relay?.log() ?: "Relay not used yet."
     var last: Media? = null
         private set
     private var watching: RemoteMediaClient? = null
