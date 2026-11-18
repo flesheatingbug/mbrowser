@@ -66,6 +66,8 @@ class MainActivity : BaseActivity() {
         var desktop = false
         var priv = false                // private tab: no history, thumbnails or syncing
         var isolated = false            // private tab with its own separate cookies and storage
+        val blocked = java.util.concurrent.ConcurrentLinkedDeque<String>()   // requests the blocker stopped on this page, newest last
+        @Volatile var hiddenCss: String = ""                                   // the element-hiding rules applied on this page
         @Volatile var lastMaster: String? = null  // the last HLS master playlist (better to cast than one quality's chunk list)
         @Volatile var lastMedia: String? = null   // the last stream or media file the page asked for, for casting
     }
@@ -841,12 +843,14 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
                 }
                 if (prefs.blockTrackers && !request.isForMainFrame && !prefs.blockerOff(Thumbs.hostOf(tab.url)) &&
                     AdBlock.shouldBlock(request.url.toString(), Thumbs.hostOf(tab.url), requestType(request))) {
+                    tab.blocked.add(request.url.host + request.url.path.orEmpty().take(60)); while (tab.blocked.size > 60) tab.blocked.pollFirst()
                     return WebResourceResponse("text/plain", "utf-8", ByteArrayInputStream(ByteArray(0)))
                 }
                 return null
             }
 
             override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
+                tab.blocked.clear(); tab.hiddenCss = ""
                 if (tabs.getOrNull(current)?.web === view) setBars(true)
                 if (url.startsWith("about:")) return
                 // a site you set to desktop or mobile keeps that choice; others follow the default
@@ -884,7 +888,7 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
                 if (!prefs.blockTrackers || prefs.blockerOff(host)) return ""   // the per-site switch turns off page-element hiding too
                 return try {
                     fun list(j: String): List<String> { val a = org.json.JSONArray(j); return (0 until a.length()).map { a.getString(it) } }
-                    AdBlock.cosmeticCss(host, list(ids), list(classes), first == 1)
+                    AdBlock.cosmeticCss(host, list(ids), list(classes), first == 1).also { if (it.isNotEmpty()) tab.hiddenCss = (tab.hiddenCss + "\n" + it).takeLast(4000) }
                 } catch (_: Exception) { "" }
             }
         }, "mbNative")
@@ -1901,6 +1905,15 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
             val off = prefs.blockerOff(Thumbs.hostOf(t.url))
             row(R.drawable.ic_shield, if (off) "Ads and trackers: allowed on this site" else "Ads and trackers: blocked on this site", need { tab -> prefs.setBlockerOff(Thumbs.hostOf(tab.url), !off); tab.web.reload() })
         }
+        if (t != null && !t.home && prefs.blockTrackers) row(R.drawable.ic_shield, "What was blocked on this page…", need { tab ->
+            val b = tab.blocked.toList()
+            val hid = tab.hiddenCss.trim()
+            val text = "Blocked requests (" + b.size + "):\n" + (if (b.isEmpty()) "none" else b.joinToString("\n")) +
+                "\n\nHidden page elements:\n" + (if (hid.isEmpty()) "none" else hid.take(1500))
+            androidx.appcompat.app.AlertDialog.Builder(this).setTitle(Thumbs.hostOf(tab.url)).setMessage(text)
+                .setPositiveButton("Copy") { _, _ -> (getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager).setPrimaryClip(android.content.ClipData.newPlainText("blocked", text)) }
+                .setNegativeButton("Close", null).show()
+        })
         if (prefs.beta && t != null && !t.home) row(R.drawable.ic_devices, if (caster?.connected == true) "Casting…" else "Cast media from this page…", need { tab -> castAction(tab) })
         row(R.drawable.ic_search, "Find on this page", need { openFind() })
         row(R.drawable.ic_translate, "Translate page", need { tab -> newTab(Translate.pageUrl(tab.url, prefs.translateLang)) })
