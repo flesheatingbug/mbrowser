@@ -93,7 +93,7 @@ class CastRelay(@Volatile var userAgent: String) {
             var code = c.responseCode
             var tries = 0
             // some sites allow one viewer per stream; the page was just playing it, so wait for that session to end
-            while (code == 403 && tries < 5) {
+            while (code == 403 && tries < 9) {
                 val msg = try { c.errorStream?.readBytes()?.toString(Charsets.UTF_8) ?: "" } catch (_: Exception) { "" }
                 note("site answered 403 for ${short(target)}: " + msg.take(60).replace(Regex("\\s+"), " "))
                 if (!msg.contains("duplicat", true)) break

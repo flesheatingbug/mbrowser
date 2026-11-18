@@ -643,6 +643,13 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
     private fun castAction(tab: Tab) {
         val c = caster ?: Caster(this).also { caster = it }
         if (!c.available) { Toast.makeText(this, "Casting needs Google Play Services", Toast.LENGTH_LONG).show(); return }
+        // sites that allow one viewer per stream would refuse the TV while this page is still playing it
+        c.onStart = { m ->
+            if (m.live) {
+                Toast.makeText(this, "Page closed while casting so the site sees one viewer. Press back to return.", Toast.LENGTH_LONG).show()
+                tab.web.postDelayed({ tab.web.loadUrl("about:blank") }, 400)
+            }
+        }
         fun cast() {
             tab.web.evaluateJavascript(
                 "(function(){var e=[].slice.call(document.querySelectorAll('video,audio'));var p=e.filter(function(x){return !x.paused&&!x.ended})[0]||e[0];" +

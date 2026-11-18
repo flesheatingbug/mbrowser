@@ -31,6 +31,8 @@ class Caster(private val act: AppCompatActivity) {
     private val cast: CastContext? = try { CastContext.getSharedInstance(act) } catch (_: Throwable) { null }
     private var pending: Media? = null
     private var relay: CastRelay? = null
+    /** Called once a cast has really started (after a device was picked, if needed). */
+    var onStart: ((Media) -> Unit)? = null
     fun relayLog(): String = relay?.log() ?: "Relay not used yet."
     var last: Media? = null
         private set
@@ -93,6 +95,7 @@ class Caster(private val act: AppCompatActivity) {
             .setStreamType(if (m.live) MediaInfo.STREAM_TYPE_LIVE else MediaInfo.STREAM_TYPE_BUFFERED)
             .setMetadata(md).build()
         last = m
+        onStart?.invoke(m)
         watching?.unregisterCallback(watcher); watching = rc; rc.registerCallback(watcher)
         val name = s.castDevice?.friendlyName ?: "your device"
         Toast.makeText(act, "Sending to $name…", Toast.LENGTH_SHORT).show()
