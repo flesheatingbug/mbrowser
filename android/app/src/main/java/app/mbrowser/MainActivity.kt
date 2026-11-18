@@ -881,7 +881,7 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
             @JavascriptInterface fun cast() { runOnUiThread { castAction(tab) } }
             @JavascriptInterface fun loginSubmitted(url: String, user: String, pass: String) { runOnUiThread { offerSaveLogin(tab, url, user, pass) } }
             @JavascriptInterface fun cosmetic(host: String, ids: String, classes: String, first: Int): String {
-                if (!prefs.blockTrackers) return ""
+                if (!prefs.blockTrackers || prefs.blockerOff(host)) return ""   // the per-site switch turns off page-element hiding too
                 return try {
                     fun list(j: String): List<String> { val a = org.json.JSONArray(j); return (0 until a.length()).map { a.getString(it) } }
                     AdBlock.cosmeticCss(host, list(ids), list(classes), first == 1)
