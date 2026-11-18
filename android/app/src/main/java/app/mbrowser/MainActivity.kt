@@ -704,8 +704,10 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
         // sites that allow one viewer per stream would refuse the TV while this page is still playing it
         c.onStart = { m ->
             if (m.live) {
-                Toast.makeText(this, "Page closed while casting so the site sees one viewer. Press back to return.", Toast.LENGTH_LONG).show()
-                tab.web.postDelayed({ tab.web.loadUrl("about:blank") }, 400)
+                // only the picture goes black; the page itself stays usable. The player is stopped so one-viewer sites see just the TV.
+                tab.web.evaluateJavascript(
+                    "(function(){try{if(!window.__mbHold){window.__mbHold=1;HTMLMediaElement.prototype.play=function(){return Promise.reject(new DOMException('Casting','NotAllowedError'))};}" +
+                    "document.querySelectorAll('video,audio').forEach(function(m){try{m.pause();m.removeAttribute('src');m.srcObject=null;m.load();m.style.setProperty('visibility','hidden','important')}catch(e){}})}catch(e){}})()", null)
             }
         }
         fun cast() {

@@ -86,6 +86,10 @@
   #sec.internal { color:var(--muted); }
   .ic svg { width:18px; height:18px; display:block; margin:auto; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
   #bar button.ic { display:grid; place-items:center; }
+  #exts { display:flex; align-items:center; gap:2px; order:40; }
+  #exts button { min-width:34px; height:34px; border-radius:9px; display:grid; place-items:center; padding:0; }
+  #exts img { width:20px; height:20px; display:block; }
+  #exts .xl { width:20px; height:20px; border-radius:5px; background:var(--accent); color:var(--onaccent); font-size:12px; font-weight:700; display:grid; place-items:center; }
   #star.on svg { fill:var(--accent); stroke:var(--accent); }
   #shield.off svg { opacity:.45; }
   #key .n { display:none; }
@@ -255,6 +259,7 @@
     </div>
     <button id="shield" class="ic" title="Tracker blocking for this site"><span id="shieldic"></span><span class="n" id="shieldn"></span></button>
     <button id="dlbtn" class="ic" title="Downloads"><svg class="ring" id="dlbtn-ring" viewBox="0 0 26 26"><circle cx="13" cy="13" r="11" pathLength="100"/></svg><span id="dlbtn-ic"></span><span class="n" id="dlbtn-n"></span></button>
+    <span id="exts"></span>
     <button id="star" class="ic" title="Bookmark (Ctrl+D)"></button>
     <button id="profile" title="Profiles"><span id="pchip"></span></button>
     <div id="dl-bar"></div>
@@ -619,6 +624,18 @@
     // status bar
     $('st-text').textContent = s.hover || s.statusText || (s.loading ? 'Loading…' : '');
     $('st-dot').style.display = s.loading ? '' : 'none';
+    const xs = $('exts'), xkey = JSON.stringify(s.exts || []);
+    if (xs.dataset.k !== xkey) {
+      xs.dataset.k = xkey; xs.textContent = '';
+      for (const x of s.exts || []) {
+        const b = document.createElement('button'); b.title = x.name;
+        if (x.icon) { const im = document.createElement('img'); im.src = x.icon; b.append(im); }
+        else { const l = document.createElement('span'); l.className = 'xl'; l.textContent = (x.name || '?').charAt(0).toUpperCase(); b.append(l); }
+        b.onclick = () => { const r = b.getBoundingClientRect(); api.extClick(x.path, { x: r.x, y: r.y, width: r.width, height: r.height }); };
+        b.oncontextmenu = (ev) => { ev.preventDefault(); api.extMenu(x.path); };
+        xs.append(b);
+      }
+    }
     const hm = $('st-home'), home = s.home || {};
     hm.style.display = home.avail ? '' : 'none';
     hm.className = home.on ? 'on' : '';

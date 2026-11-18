@@ -85,6 +85,8 @@ if (location.protocol === 'my:') {
     extensionsAddStore: invoke('extensions:addStore'),
     extensionsToggle: invoke('extensions:toggle'),
     extensionsRemove: invoke('extensions:remove'),
+    extensionsPin: invoke('extensions:pin'),
+    extensionsOptions: invoke('extensions:options'),
     profilesUpdate: invoke('profiles:update'),
     profilesSetPassword: invoke('profiles:setPassword'),
     profilesRemove: invoke('profiles:remove'),

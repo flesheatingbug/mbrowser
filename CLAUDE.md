@@ -29,14 +29,17 @@ not npm's. Browser version in package.json: 0.9.0. Server: 1.0.0 (stdlib-only Py
 - One long-lived branch: **master**. The old `next` pre-release branch is retired (delete it on GitHub if it still shows up); the repo's old default `main` is stale.
   Commit to master, push, check CI. Commits end with the `Co-Authored-By` and `Claude-Session` lines the session gives.
 - **Beta switch** (Android: Settings > Beta features; desktop: General > Beta features, per computer, never synced) hides features still being tested.
-  Currently gated: Android casting (menu row, overlay icon, fullscreen button) and desktop Extensions. Promote a feature by removing its gate.
+  Currently gated: Android casting (menu row, overlay icon, fullscreen button) and desktop Extensions (home network mode graduated out of beta). Promote a feature by removing its gate.
 - Desktop extensions (beta): unpacked Chrome extensions or install from a Chrome Web Store link (`lib/crx.js` unpacks the CRX). Only part of the Chrome extension API exists in Electron.
 - Android cast: Google Cast default receiver; `Caster.kt` plus `CastRelay.kt` (a small server on the phone that fetches the stream with the page's cookies/referer/UA, adds CORS and rewrites HLS playlists). Live streams close the page while casting (one-viewer-per-token sites). Untested on real hardware beyond the user's reports.
 - Desktop lock profile: status-bar lock button / Ctrl+Shift+L covers every window of the profile with `lock.html` (a top-most WebContentsView re-asserted by `enforceLock`), pauses and mutes media, blocks shortcuts. Optional password in Settings > Privacy (`lib/lock.js`, scrypt, `lock.json`, per profile, never synced).
 - Android automatic sync stays silent when the server is unreachable (changes stay dirty and go up next time); manual Sync now still reports it.
 - Done since the 0.9 rebuild: setup wizard, profile avatars/default/open-last, vault device/master modes, cards and addresses, recycle bins, speed dial overhaul, downloads menu, tab-strip wheel, Windows default-browser flow, passkey setting, Android fullscreen video and background audio.
 
-- Home network mode (beta, desktop): server `ALLOW_TUNNEL=true` exposes `GET /api/tunnel` (Upgrade: mbtunnel, X-Target host:port, private IPs only) and `/api/tunnel/status`. `lib/hometunnel.js` runs a local HTTP proxy over it; `applyHomeNetwork` in main.js sets a PAC on the default and private sessions (LAN ranges and plain/.lan/.local names via proxy). Status-bar chip toggles it. Electron side untested at runtime.
+- Home network mode (desktop, user-confirmed working): server `ALLOW_TUNNEL=true` exposes `GET /api/tunnel` (Upgrade: mbtunnel, X-Target host:port, private IPs only) and `/api/tunnel/status`. `lib/hometunnel.js` runs a local HTTP proxy over it; `applyHomeNetwork` in main.js sets a PAC on the default and private sessions (LAN ranges and plain/.lan/.local names via proxy). Status-bar chip toggles it. 
+- Extension toolbar buttons (beta): icon from the manifest, click opens the popup in a small window, right-click = Options / Hide / Manage; hide state is `hidden` in extensions.json. Untested at runtime.
+- Lock screen uses the profile password when the profile has one, else the optional `lock.json` password. Session restore keeps every window (`session.json` has `windows`).
+- Android live cast: only the video is hidden (not the page); CastRelay prefetches live segments.
 - Beta items in Settings show an amber BETA badge/highlight (`.beta` in pages/settings.html).
 
 ## Open items

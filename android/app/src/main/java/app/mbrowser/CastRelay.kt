@@ -52,6 +52,42 @@ class CastRelay(@Volatile var userAgent: String) {
 
     fun stop() { try { server?.close() } catch (_: Exception) { }; server = null }
 
+
+    private val cached = java.util.concurrent.ConcurrentHashMap<String, ByteArray>()
+    private val cachedOrder = java.util.concurrent.ConcurrentLinkedQueue<String>()
+    private val fetching = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+
+    private fun conn(target: String, range: String?): HttpURLConnection {
+        val x = URL(target).openConnection() as HttpURLConnection
+        x.connectTimeout = 10000; x.readTimeout = 30000; x.instanceFollowRedirects = true
+        x.setRequestProperty("User-Agent", userAgent)
+        x.setRequestProperty("Accept", "*/*")
+        x.setRequestProperty("Accept-Language", "en-US,en;q=0.9")
+        if (referer.isNotEmpty()) {
+            x.setRequestProperty("Referer", referer)
+            try { val u = URI(referer); x.setRequestProperty("Origin", "${u.scheme}://${u.authority}") } catch (_: Exception) { }
+        }
+        CookieManager.getInstance().getCookie(target)?.let { x.setRequestProperty("Cookie", it) }
+        if (range != null) x.setRequestProperty("Range", range)
+        return x
+    }
+
+    /** Fetches the next few live segments ahead of the TV so a slow moment on the site doesn't make the picture stutter. */
+    private fun prefetch(urls: List<String>) {
+        for (u in urls) {
+            if (cached.containsKey(u) || !fetching.add(u)) continue
+            pool.execute {
+                try {
+                    val c = conn(u, null)
+                    if (c.responseCode == 200 && c.contentLengthLong in 0..8_000_000) {
+                        cached[u] = c.inputStream.readBytes(); cachedOrder.add(u)
+                        while (cachedOrder.size > 12) cachedOrder.poll()?.let { cached.remove(it) }
+                    }
+                } catch (_: Exception) { } finally { fetching.remove(u) }
+            }
+        }
+    }
+
     private fun readLine(i: InputStream): String? {
         val b = StringBuilder()
         while (true) { val c = i.read(); if (c < 0) return if (b.isEmpty()) null else b.toString(); if (c == '\n'.code) break; if (c != '\r'.code) b.append(c.toChar()) }
@@ -75,19 +111,10 @@ class CastRelay(@Volatile var userAgent: String) {
             if (parts[0] == "OPTIONS") { val h = StringBuilder("HTTP/1.1 204 No Content\r\n"); cors(h); h.append("Connection: close\r\n\r\n"); out.write(h.toString().toByteArray()); return }
             val target = android.net.Uri.parse("http://x" + parts[1]).getQueryParameter("u")
             if (target == null) { out.write("HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n".toByteArray()); return }
-            fun open(): HttpURLConnection {
-                val x = URL(target).openConnection() as HttpURLConnection
-                x.connectTimeout = 10000; x.readTimeout = 30000; x.instanceFollowRedirects = true
-                x.setRequestProperty("User-Agent", userAgent)
-                x.setRequestProperty("Accept", "*/*")
-                x.setRequestProperty("Accept-Language", "en-US,en;q=0.9")
-                if (referer.isNotEmpty()) {
-                    x.setRequestProperty("Referer", referer)
-                    try { val u = URI(referer); x.setRequestProperty("Origin", "${u.scheme}://${u.authority}") } catch (_: Exception) { }
-                }
-                CookieManager.getInstance().getCookie(target)?.let { x.setRequestProperty("Cookie", it) }
-                if (range != null) x.setRequestProperty("Range", range)
-                return x
+            fun open(): HttpURLConnection = conn(target, range)
+            cached[target]?.takeIf { range == null }?.let { b ->
+                val h = StringBuilder("HTTP/1.1 200 OK\r\nContent-Length: ${b.size}\r\nAccept-Ranges: bytes\r\nConnection: close\r\n"); cors(h); h.append("\r\n")
+                out.write(h.toString().toByteArray()); out.write(b); out.flush(); return
             }
             var c = open()
             var code = c.responseCode
@@ -117,6 +144,7 @@ class CastRelay(@Volatile var userAgent: String) {
                 }.toByteArray()
                 h.append("HTTP/1.1 $code OK\r\nContent-Type: application/x-mpegURL\r\nContent-Length: ${rewritten.size}\r\nCache-Control: no-cache\r\nConnection: close\r\n"); cors(h); h.append("\r\n")
                 out.write(h.toString().toByteArray()); out.write(rewritten)
+                prefetch(text.lines().filter { it.isNotBlank() && !it.startsWith("#") && !it.contains(".m3u8", true) }.map { resolve(base, it.trim()) }.takeLast(4))
             } else {
                 h.append("HTTP/1.1 $code OK\r\n")
                 if (ctype.isNotEmpty()) h.append("Content-Type: $ctype\r\n")

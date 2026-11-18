@@ -485,7 +485,8 @@ function stateFor() {
     theme: themeVars(),
     blocked: wc ? blockedCounts.get(wc.id) || 0 : 0,
     blockerOn: S().privacy.blockTrackers,
-    home: { avail: betaOn() && syncReady(), on: homeActive },
+    home: { avail: syncReady(), on: homeActive },
+    exts: extButtons(),
     siteAllowed: !!host && allow.some((h) => host === h || host.endsWith('.' + h)),
     private: !!(t && t.private),
     downloadCount: downloads.filter((d) => !d.winUid || d.winUid === cur.uid).length,
@@ -540,14 +541,18 @@ function pushAll(relayout = false) {
 }
 
 let sessionTimer = null;
+let closeBurst = null;      // snapshot taken when a run of window closes began, so closing every window keeps all of them
+let closeBurstTimer = null;
+function sessionSnapshot() {
+  const groups = [...windows].map((w) => w.order.map((id) => w.tabs.get(id))
+    .filter((t) => t && !t.private && /^https?:\/\//i.test(t.wc.getURL()))
+    .map((t) => ({ url: t.wc.getURL(), pinned: t.pinned }))).filter((g) => g.length);
+  return { windows: groups.map((tabs) => ({ tabs })), tabs: groups.flat() };
+}
+function saveSession(snap) { try { save('session.json', snap || sessionSnapshot()); } catch { /* ignore */ } }
 function scheduleSessionSave() {
   clearTimeout(sessionTimer);
-  sessionTimer = setTimeout(() => {
-    const list = [...windows].flatMap((w) => w.order.map((id) => w.tabs.get(id)))
-      .filter((t) => t && !t.private && /^https?:\/\//i.test(t.wc.getURL()))
-      .map((t) => ({ url: t.wc.getURL(), pinned: t.pinned }));
-    try { save('session.json', { tabs: list }); } catch { /* ignore */ }
-  }, 1500);
+  sessionTimer = setTimeout(() => { if (!windows.size) return; if (closeBurst) scheduleSessionSave(); else saveSession(); }, 1500);
 }
 
 // ---------- auth-popup allowlist ----------
@@ -1009,6 +1014,10 @@ function focusUrl() {
 // A full-window cover (lock.html) on top of every window of this profile. Media is paused and muted while it is up.
 const { createLock } = require('./lib/lock');
 const lockPw = () => createLock(file('lock.json'));
+// A profile that already has a password uses it for the lock screen too; otherwise the optional separate lock password applies.
+const profileHasPw = () => { const p = profiles.get(profileId); return !!(p && p.locked); };
+const lockHasPw = () => profileHasPw() || lockPw().has();
+const lockCheck = (pw) => (profileHasPw() ? profiles.verify(profileId, pw || '') : lockPw().verify(pw || ''));
 let locked = false;
 let lockTimer = null;
 let lockFails = 0;
@@ -1048,7 +1057,7 @@ function lockNow() {
   if (locked) return;
   locked = true;
   lockFails = 0;
-  if (lockPw().has() && vault.unlocked() && !vault.isDevice()) { try { vault.lock(); clearTimeout(vaultTimer); } catch { /* ignore */ } }
+  if (lockHasPw() && vault.unlocked() && !vault.isDevice()) { try { vault.lock(); clearTimeout(vaultTimer); } catch { /* ignore */ } }
   for (const w of windows) lockWindow(w);
   lockTimer = setInterval(() => { for (const w of windows) enforceLockFor(w); }, 400);   // nothing may end up above the cover
 }
@@ -2150,8 +2159,60 @@ async function loadExtensions(ses) {
     } catch (err) { e.error = String(err && err.message || err).slice(0, 200); }
   }
 }
-const extView = () => extList.map((e) => ({ path: e.path, enabled: !!e.enabled, name: e.name, version: e.version, mv: e.mv, loaded: loadedExt.has(e.path), error: e.error || '' }));
-function saveExt() { try { save('extensions.json', extList.map((e) => ({ path: e.path, enabled: e.enabled, name: e.name, version: e.version, mv: e.mv }))); } catch { /* ignore */ } }
+// toolbar buttons (like Chrome): icon, popup and options page come from the extension's manifest
+const extInfoCache = new Map();
+function extInfo(e) {
+  if (extInfoCache.has(e.path)) return extInfoCache.get(e.path);
+  const info = { icon: '', popup: '', options: '' };
+  try {
+    const m = JSON.parse(fs.readFileSync(path.join(e.path, 'manifest.json'), 'utf8'));
+    const act = m.action || m.browser_action || m.page_action || {};
+    info.popup = typeof act.default_popup === 'string' ? act.default_popup.replace(/^\//, '') : '';
+    const opt = (m.options_ui && m.options_ui.page) || m.options_page || '';
+    info.options = typeof opt === 'string' ? opt.replace(/^\//, '') : '';
+    const pick = (o) => { if (!o) return ''; if (typeof o === 'string') return o; const ks = Object.keys(o).map(Number).filter((n) => n > 0).sort((a, b) => a - b); const k = ks.find((n) => n >= 32) || ks[ks.length - 1]; return k ? o[k] : ''; };
+    const rel = pick(act.default_icon) || pick(m.icons);
+    if (rel) {
+      const f = path.resolve(e.path, rel.replace(/^\//, ''));
+      if (f.startsWith(path.resolve(e.path)) && fs.existsSync(f)) {
+        const ext = path.extname(f).toLowerCase();
+        const mime = ext === '.svg' ? 'image/svg+xml' : ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' : 'image/png';
+        info.icon = 'data:' + mime + ';base64,' + fs.readFileSync(f).toString('base64');
+      }
+    }
+  } catch { /* no manifest details */ }
+  extInfoCache.set(e.path, info);
+  return info;
+}
+const extButtons = () => (betaOn() ? extList.filter((e) => e.enabled && !e.hidden && loadedExt.has(e.path)).map((e) => ({ path: e.path, name: e.name, icon: extInfo(e).icon, popup: !!extInfo(e).popup })) : []);
+function extUrl(e, rel) { return 'chrome-extension://' + loadedExt.get(e.path) + '/' + rel; }
+function openExtOptions(e) {
+  const i = extInfo(e);
+  if (!loadedExt.has(e.path)) return;
+  if (i.options) newTab(extUrl(e, i.options)); else if (cur && activeTab()) flashStatus(activeTab(), e.name + ' has no settings page');
+}
+let extPopup = null;
+function openExtPopup(w, e, rect) {
+  const i = extInfo(e);
+  if (!i.popup) { openExtOptions(e); return; }
+  if (extPopup && !extPopup.isDestroyed()) extPopup.close();
+  const cb = w.win.getContentBounds(), tb = w.toolbarView.getBounds();
+  const x = Math.round(cb.x + tb.x + rect.x + rect.width - 360), y = Math.round(cb.y + tb.y + rect.y + rect.height + 4);
+  const pw = new BrowserWindow({ alwaysOnTop: true, x: Math.max(cb.x, x), y, width: 360, height: 420, frame: false, resizable: false, show: false, skipTaskbar: true, backgroundColor: '#ffffff', webPreferences: { session: session.defaultSession, sandbox: true } });
+  extPopup = pw;
+  pw.on('blur', () => { if (!pw.isDestroyed()) pw.close(); });
+  pw.webContents.on('did-finish-load', async () => {
+    try {
+      const sz = await pw.webContents.executeJavaScript('[Math.max(document.documentElement.scrollWidth, document.body ? document.body.scrollWidth : 0), Math.max(document.documentElement.scrollHeight, document.body ? document.body.scrollHeight : 0)]');
+      const nw = Math.min(800, Math.max(200, sz[0])), nh = Math.min(600, Math.max(100, sz[1]));
+      pw.setBounds({ x: Math.max(cb.x, Math.round(cb.x + tb.x + rect.x + rect.width - nw)), y, width: nw, height: nh });
+    } catch { /* keep the default size */ }
+    if (!pw.isDestroyed()) { pw.show(); pw.focus(); }
+  });
+  pw.loadURL(extUrl(e, i.popup)).catch(() => { if (!pw.isDestroyed()) pw.close(); });
+}
+const extView = () => extList.map((e) => ({ hidden: !!e.hidden, hasOptions: !!extInfo(e).options, path: e.path, enabled: !!e.enabled, name: e.name, version: e.version, mv: e.mv, loaded: loadedExt.has(e.path), error: e.error || '' }));
+function saveExt() { try { save('extensions.json', extList.map((e) => ({ path: e.path, enabled: e.enabled, hidden: !!e.hidden, name: e.name, version: e.version, mv: e.mv }))); } catch { /* ignore */ } }
 
 // ---------- clearing data ----------
 async function clearData(what) {
@@ -2174,7 +2235,7 @@ function applySetting(p, value) {
 let homeProxy = null;
 let homeActive = false;
 async function applyHomeNetwork({ startup = false } = {}) {
-  const want = betaOn() && !!S().general.homeNetwork;
+  const want = !!S().general.homeNetwork;
   const sessions = () => [session.defaultSession, session.fromPartition('private')];
   const stop = async () => {
     if (homeActive) for (const s of sessions()) { try { await s.setProxy({ mode: 'system' }); } catch { /* ignore */ } }
@@ -2208,7 +2269,7 @@ async function applyHomeNetwork({ startup = false } = {}) {
 }
 
 function afterSettingsChange(p) {
-  if (!p || p === 'general.beta' || p === 'general.homeNetwork') applyHomeNetwork({ startup: !p }).catch(() => {});
+  if (!p || p === 'general.homeNetwork') applyHomeNetwork({ startup: !p }).catch(() => {});
   if (!p || p === 'general.beta') loadExtensions(session.defaultSession).catch(() => {});
   if (!p || p === 'general.browserId') for (const ses of uaSessions) { try { ses.setUserAgent(uaForMode(S().general.browserId)); } catch { /* ignore */ } }
   applyThemeSource();
@@ -2295,17 +2356,34 @@ function setupIpc() {
     wc.setZoomFactor(Math.min(3, Math.max(0.25, f + dir * 0.1))); pushState();
   });
   on('lock:now', () => lockNow());
-  on('home:toggle', () => { if (betaOn()) applySetting('general.homeNetwork', !S().general.homeNetwork); });
-  handle('lock:info', () => ({ hasPassword: lockPw().has() }));
+  on('ext:click', (e, p, rect) => {
+    const x = extList.find((v) => v.path === p);
+    if (x && loadedExt.has(p) && rect && typeof rect.x === 'number') openExtPopup(cur, x, rect);
+  });
+  on('ext:menu', (_e, p) => {
+    const x = extList.find((v) => v.path === p);
+    if (!x) return;
+    Menu.buildFromTemplate([
+      { label: x.name, enabled: false },
+      { label: 'Options', enabled: !!extInfo(x).options, click: () => openExtOptions(x) },
+      { label: 'Hide from toolbar', click: () => { x.hidden = true; saveExt(); pushAll(true); } },
+      { label: 'Manage extensions', click: () => newTab('my://settings#extensions') },
+    ]).popup();
+  });
+  handle('extensions:pin', (_e, p, shown) => { const x = extList.find((v) => v.path === p); if (x) { x.hidden = !shown; saveExt(); pushAll(true); } return extView(); }, { chrome: false, page: true });
+  handle('extensions:options', (_e, p) => { const x = extList.find((v) => v.path === p); if (x) openExtOptions(x); return true; }, { chrome: false, page: true });
+  on('home:toggle', () => { applySetting('general.homeNetwork', !S().general.homeNetwork); });
+  handle('lock:info', () => ({ hasPassword: lockHasPw() }));
   handle('lock:unlock', async (_e, pw) => {
     if (!locked) return { ok: true };
-    if (lockPw().verify(typeof pw === 'string' ? pw : '')) { lockFails = 0; unlockNow(); return { ok: true }; }
+    if (lockCheck(typeof pw === 'string' ? pw : '')) { lockFails = 0; unlockNow(); return { ok: true }; }
     lockFails++;
     await new Promise((r) => setTimeout(r, Math.min(4000, lockFails * 400)));   // slows down guessing
     return { ok: false };
   });
-  handle('lock:has', () => lockPw().has(), { chrome: false, page: true });
+  handle('lock:has', () => (profileHasPw() ? 'profile' : lockPw().has()), { chrome: false, page: true });
   handle('lock:set', (_e, current, next) => {
+    if (profileHasPw()) return { ok: false, error: 'This profile has a password, so the lock screen uses it. Change it under Profiles.' };
     const l = lockPw();
     if (l.has() && !l.verify(typeof current === 'string' ? current : '')) return { ok: false, error: 'The current password is wrong.' };
     if (!next) l.clear(); else l.set(String(next));
@@ -3780,8 +3858,13 @@ function startupTabs() {
   if (given.length && g.startup !== 'restore') { given.forEach((u) => newTab(u)); return; }
   if (g.startup === 'restore') {
     const sess = load('session.json', { tabs: [] });
-    if (sess.tabs.length) sess.tabs.forEach((t) => newTab(t.url, { pinned: t.pinned })); else if (!given.length) newTab(START);
+    const groups = Array.isArray(sess.windows) && sess.windows.length ? sess.windows.map((g) => g.tabs || []).filter((g) => g.length) : (sess.tabs.length ? [sess.tabs] : []);
+    if (groups.length) groups[0].forEach((t) => newTab(t.url, { pinned: t.pinned })); else if (!given.length) newTab(START);
     given.forEach((u) => newTab(u));
+    if (groups.length > 1) {
+      const first = cur;
+      setTimeout(() => { for (const g of groups.slice(1)) createWindow({ restore: g }); if (first && windows.has(first)) use(first); }, 0);
+    }
   } else if (g.startup === 'home') newTab(g.homepage);
   else newTab(START);
 }
@@ -3872,6 +3955,7 @@ function createWindow(opts = {}) {
     use(w);
     layout();
     if (opts.first) startupTabs();
+    else if (opts.restore) opts.restore.forEach((t) => newTab(t.url, { pinned: t.pinned }));
     else if (!opts.empty) newTab(undefined, opts.private ? { private: true } : undefined);
     pushState();
     if (opts.first) syncAll();
@@ -3882,16 +3966,17 @@ function createWindow(opts = {}) {
 }
 
 function onWindowClosed(w) {
-  // Flush session BEFORE windows.delete(w) so this window's tabs are still reachable.
+  // Snapshot BEFORE windows.delete(w) so this window's tabs are still reachable. When several windows close
+  // in quick succession (quitting), the first snapshot is kept so every window comes back next time.
   clearTimeout(sessionTimer);
   sessionTimer = null;
-  const sessionList = [...windows]
-    .flatMap((win) => win.order.map((id) => win.tabs.get(id)))
-    .filter((t) => t && !t.private && /^https?:\/\//i.test(t.wc.getURL()))
-    .map((t) => ({ url: t.wc.getURL(), pinned: t.pinned }));
-  try { save('session.json', { tabs: sessionList }); } catch { /* ignore */ }
+  if (!closeBurst) closeBurst = sessionSnapshot();
+  clearTimeout(closeBurstTimer);
+  closeBurstTimer = setTimeout(() => { closeBurst = null; }, 4000);
+  if (windows.size <= 1) saveSession(closeBurst);
 
   windows.delete(w);
+  if (windows.size) scheduleSessionSave();
   // Save all non-private tabs to recently-closed before tearing down
   for (const id of w.order) {
     const t = w.tabs.get(id);
@@ -4443,12 +4528,7 @@ app.on('before-quit', (e) => {
   // programmatically before any window closes). onWindowClosed handles the normal case.
   clearTimeout(sessionTimer);
   sessionTimer = null;
-  if (windows.size > 0) {
-    const list = [...windows].flatMap((w) => w.order.map((id) => w.tabs.get(id)))
-      .filter((t) => t && !t.private && /^https?:\/\//i.test(t.wc.getURL()))
-      .map((t) => ({ url: t.wc.getURL(), pinned: t.pinned }));
-    try { save('session.json', { tabs: list }); } catch { /* ignore */ }
-  }
+  if (windows.size > 0) saveSession();
   if (quitCleared || !store) return;
   const c = S().privacy.clearOnExit;
   const what = c.history && c.cookies && c.cache ? 'all' : null;
