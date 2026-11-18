@@ -78,6 +78,8 @@ if (location.protocol === 'my:') {
     profilesList: invoke('profiles:list'),
     profilesCreate: invoke('profiles:create'),
     relaunch: invoke('app:relaunch'),
+    lockHas: invoke('lock:has'),
+    lockSet: invoke('lock:set'),
     extensionsList: invoke('extensions:list'),
     extensionsAdd: invoke('extensions:add'),
     extensionsAddStore: invoke('extensions:addStore'),

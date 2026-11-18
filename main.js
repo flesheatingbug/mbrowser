@@ -367,6 +367,11 @@ const defaultBarWanted = () => process.platform === 'win32' && app.isPackaged &&
 
 // ---------- layout ----------
 function layout() {
+  layoutCore();
+  enforceLock();
+}
+
+function layoutCore() {
   if (!cur || !cur.win || !cur.toolbarView) return;
   const { width, height } = cur.win.getContentBounds();
   const zero = { x: 0, y: 0, width: 0, height: 0 };
@@ -999,7 +1004,74 @@ function focusUrl() {
 }
 
 // ---------- commands & shortcuts ----------
+// ---------- lock profile ----------
+// A full-window cover (lock.html) on top of every window of this profile. Media is paused and muted while it is up.
+const { createLock } = require('./lib/lock');
+const lockPw = () => createLock(file('lock.json'));
+let locked = false;
+let lockTimer = null;
+let lockFails = 0;
+const lockMuted = new Map();   // webContents id -> was it already muted
+const PAUSE_JS = "document.querySelectorAll('video,audio').forEach(function(m){try{if(!m.paused){m.dataset.mbLockPaused='1';m.pause()}}catch(e){}})";
+const RESUME_JS = "document.querySelectorAll('video,audio').forEach(function(m){try{if(m.dataset.mbLockPaused){delete m.dataset.mbLockPaused;m.play()}}catch(e){}})";
+
+function enforceLockFor(w) {
+  if (!locked || !w || !w.win || w.win.isDestroyed() || !w.lockView) return;
+  const b = w.win.getContentBounds();
+  w.lockView.setBounds({ x: 0, y: 0, width: b.width, height: b.height });
+  const ch = w.win.contentView.children;
+  if (ch[ch.length - 1] !== w.lockView) w.win.contentView.addChildView(w.lockView);   // re-adding moves it to the top
+}
+function enforceLock() { if (cur) enforceLockFor(cur); }
+
+function lockWindow(w) {
+  if (!w.lockView) {
+    w.lockView = new WebContentsView({ webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, sandbox: true } });
+    chromeIds.add(w.lockView.webContents.id);
+    chromeOwner.set(w.lockView.webContents.id, w);
+    w.lockView.webContents.loadFile(path.join(__dirname, 'lock.html'), { query: { frameless: w.frameless ? '1' : '0' } });
+  }
+  w.win.contentView.addChildView(w.lockView);
+  enforceLockFor(w);
+  for (const t of w.tabs.values()) {
+    try {
+      if (!lockMuted.has(t.wc.id)) lockMuted.set(t.wc.id, t.wc.isAudioMuted());
+      t.wc.setAudioMuted(true);
+      t.wc.executeJavaScript(PAUSE_JS).catch(() => {});
+    } catch { /* tab is gone */ }
+  }
+  try { w.lockView.webContents.send('lock:shown'); w.lockView.webContents.focus(); } catch { /* still loading */ }
+}
+
+function lockNow() {
+  if (locked) return;
+  locked = true;
+  lockFails = 0;
+  if (lockPw().has() && vault.unlocked() && !vault.isDevice()) { try { vault.lock(); clearTimeout(vaultTimer); } catch { /* ignore */ } }
+  for (const w of windows) lockWindow(w);
+  lockTimer = setInterval(() => { for (const w of windows) enforceLockFor(w); }, 400);   // nothing may end up above the cover
+}
+
+function unlockNow() {
+  if (!locked) return;
+  locked = false;
+  clearInterval(lockTimer); lockTimer = null;
+  for (const w of windows) {
+    if (w.lockView) { try { w.win.contentView.removeChildView(w.lockView); } catch { /* ignore */ } }
+    for (const t of w.tabs.values()) {
+      try {
+        const was = lockMuted.get(t.wc.id);
+        if (was !== undefined) t.wc.setAudioMuted(was);
+        t.wc.executeJavaScript(RESUME_JS).catch(() => {});
+      } catch { /* tab is gone */ }
+    }
+  }
+  lockMuted.clear();
+  if (cur && cur.win) { const t = activeTab(); if (t) { try { t.wc.focus(); } catch { /* ignore */ } } }
+}
+
 const COMMANDS = [
+  { id: 'lock-profile', label: 'Lock Profile', keys: ['Ctrl+Shift+L'], run: () => lockNow() },
   { id: 'tab-new', label: 'New Tab', keys: ['Ctrl+T'], run: () => newTab() },
   { id: 'tab-new-private', label: 'New Private Tab', keys: ['Ctrl+Shift+N'], run: () => newTab(undefined, { private: true }) },
   { id: 'window-new', label: 'New Window', keys: ['Ctrl+N'], run: () => createWindow() },
@@ -1084,6 +1156,7 @@ function runCommand(id) {
 }
 
 function handleShortcut(event, input) {
+  if (locked) { if (input.type === 'keyDown') event.preventDefault(); return; }   // nothing works behind the lock
   if (input.type !== 'keyDown') return;
   if (!(input.control || input.alt || input.meta || /^F\d+$/.test(input.key))) return;
   const a = accelOf(input);
@@ -2180,6 +2253,22 @@ function setupIpc() {
     use(t.owner); const wc = t.wc; const f = wc.getZoomFactor();
     wc.setZoomFactor(Math.min(3, Math.max(0.25, f + dir * 0.1))); pushState();
   });
+  on('lock:now', () => lockNow());
+  handle('lock:info', () => ({ hasPassword: lockPw().has() }));
+  handle('lock:unlock', async (_e, pw) => {
+    if (!locked) return { ok: true };
+    if (lockPw().verify(typeof pw === 'string' ? pw : '')) { lockFails = 0; unlockNow(); return { ok: true }; }
+    lockFails++;
+    await new Promise((r) => setTimeout(r, Math.min(4000, lockFails * 400)));   // slows down guessing
+    return { ok: false };
+  });
+  handle('lock:has', () => lockPw().has(), { chrome: false, page: true });
+  handle('lock:set', (_e, current, next) => {
+    const l = lockPw();
+    if (l.has() && !l.verify(typeof current === 'string' ? current : '')) return { ok: false, error: 'The current password is wrong.' };
+    if (!next) l.clear(); else l.set(String(next));
+    return { ok: true };
+  }, { chrome: false, page: true });
   on('win:min', () => cur.win.minimize());
   on('win:max', () => { if (cur.win.isMaximized()) cur.win.unmaximize(); else cur.win.maximize(); });
   on('win:close', () => cur.win.close());
@@ -3744,6 +3833,7 @@ function createWindow(opts = {}) {
     else if (!opts.empty) newTab(undefined, opts.private ? { private: true } : undefined);
     pushState();
     if (opts.first) syncAll();
+    if (locked) lockWindow(w);
   };
   for (const v of [w.tabbarView, w.toolbarView, w.statusView]) v.webContents.once('did-finish-load', ready);
   return w;

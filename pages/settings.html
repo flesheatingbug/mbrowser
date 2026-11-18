@@ -166,6 +166,23 @@
     m.append(add);
   }
 
+  async function lockSection(m) {
+    m.append(el('h2', null, 'Lock screen'));
+    m.append(el('p', 'muted', 'The lock button in the status bar (or Ctrl+Shift+L) covers every window of this profile with a blank screen and pauses media. With no password, one click unlocks it. A password keeps casual onlookers out; it does not encrypt your data on disk. It is kept on this computer only and is never synced.'));
+    const has = await browser.lockHas();
+    const box = el('div'); box.style.cssText = 'display:flex;flex-direction:column;gap:8px;max-width:340px;margin:8px 0 16px';
+    const cur = el('input'); cur.type = 'password'; cur.placeholder = 'Current password'; cur.style.display = has ? '' : 'none';
+    const nw = el('input'); nw.type = 'password'; nw.placeholder = has ? 'New password (leave empty to remove)' : 'Choose a lock password';
+    const go = el('button', null, has ? 'Change or remove password' : 'Set password');
+    const msg = el('p', 'muted');
+    go.onclick = async () => {
+      const r = await browser.lockSet(cur.value, nw.value);
+      if (!r.ok) { msg.textContent = r.error || 'Could not save'; return; }
+      render();
+    };
+    box.append(cur, nw, go, msg); m.append(box);
+  }
+
   function toolbarSection(m) {
     m.append(el('h2', null, 'Toolbar'));
     m.append(el('p', 'muted', 'Choose which buttons are shown and move them left or right. The address bar always stays visible.'));
@@ -747,6 +764,7 @@
     }
     if (cur === 'sync') syncAuthSection(m);
     (FIELDS[cur] || []).forEach((d) => m.append(field(d)));
+    if (cur === 'privacy') await lockSection(m);
     if (cur === 'startpage') m.append(el('p', 'muted', 'Add, edit, group and reorder speed dials on the start page itself. Drag a tile to reorder it, or drop it on a group tab to move it.'));
     if (cur === 'privacy') clearButtons(m);
     if (cur === 'adblocker') await blockerSection(m);

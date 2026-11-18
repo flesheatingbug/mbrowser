@@ -1,0 +1,50 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Locked</title>
+<style>
+  html,body { margin:0; height:100%; background:#2b2b30; color:#d8d8de; font:15px system-ui,-apple-system,"Segoe UI",sans-serif; overflow:hidden; user-select:none; }
+  body { background:linear-gradient(#3c3c42,#2a2a2f 70%,#26262b); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:18px; }
+  #unlock { width:160px; height:160px; border-radius:42px; border:0; background:#38383d; color:#c9c9d1; cursor:pointer; box-shadow:0 10px 30px rgba(0,0,0,.35); display:flex; align-items:center; justify-content:center; transition:transform .12s, background .12s; }
+  #unlock:hover { background:#434349; transform:scale(1.03); } #unlock:active { transform:scale(.98); }
+  #unlock svg { width:78px; height:78px; fill:none; stroke:currentColor; stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round; }
+  #pw-row { display:none; flex-direction:column; align-items:center; gap:10px; }
+  #pw { width:240px; padding:11px 14px; border-radius:12px; border:1px solid #4a4a52; background:#232327; color:#eee; font-size:15px; text-align:center; outline:none; user-select:text; }
+  #pw:focus { border-color:#7f8cff; }
+  #msg { height:18px; font-size:13px; color:#e58b8b; }
+  .shake { animation:shake .3s; } @keyframes shake { 25%{transform:translateX(-7px)} 75%{transform:translateX(7px)} }
+  #win { position:fixed; top:0; right:0; display:none; }
+  #win button { width:46px; height:32px; border:0; background:none; color:#aaa; font-size:14px; cursor:pointer; } #win button:hover { background:#ffffff18; } #win .x:hover { background:#c42b1c; color:#fff; }
+</style></head>
+<body>
+  <div id="win"><button id="wmin" title="Minimise">&#8211;</button><button id="wmax" title="Maximise">&#9633;</button><button id="wclose" class="x" title="Close">&#10005;</button></div>
+  <button id="unlock" title="Unlock"></button>
+  <div id="pw-row"><input id="pw" type="password" placeholder="Password" autocomplete="off"><div id="msg"></div></div>
+<script>
+  const $ = (id) => document.getElementById(id);
+  const LOCK = '<svg viewBox="0 0 24 24"><rect x="5" y="10.5" width="14" height="9.5" rx="2.5"/><path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5"/></svg>';
+  $('unlock').innerHTML = LOCK;
+  if (new URLSearchParams(location.search).get('frameless') === '1') $('win').style.display = 'block';
+  $('wmin').onclick = () => api.winMin(); $('wmax').onclick = () => api.winMax(); $('wclose').onclick = () => api.winClose();
+  let hasPw = false, busy = false;
+  async function init() {
+    hasPw = (await api.lockInfo()).hasPassword;
+    $('pw-row').style.display = hasPw ? 'flex' : 'none';
+    $('unlock').title = hasPw ? 'Enter the password to unlock' : 'Unlock';
+    $('pw').value = ''; $('msg').textContent = '';
+    if (hasPw) $('pw').focus();
+  }
+  async function submit() {
+    if (busy) return;
+    if (hasPw && !$('pw').value) { $('pw').focus(); return; }
+    busy = true;
+    const r = await api.lockUnlock($('pw').value);
+    busy = false;
+    if (!r.ok) {
+      $('msg').textContent = 'Wrong password';
+      $('pw').value = ''; $('pw-row').classList.remove('shake'); void $('pw-row').offsetWidth; $('pw-row').classList.add('shake'); $('pw').focus();
+    }
+  }
+  $('unlock').onclick = submit;
+  $('pw').addEventListener('keydown', (e) => { if (e.key === 'Enter') submit(); });
+  api.onLockShown(init);
+  init();
+</script></body></html>

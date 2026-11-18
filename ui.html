@@ -152,6 +152,8 @@
   #status button { background:none; border:0; color:var(--muted); font-size:12px; padding:0 4px; cursor:pointer; }
   #status button:hover { color:var(--fg); }
   #st-cog { font-size:14px !important; padding:0 2px !important; }
+  #st-lock { padding:0 2px !important; display:flex; align-items:center; }
+  #st-lock svg { width:14px; height:14px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
   #st-time { font-size:11px; letter-spacing:.03em; }
   #st-zoom-wrap { display:flex; align-items:center; gap:4px; }
   #st-zoom-range { width:72px; height:3px; accent-color:var(--accent); cursor:pointer; }
@@ -220,6 +222,7 @@
   </div>
   <div id="status">
     <button id="st-cog" title="Settings">⚙</button>
+    <button id="st-lock" title="Lock profile (Ctrl+Shift+L)"></button>
     <span class="dot" id="st-dot" style="display:none"></span>
     <span class="grow" id="st-text"></span>
     <span id="st-blocked"></span>
@@ -318,6 +321,8 @@
   $('nctx-private').onclick = () => api.newPrivateTab();
 
   $('st-cog').onclick = () => api.newTab('my://settings');
+  $('st-lock').innerHTML = '<svg viewBox="0 0 24 24"><rect x="5" y="10.5" width="14" height="9.5" rx="2.5"/><path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5"/></svg>';
+  $('st-lock').onclick = () => api.lockNow();
   $('st-zoom-pct').onclick = () => api.resetZoom();
   let zoomDragging = false;
   $('st-zoom-range').addEventListener('mousedown', () => { zoomDragging = true; });
