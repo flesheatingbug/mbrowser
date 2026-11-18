@@ -74,8 +74,15 @@ class Caster(private val act: AppCompatActivity) {
         val info = MediaInfo.Builder(m.url).setContentType(m.type)
             .setStreamType(if (m.live) MediaInfo.STREAM_TYPE_LIVE else MediaInfo.STREAM_TYPE_BUFFERED)
             .setMetadata(md).build()
+        val name = s.castDevice?.friendlyName ?: "your device"
+        Toast.makeText(act, "Sending to $name…", Toast.LENGTH_SHORT).show()
         rc.load(MediaLoadRequestData.Builder().setMediaInfo(info).setAutoplay(true).setCurrentTime(if (m.live) 0 else m.positionMs).build())
-        Toast.makeText(act, "Casting to ${s.castDevice?.friendlyName ?: "your device"}", Toast.LENGTH_SHORT).show()
+            .setResultCallback { r ->
+                if (!r.status.isSuccess) {
+                    val host = try { android.net.Uri.parse(m.url).host } catch (_: Exception) { null } ?: m.url
+                    Toast.makeText(act, "The device couldn't play it (code ${r.status.statusCode}) from $host as ${m.type}. The site may block other devices or need a login.", Toast.LENGTH_LONG).show()
+                }
+            }
     }
 
     companion object {

@@ -79,6 +79,21 @@ class MainActivity : BaseActivity() {
       document.addEventListener('submit',grab,true);
       document.addEventListener('click',function(e){var b=e.target.closest&&e.target.closest('button,input[type=submit]');if(b&&b.type==='submit')grab();},true);
       document.addEventListener('keydown',function(e){if(e.key==='Enter')grab();},true);})();"""
+    // a small cast button floated over the video that is playing
+    private val CAST_JS = """(function(){if(window.__mbCast)return;window.__mbCast=1;
+var b=document.createElement('div');b.setAttribute('aria-label','Cast');
+b.style.cssText='position:fixed;z-index:2147483647;display:none;width:40px;height:40px;border-radius:20px;background:rgba(0,0,0,.6);align-items:center;justify-content:center;touch-action:manipulation';
+b.innerHTML='<svg width="22" height="22" viewBox="0 0 24 24" fill="#fff"><path d="M21 3H3c-1.1 0-2 .9-2 2v3h2V5h18v14h-7v2h7c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM1 18v3h3c0-1.66-1.34-3-3-3zm0-4v2c2.76 0 5 2.24 5 5h2c0-3.87-3.13-7-7-7zm0-4v2c4.97 0 9 4.03 9 9h2c0-6.08-4.93-11-11-11z"/></svg>';
+b.addEventListener('click',function(e){e.stopPropagation();e.preventDefault();try{mbNative.cast()}catch(x){}},true);
+document.documentElement.appendChild(b);
+function tick(){var best=null,ba=0;[].forEach.call(document.querySelectorAll('video,audio'),function(v){
+ if(v.tagName=='AUDIO'){return}
+ var r=v.getBoundingClientRect();if(r.width<160||r.height<90||v.ended)return;
+ if(r.bottom<0||r.top>innerHeight||r.right<0||r.left>innerWidth)return;
+ var a=r.width*r.height;if(a>ba){ba=a;best=r}});
+ if(!best||document.fullscreenElement){b.style.display='none';return}
+ b.style.display='flex';b.style.top=Math.max(8,best.top+8)+'px';b.style.left=Math.max(8,Math.min(innerWidth-48,best.right-48))+'px'}
+setInterval(tick,700);addEventListener('scroll',tick,{passive:true});tick()})()"""
     private val DRAG_GUARD_JS = """(function(){if(window.__mbRef)return;window.__mbRef=1;
       function bad(e){for(var n=e;n&&n.nodeType===1;n=n.parentElement){var t=n.tagName;
         if(t==='VIDEO'||t==='AUDIO'||t==='CANVAS'||n.draggable)return true;
@@ -765,6 +780,7 @@ class MainActivity : BaseActivity() {
                 view.evaluateJavascript(DRAG_GUARD_JS, null)
                 if (!tab.priv) view.evaluateJavascript(LOGIN_CAPTURE_JS, null)
                 if (prefs.blockTrackers) view.evaluateJavascript(HIDE_JS, null)
+                if (caster?.available != false) view.evaluateJavascript(CAST_JS, null)
                 tab.url = url
                 tab.title = view.title ?: ""
                 if (!tab.priv) Store.addVisit(url, tab.title)
@@ -774,6 +790,7 @@ class MainActivity : BaseActivity() {
         }
         w.addJavascriptInterface(object {
             @JavascriptInterface fun blockRefresh(b: Boolean) { refreshBlocked = b }
+            @JavascriptInterface fun cast() { runOnUiThread { castAction(tab) } }
             @JavascriptInterface fun loginSubmitted(url: String, user: String, pass: String) { runOnUiThread { offerSaveLogin(tab, url, user, pass) } }
             @JavascriptInterface fun cosmetic(host: String, ids: String, classes: String, first: Int): String {
                 if (!prefs.blockTrackers) return ""
