@@ -7,7 +7,7 @@ name: Build mbrowser
 on:
   workflow_dispatch:
   push:
-    branches: [master, main, next]
+    branches: [master, main]
     tags: ['v*']
     paths:
       - '*.js'

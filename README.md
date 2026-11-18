@@ -33,7 +33,7 @@
 | 🐧 **Linux** (AppImage) | [mbrowser-linux.AppImage](https://github.com/flesheatingbug/mbrowser/releases/download/latest-desktop/mbrowser-linux.AppImage) |
 | 🪟 **Windows** (Installer) | [mbrowser-windows-setup.exe](https://github.com/flesheatingbug/mbrowser/releases/download/latest-desktop/mbrowser-windows-setup.exe) |
 | 🤖 **Android** (APK) | [mbrowser.apk](https://github.com/flesheatingbug/mbrowser/releases/download/latest-apk/mbrowser.apk) |
-| 🐳 **Sync server** (Docker) | [Setup guide](#sync-server--docker-setup-dockge--portainer--compose) |
+| 🐳 **Sync server** (Docker) | [Setup guide](#sync-server--docker-setup-dockhand--dockge--portainer--compose) |
 
 > **Pre-release builds:** the `next` branch publishes newer builds to the `pre-desktop` and `pre-apk` releases.
 > **Android:** enable *Install from unknown sources* in your device settings, then open the APK to install.
@@ -201,19 +201,19 @@ If you see a Windows Defender SmartScreen warning, click **More info → Run any
 
 ---
 
-## Sync server — Docker setup (Dockge / Portainer / Compose)
+## Sync server — Docker setup (Dockhand / Dockge / Portainer / Compose)
 
 mbrowser can run completely standalone (no server needed), or you can self-host the sync server to sync across devices.
 
-### Quick start with Dockge
+### Quick start with a stack manager (Dockhand, Dockge, Portainer)
 
-1. In Dockge, click **+ Compose** and paste the contents of [`server/dockge-stack.yaml`](server/dockge-stack.yaml).
+1. Create a new stack in your manager and paste the contents of [`server/stack.yaml`](server/stack.yaml).
 2. Edit the volume path to wherever you want to store data, e.g.:
    ```yaml
    - /opt/mbrowser-sync/data:/config
    ```
 3. Set `PUID`/`PGID` to match your server user (run `id` to check).
-4. Click **Deploy**.
+4. Deploy the stack.
 
 ### Quick start with Docker Compose
 
@@ -250,7 +250,7 @@ The web interface and API will be available at **http://your-server:4242**.
 
 ### Behind Nginx Proxy Manager
 
-1. In the Dockge stack / compose file, **remove** the `ports:` block and uncomment the `networks:` section — set it to your NPM Docker network name.
+1. In the stack / compose file, **remove** the `ports:` block and uncomment the `networks:` section — set it to your NPM Docker network name.
 2. In NPM, create a **Proxy Host** pointing to `mbrowser-sync:4242`.
 3. Enable **Websockets support** and add an SSL certificate.
 
@@ -288,7 +288,7 @@ The server image is rebuilt automatically whenever `server/` changes on the `mai
 ghcr.io/flesheatingbug/mbrowser-sync:latest
 ```
 
-To update a running container: in Dockge click **Pull & Restart**, or:
+To update a running container: pull the new image and redeploy the stack in your manager, or:
 
 ```bash
 docker compose pull && docker compose up -d

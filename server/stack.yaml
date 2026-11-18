@@ -1,6 +1,6 @@
 ---
-# mbrowser sync server — Dockge stack
-# Paste this into Dockge (or save as compose.yaml in /opt/stacks/mbrowser-sync/).
+# mbrowser sync server — stack file for Dockhand, Dockge, Portainer or any Compose tool.
+# Paste this into a new stack (or save it as compose.yaml in your stacks folder).
 # Image is built automatically from the GitHub repo and published to GHCR.
 #
 # First run: open http://<your-server>:4242 and create your admin account.
