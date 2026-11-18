@@ -16,6 +16,7 @@ services:
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
       - TRUST_PROXY=${TRUST_PROXY:-true}
       - SESSION_DAYS=${SESSION_DAYS:-7}
+      - ALLOW_TUNNEL=${ALLOW_TUNNEL:-false}
     volumes:
       - ${CONFIG_PATH:-./config}:/config
     ports:

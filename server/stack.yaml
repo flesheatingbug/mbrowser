@@ -29,6 +29,12 @@ services:
       # true = trust X-Forwarded-For / X-Forwarded-Proto (Nginx Proxy Manager, Traefik, etc.)
       - TRUST_PROXY=true
 
+      # ── home network (beta) ──
+      # true = let signed-in browsers reach private LAN addresses (192.168.x, 10.x, 172.16-31.x)
+      # through this server. Anyone holding a sync key can then reach your LAN, so guard keys.
+      # Behind Nginx Proxy Manager turn on "Websockets support" for the proxy host.
+      - ALLOW_TUNNEL=false
+
       # days a web-UI login stays valid
       - SESSION_DAYS=7
 

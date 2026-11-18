@@ -1,8 +1,11 @@
 """mbrowser sync server: web interface, accounts and sync API in one small program (standard library only)."""
+import ipaddress
 import json
 import os
 import re
+import select
 import signal
+import socket
 import sys
 import threading
 import time
@@ -31,6 +34,9 @@ class Config:
         self.admin_password = env.get('ADMIN_PASSWORD', '')
         self.trust_proxy = env.get('TRUST_PROXY', 'true').lower() in ('1', 'true', 'yes')
         self.session_days = max(1, int(env.get('SESSION_DAYS', '7')))
+        # Home-network tunnel: lets a signed-in browser reach devices on THIS network (router, NAS...) from anywhere.
+        # Off unless you turn it on. It only ever connects to private addresses.
+        self.tunnel = env.get('ALLOW_TUNNEL', 'false').lower() in ('1', 'true', 'yes')
 
 
 class Ctx:
@@ -110,6 +116,13 @@ route('POST', G + r'/users/(\d+)/password', 'admin')(guiapi.user_password)
 route('POST', G + r'/users/(\d+)/disable2fa', 'admin')(guiapi.user_disable_2fa)
 route('POST', G + r'/users/(\d+)/toggle', 'admin')(guiapi.user_toggle)
 
+
+# ---- home-network tunnel status (Bearer key): lets the browser check the switch before using it
+def _tunnel_status(ctx, req):
+    return 200, {'enabled': bool(ctx.cfg.tunnel)}
+
+
+route('GET', r'/api/tunnel/status', 'token')(_tunnel_status)
 
 # ---- sync API (Bearer key)
 def _with_profile(fn):
@@ -249,6 +262,23 @@ class Req:
         return self._json
 
 
+def _tunnel_target(host, port):
+    """Resolve host and make sure every address is on a private network (never loopback, link-local or public)."""
+    try:
+        infos = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
+    except OSError:
+        raise ApiError(502, 'The server could not find "%s" on its network.' % host)
+    addrs = []
+    for fam, _t, _p, _c, sa in infos:
+        ip = ipaddress.ip_address(sa[0].split('%')[0])
+        if ip.is_loopback or ip.is_link_local or ip.is_unspecified or ip.is_multicast or not ip.is_private:
+            raise ApiError(403, 'The tunnel only reaches devices on private home-network addresses (%s is not one).' % ip)
+        addrs.append((fam, sa))
+    if not addrs:
+        raise ApiError(502, 'The server could not find "%s" on its network.' % host)
+    return addrs[0]
+
+
 class Handler(BaseHTTPRequestHandler):
     protocol_version = 'HTTP/1.1'
     server_version = 'mbrowser-sync'
@@ -297,6 +327,52 @@ class Handler(BaseHTTPRequestHandler):
         self._send(200, data, {'Content-Type': TYPES.get(ext, 'application/octet-stream'), 'Cache-Control': 'no-cache'}, head_only)
         return True
 
+    def _tunnel(self, ctx):
+        """GET /api/tunnel with 'Upgrade: mbtunnel' and 'X-Target: host:port' turns this connection into a raw pipe to that device."""
+        if not ctx.cfg.tunnel:
+            raise ApiError(403, 'The home-network tunnel is switched off on this server. Set ALLOW_TUNNEL=true and restart it to use it.')
+        self._auth_token(ctx, Req(self, 'GET', '/api/tunnel', {}, b''))
+        if self.headers.get('Upgrade', '').lower() != 'mbtunnel':
+            raise ApiError(400, 'Not a tunnel request.')
+        host, _, port_s = self.headers.get('X-Target', '').rpartition(':')
+        host = host.strip('[]')
+        if not host or not port_s.isdigit() or not (0 < int(port_s) < 65536):
+            raise ApiError(400, 'X-Target must look like host:port.')
+        fam, sa = _tunnel_target(host, int(port_s))
+        up = socket.socket(fam, socket.SOCK_STREAM)
+        up.settimeout(8)
+        try:
+            up.connect(sa)
+        except OSError:
+            up.close()
+            raise ApiError(502, 'The server could not reach %s:%s.' % (host, port_s))
+        up.settimeout(None)
+        cli = self.connection
+        self.wfile.write(b'HTTP/1.1 101 Switching Protocols\r\nUpgrade: mbtunnel\r\nConnection: Upgrade\r\n\r\n')
+        self.wfile.flush()
+        self.close_connection = True
+        cli.settimeout(None)
+        try:
+            idle = 0
+            while True:
+                r, _, _ = select.select([cli, up], [], [], 30)
+                if not r:
+                    idle += 30
+                    if idle >= 600:
+                        break
+                    continue
+                idle = 0
+                for s in r:
+                    data = s.recv(65536)
+                    if not data:
+                        return 101
+                    (up if s is cli else cli).sendall(data)
+        except OSError:
+            pass
+        finally:
+            up.close()
+        return 101
+
     def _handle(self):
         t0 = time.time()
         ctx = self.server.ctx
@@ -305,6 +381,9 @@ class Handler(BaseHTTPRequestHandler):
         method = self.command
         status = 500
         try:
+            if path == '/api/tunnel' and method == 'GET':
+                status = self._tunnel(ctx)
+                return
             if method in ('GET', 'HEAD') and not path.startswith('/api/') and path != '/health':
                 if self._static(path, method == 'HEAD'):
                     return

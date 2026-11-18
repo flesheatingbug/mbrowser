@@ -485,6 +485,7 @@ function stateFor() {
     theme: themeVars(),
     blocked: wc ? blockedCounts.get(wc.id) || 0 : 0,
     blockerOn: S().privacy.blockTrackers,
+    home: { avail: betaOn() && syncReady(), on: homeActive },
     siteAllowed: !!host && allow.some((h) => host === h || host.endsWith('.' + h)),
     private: !!(t && t.private),
     downloadCount: downloads.filter((d) => !d.winUid || d.winUid === cur.uid).length,
@@ -2132,6 +2133,7 @@ let extList = [];
 const loadedExt = new Map();   // path -> extension id
 const betaOn = () => !!S().general.beta;
 const { extractCrx, storeId, crxUrl } = require('./lib/crx');
+const hometunnel = require('./lib/hometunnel');
 function readExtManifest(dir) {
   try {
     const m = JSON.parse(fs.readFileSync(path.join(dir, 'manifest.json'), 'utf8'));
@@ -2167,7 +2169,46 @@ function applySetting(p, value) {
   if (syncReady() && S().sync.settings !== false && !p.startsWith('sync')) syncSoon();
 }
 
+// ---------- home network mode (beta) ----------
+// Private addresses go through the sync server's tunnel (lib/hometunnel.js) so they reach the HOME network.
+let homeProxy = null;
+let homeActive = false;
+async function applyHomeNetwork({ startup = false } = {}) {
+  const want = betaOn() && !!S().general.homeNetwork;
+  const sessions = () => [session.defaultSession, session.fromPartition('private')];
+  const stop = async () => {
+    if (homeActive) for (const s of sessions()) { try { await s.setProxy({ mode: 'system' }); } catch { /* ignore */ } }
+    if (homeProxy) { homeProxy.close(); homeProxy = null; }
+    homeActive = false;
+  };
+  const fail = (detail) => {
+    store.set('general.homeNetwork', false);
+    stop().finally(() => pushAll());
+    dialog.showMessageBox({ type: 'warning', title: 'Home network mode', message: 'Could not turn on home network mode', detail });
+  };
+  if (!want) { await stop(); pushAll(); return; }
+  if (!syncReady()) { if (startup) return; return fail('Home network mode needs your sync server. Connect one in Settings → Sync first.'); }
+  if (!startup) {   // check the server before switching anything
+    try {
+      const c = S().sync;
+      const r = await fetch(c.server.replace(/\/+$/, '') + '/api/tunnel/status', { headers: { authorization: 'Bearer ' + c.token }, signal: AbortSignal.timeout(10000) });
+      if (r.status === 404) return fail('Your sync server is too old for this. Update it, then try again.');
+      if (r.status === 401) return fail('The sync server rejected the key, or a proxy in front of it answered 401.');
+      if (!r.ok) return fail('The sync server answered HTTP ' + r.status + '.');
+      if (!(await r.json()).enabled) return fail('The tunnel is switched off on your server. Add ALLOW_TUNNEL=true to its settings and restart it.');
+    } catch (e) { return fail('Could not reach the sync server: ' + e.message); }
+  }
+  try {
+    if (!homeProxy) homeProxy = await hometunnel.startProxy(() => ({ server: S().sync.server, token: S().sync.token, device: S().sync.deviceName || 'mbrowser' }));
+    const pac = 'data:application/x-ns-proxy-autoconfig;base64,' + Buffer.from(hometunnel.pacScript(homeProxy.port)).toString('base64');
+    for (const s of sessions()) await s.setProxy({ mode: 'pac_script', pacScript: pac });
+    homeActive = true;
+    pushAll();
+  } catch (e) { fail('Could not start the tunnel: ' + e.message); }
+}
+
 function afterSettingsChange(p) {
+  if (!p || p === 'general.beta' || p === 'general.homeNetwork') applyHomeNetwork({ startup: !p }).catch(() => {});
   if (!p || p === 'general.beta') loadExtensions(session.defaultSession).catch(() => {});
   if (!p || p === 'general.browserId') for (const ses of uaSessions) { try { ses.setUserAgent(uaForMode(S().general.browserId)); } catch { /* ignore */ } }
   applyThemeSource();
@@ -2254,6 +2295,7 @@ function setupIpc() {
     wc.setZoomFactor(Math.min(3, Math.max(0.25, f + dir * 0.1))); pushState();
   });
   on('lock:now', () => lockNow());
+  on('home:toggle', () => { if (betaOn()) applySetting('general.homeNetwork', !S().general.homeNetwork); });
   handle('lock:info', () => ({ hasPassword: lockPw().has() }));
   handle('lock:unlock', async (_e, pw) => {
     if (!locked) return { ok: true };
@@ -4364,6 +4406,7 @@ app.whenReady().then(async () => {
   setupSession(session.fromPartition('private'));
   extList = load('extensions.json', []).filter((e) => e && typeof e.path === 'string');
   loadExtensions(session.defaultSession).catch(() => {});
+  applyHomeNetwork({ startup: true }).catch(() => {});
   setupIpc();
 
   Menu.setApplicationMenu(null); // no File / Edit / View menu bar

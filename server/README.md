@@ -29,6 +29,7 @@ Settings live in `.env`, the same way as with linuxserver.io containers:
 | `ADMIN_USER` / `ADMIN_PASSWORD` | empty | Create the first administrator from the environment (only while no account exists) |
 | `TRUST_PROXY` | `true` | Trust `X-Forwarded-For` / `-Proto` from your reverse proxy |
 | `SESSION_DAYS` | `7` | How long a web login lasts |
+| `ALLOW_TUNNEL` | `false` | Beta home-network tunnel (`/api/tunnel`); private addresses only; needs Websockets support behind NPM |
 
 ## Upgrading from the old single-token server
 

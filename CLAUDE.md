@@ -36,6 +36,9 @@ not npm's. Browser version in package.json: 0.9.0. Server: 1.0.0 (stdlib-only Py
 - Android automatic sync stays silent when the server is unreachable (changes stay dirty and go up next time); manual Sync now still reports it.
 - Done since the 0.9 rebuild: setup wizard, profile avatars/default/open-last, vault device/master modes, cards and addresses, recycle bins, speed dial overhaul, downloads menu, tab-strip wheel, Windows default-browser flow, passkey setting, Android fullscreen video and background audio.
 
+- Home network mode (beta, desktop): server `ALLOW_TUNNEL=true` exposes `GET /api/tunnel` (Upgrade: mbtunnel, X-Target host:port, private IPs only) and `/api/tunnel/status`. `lib/hometunnel.js` runs a local HTTP proxy over it; `applyHomeNetwork` in main.js sets a PAC on the default and private sessions (LAN ranges and plain/.lan/.local names via proxy). Status-bar chip toggles it. Electron side untested at runtime.
+- Beta items in Settings show an amber BETA badge/highlight (`.beta` in pages/settings.html).
+
 ## Open items
 - All Tabs / recently closed including tabs from other synced sessions.
 - Google sign-in workaround. Translate on desktop (Android has it).

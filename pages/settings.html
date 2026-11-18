@@ -12,6 +12,13 @@
   nav button { display:block; width:100%; text-align:left; border:0; background:none; padding:10px 14px; border-radius:8px; }
   nav button:hover { background:var(--tab); }
   nav button.on { background:var(--accent); color:var(--onaccent); }
+  /* beta items stand out in amber while Beta features is on */
+  nav button.beta { color:#f5a524; box-shadow:inset 3px 0 0 #f5a524; }
+  nav button.beta:hover { background:rgba(245,165,36,.14); }
+  nav button.beta.on { background:#f5a524; color:#1b1200; }
+  nav button.beta::after, .row.beta label::after { content:'BETA'; margin-left:8px; padding:1px 6px; border-radius:6px; font-size:10px; font-weight:700; letter-spacing:.05em; background:rgba(245,165,36,.2); color:#f5a524; vertical-align:middle; }
+  nav button.beta.on::after { background:rgba(27,18,0,.18); color:#1b1200; }
+  .row.beta { box-shadow:inset 3px 0 0 #f5a524; padding-left:12px; border-radius:6px; background:rgba(245,165,36,.07); }
   #settings-search { width:100%; padding:7px 10px; margin-bottom:8px; border:1px solid var(--line); border-radius:8px; background:var(--bg); color:var(--fg); font:inherit; font-size:13px; outline:none; box-sizing:border-box; }
   #settings-search:focus { border-color:var(--accent); }
   main { flex:1; max-width:820px; padding:40px 56px 100px; }
@@ -54,6 +61,7 @@
     ['privacy', 'Privacy'], ['adblocker', 'Adblocker'], ['passwords', 'Passwords'], ['downloads', 'Downloads'], ['extensions', 'Extensions'], ['keyboard', 'Keyboard'],
     ['sync', 'Sync'], ['server', 'Server Admin'], ['import', 'Import'], ['profiles', 'Profiles'], ['about', 'About'],
   ];
+  const BETA_CATS = new Set(['extensions']);   // whole pages that are beta features
   const FIELDS = {
     general: [
       { path: 'general.startup', label: 'On startup', type: 'select', options: [['start', 'Open the start page'], ['home', 'Open the homepage'], ['restore', 'Restore the last session']] },
@@ -62,6 +70,7 @@
       { path: 'general.autoUpdate', label: 'Check for updates automatically', type: 'toggle', help: 'Looks every few hours and shows a notice in the status bar. Turn off to only check from the menu.' },
       { path: 'general.askDefaultBrowser', label: 'Ask to make mbrowser the default browser (Windows)', type: 'toggle', help: 'Shows a notice under the toolbar while another browser is the default.' },
       { path: 'general.beta', label: 'Beta features', type: 'toggle', help: 'Shows features that are still being tested, such as Extensions. Off by default and only for this computer. Turning it off hides them again.' },
+      { path: 'general.homeNetwork', label: 'Home network mode', type: 'toggle', beta: true, help: 'While on, addresses on a home network (192.168.x.x, 10.x.x.x, router.lan, a bare name like nas) open on YOUR HOME network through your sync server, not on the network this computer is on. Everything else goes direct. Needs ALLOW_TUNNEL=true on the server. A status-bar chip shows when it is on.' },
       { path: 'general.newTab', label: 'New tab page', type: 'select', options: [['start', 'Start page'], ['home', 'Homepage'], ['blank', 'Blank page']] },
       { path: 'pages.defaultZoom', label: 'Default page zoom (%)', type: 'number', min: 30, max: 300, help: 'Applies to newly opened tabs.' },
     ],
@@ -237,7 +246,7 @@
   }
 
   function field(def) {
-    const row = el('div', 'row' + (def.type === 'textarea' || def.type === 'lines' ? ' col' : ''));
+    const row = el('div', 'row' + (def.type === 'textarea' || def.type === 'lines' ? ' col' : '') + (def.beta ? ' beta' : ''));
     const label = el('label', null, def.label);
     if (def.help) label.append(el('span', 'help', def.help));
     row.append(label);
@@ -594,7 +603,7 @@
     m.append(el('h1', null, 'Search results'));
     let found = 0;
     for (const [catId, catName] of CATS) {
-      const all = FIELDS[catId] || [];
+      const all = (FIELDS[catId] || []).filter((d) => !d.beta || S.general.beta);
       if (!all.length) continue;
       const matches = catName.toLowerCase().includes(q)
         ? all
@@ -619,7 +628,7 @@
       if (id === 'server' && !S.sync.server) continue;
       if (id === 'extensions' && !S.general.beta) continue;
       const active = !searchQuery && id === cur;
-      const b = el('button', active ? 'on' : '', name);
+      const b = el('button', (active ? 'on' : '') + (BETA_CATS.has(id) ? ' beta' : ''), name);
       b.onclick = () => { cur = id; searchQuery = ''; $('settings-search').value = ''; location.hash = id; render(); };
       nav.append(b);
     }
@@ -766,7 +775,7 @@
       }
     }
     if (cur === 'sync') syncAuthSection(m);
-    (FIELDS[cur] || []).forEach((d) => m.append(field(d)));
+    (FIELDS[cur] || []).forEach((d) => { if (d.beta && !S.general.beta) return; m.append(field(d)); });
     if (cur === 'privacy') await lockSection(m);
     if (cur === 'startpage') m.append(el('p', 'muted', 'Add, edit, group and reorder speed dials on the start page itself. Drag a tile to reorder it, or drop it on a group tab to move it.'));
     if (cur === 'privacy') clearButtons(m);

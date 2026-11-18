@@ -153,6 +153,8 @@
   #status button:hover { color:var(--fg); }
   #st-cog { font-size:14px !important; padding:0 2px !important; }
   #st-lock { padding:0 2px !important; display:flex; align-items:center; }
+  #status #st-home { border-radius:9px; padding:1px 9px !important; font-size:11px !important; font-weight:600; border:1px solid var(--line); }
+  #status #st-home.on { background:#f5a524; color:#1b1200; border-color:#f5a524; }
   #st-lock svg { width:14px; height:14px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
   #st-time { font-size:11px; letter-spacing:.03em; }
   #st-zoom-wrap { display:flex; align-items:center; gap:4px; }
@@ -225,6 +227,7 @@
     <button id="st-lock" title="Lock profile (Ctrl+Shift+L)"></button>
     <span class="dot" id="st-dot" style="display:none"></span>
     <span class="grow" id="st-text"></span>
+    <button id="st-home" style="display:none"></button>
     <span id="st-blocked"></span>
     <button id="dl-pill" title="Downloads (right-click for options)"></button>
     <span id="st-zoom-wrap">
@@ -323,6 +326,7 @@
   $('st-cog').onclick = () => api.newTab('my://settings');
   $('st-lock').innerHTML = '<svg viewBox="0 0 24 24"><rect x="5" y="10.5" width="14" height="9.5" rx="2.5"/><path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5"/></svg>';
   $('st-lock').onclick = () => api.lockNow();
+  $('st-home').onclick = () => api.homeToggle();
   $('st-zoom-pct').onclick = () => api.resetZoom();
   let zoomDragging = false;
   $('st-zoom-range').addEventListener('mousedown', () => { zoomDragging = true; });
@@ -615,6 +619,11 @@
     // status bar
     $('st-text').textContent = s.hover || s.statusText || (s.loading ? 'Loading…' : '');
     $('st-dot').style.display = s.loading ? '' : 'none';
+    const hm = $('st-home'), home = s.home || {};
+    hm.style.display = home.avail ? '' : 'none';
+    hm.className = home.on ? 'on' : '';
+    hm.textContent = home.on ? 'Home network' : 'Home network: off';
+    hm.title = home.on ? 'Home network mode is ON: addresses like 192.168.1.1 open on your HOME network, not this computer\u2019s. Click to turn off.' : 'Turn on home network mode (beta)';
     $('st-blocked').textContent = s.blocked > 0 && s.blockerOn && !s.siteAllowed ? s.blocked + ' blocked' : '';
     const lg = s.logins;
     $('key').classList.toggle('show', !!(lg && (lg.form || lg.count > 0)));

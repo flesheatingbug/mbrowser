@@ -258,6 +258,7 @@ The web interface and API will be available at **http://your-server:4242**.
 | `ADMIN_PASSWORD` | *(blank)* | Auto-create first admin on first run |
 | `TRUST_PROXY` | `true` | Trust `X-Forwarded-For` from a reverse proxy |
 | `SESSION_DAYS` | `7` | Web login session lifetime |
+| `ALLOW_TUNNEL` | `false` | Beta: lets the desktop browser's Home network mode reach private LAN addresses through the server (needs Websockets support on Nginx Proxy Manager) |
 
 ### Behind Nginx Proxy Manager
 

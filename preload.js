@@ -33,6 +33,7 @@ contextBridge.exposeInMainWorld('api', {
   tablistReopen: send('tablist:reopen'),
   onTablistData: (cb) => ipcRenderer.on('tablist:data', (_e, d) => cb(d)),
   lockNow: send('lock:now'),
+  homeToggle: send('home:toggle'),
   lockInfo: () => ipcRenderer.invoke('lock:info'),
   lockUnlock: (pw) => ipcRenderer.invoke('lock:unlock', pw),
   onLockShown: (cb) => ipcRenderer.on('lock:shown', () => cb()),
