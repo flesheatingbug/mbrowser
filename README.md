@@ -139,6 +139,7 @@ The native Android app: a speed dial start page with your wallpaper, a full menu
 <table>
 <tr><td align="center"><img src="docs/screenshots/android-start-page.png" width="200"><br><sub>Start page</sub></td><td align="center"><img src="docs/screenshots/android-menu.png" width="200"><br><sub>Menu</sub></td><td align="center"><img src="docs/screenshots/android-appearance.png" width="200"><br><sub>Appearance</sub></td><td align="center"><img src="docs/screenshots/android-toolbar.png" width="200"><br><sub>Bottom toolbar</sub></td></tr>
 <tr><td align="center"><img src="docs/screenshots/android-start-page-settings.png" width="200"><br><sub>Start page settings</sub></td><td align="center"><img src="docs/screenshots/android-settings.png" width="200"><br><sub>Settings</sub></td><td align="center"><img src="docs/screenshots/android-privacy.png" width="200"><br><sub>Privacy and security</sub></td><td align="center"><img src="docs/screenshots/android-sync.png" width="200"><br><sub>Sync</sub></td></tr>
+<tr><td align="center"><img src="docs/screenshots/android-appearance-light.png" width="200"><br><sub>Light theme: Appearance</sub></td><td align="center"><img src="docs/screenshots/android-settings-light.png" width="200"><br><sub>Light theme: Settings</sub></td></tr>
 </table>
 
 ---
