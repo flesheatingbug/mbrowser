@@ -66,6 +66,7 @@ class MainActivity : BaseActivity() {
         var desktop = false
         var priv = false                // private tab: no history, thumbnails or syncing
         var isolated = false            // private tab with its own separate cookies and storage
+        @Volatile var lastMaster: String? = null  // the last HLS master playlist (better to cast than one quality's chunk list)
         @Volatile var lastMedia: String? = null   // the last stream or media file the page asked for, for casting
     }
 
@@ -653,10 +654,11 @@ setInterval(tick,700);addEventListener('scroll',tick,{passive:true});tick()})()"
                         title = o.optString("n").ifBlank { title }
                     }
                 } catch (_: Exception) { /* fall back to the last stream the page asked for */ }
-                if (url.isEmpty() || url.startsWith("blob:")) { url = tab.lastMedia ?: ""; if (url.isNotEmpty() && !Caster.looksLikeMedia(url)) url = "" ; if (tab.lastMedia != null) { pos = 0; live = url.contains(".m3u8", true) } }
+                if (url.isEmpty() || url.startsWith("blob:")) { url = tab.lastMaster ?: tab.lastMedia ?: ""; if (url.isNotEmpty() && !Caster.looksLikeMedia(url)) url = "" ; if (tab.lastMedia != null || tab.lastMaster != null) { pos = 0; live = url.contains(".m3u8", true) } }
                 if (url.isEmpty() || !(url.startsWith("http://") || url.startsWith("https://"))) {
                     Toast.makeText(this, "Nothing castable here. Start the video or audio first. Sites with protected content can't be cast; use Cast screen in Android's quick settings instead.", Toast.LENGTH_LONG).show(); return@evaluateJavascript
                 }
+                url = Caster.clean(url)
                 c.send(Caster.Media(url, title.ifBlank { Thumbs.hostOf(tab.url) }, Caster.typeFor(url, video), pos, live))
                 // the phone stops playing it, the TV takes over
                 tab.web.evaluateJavascript("document.querySelectorAll('video,audio').forEach(function(m){try{m.pause()}catch(e){}})", null)
@@ -764,7 +766,13 @@ setInterval(tick,700);addEventListener('scroll',tick,{passive:true});tick()})()"
             }
 
             override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
-                if (Caster.looksLikeMedia(request.url.toString())) tab.lastMedia = request.url.toString()
+                request.url.toString().let { u ->
+                    if (Caster.looksLikeMedia(u)) {
+                        val cu = Caster.clean(u)
+                        tab.lastMedia = cu
+                        if (cu.substringBefore('?').endsWith(".m3u8", true) && !cu.contains("chunklist", true)) tab.lastMaster = cu
+                    }
+                }
                 if (prefs.blockTrackers && !request.isForMainFrame && !prefs.blockerOff(Thumbs.hostOf(tab.url)) &&
                     AdBlock.shouldBlock(request.url.toString(), Thumbs.hostOf(tab.url), requestType(request))) {
                     return WebResourceResponse("text/plain", "utf-8", ByteArrayInputStream(ByteArray(0)))

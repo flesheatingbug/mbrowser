@@ -111,6 +111,16 @@ class Caster(private val act: AppCompatActivity) {
             return EXT.keys.any { path.endsWith(".$it") }
         }
 
+        /** Drops the low-latency HLS "wait for this segment" parameters, which make a player hang on a stale request. */
+        fun clean(url: String): String {
+            val u = try { android.net.Uri.parse(url) } catch (_: Exception) { return url }
+            val drop = setOf("_HLS_msn", "_HLS_part", "_HLS_skip")
+            if (u.queryParameterNames.none { it in drop }) return url
+            val b = u.buildUpon().clearQuery()
+            for (n in u.queryParameterNames) if (n !in drop) for (v in u.getQueryParameters(n)) b.appendQueryParameter(n, v)
+            return b.build().toString()
+        }
+
         fun typeFor(url: String, isVideo: Boolean): String {
             val ext = url.substringBefore('?').substringBefore('#').lowercase().substringAfterLast('.', "")
             return EXT[ext] ?: if (isVideo) "video/mp4" else "audio/mpeg"
