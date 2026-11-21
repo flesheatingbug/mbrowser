@@ -2915,7 +2915,7 @@ function setupIpc() {
     const pw = vault.reveal(id);
     if (pw == null) return false;
     clipboard.writeText(pw);
-    setTimeout(() => { if (clipboard.readText() === pw) clipboard.clear(); }, 30000); // wipe it again after 30 s
+    setTimeout(() => { try { if (clipboard.readText() === pw) clipboard.clear(); } catch { /* clipboard busy */ } }, 30000); // wipe it again after 30 s
     return true;
   }, PAGE_ONLY);
   handle('vault:save', (_e, entry) => {
@@ -3043,7 +3043,8 @@ function setupIpc() {
   }, BOTH);
   on('url:menu', (e, hasSel) => {
     const ui = e.sender;
-    const clip = clipboard.readText();
+    let clip = '';
+    try { const r = clipboard.readText(); clip = typeof r === 'string' ? r : ''; } catch { /* clipboard busy (Wayland): treat as empty */ }
     popup(Menu.buildFromTemplate([
       { label: 'Cut', enabled: !!hasSel, click: () => ui.cut() },
       { label: 'Copy', enabled: !!hasSel, click: () => ui.copy() },
