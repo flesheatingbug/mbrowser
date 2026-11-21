@@ -547,12 +547,12 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
 
     private fun closePrivateTabs() {
         if (tabs.none { it.priv }) return
-        val wasHome = cur()?.priv == true
-        tabs.filter { it.priv }.forEach { it.web.destroy() }
+        val keep = cur()?.takeIf { !it.priv }   // stay on the tab you were on if it is a normal one
+        tabs.filter { it.priv }.forEach { (it.web.parent as? ViewGroup)?.removeView(it.web); it.web.destroy() }
         tabs.removeAll { it.priv }
         if (tabs.isEmpty()) newTab(null)
-        if (current >= tabs.size || wasHome) current = tabs.size - 1
-        hideSwitcher(); render(); cleanupPrivate()
+        current = keep?.let { tabs.indexOf(it) }?.takeIf { it >= 0 } ?: (tabs.size - 1)
+        hideSwitcher(); setBars(true); render(); cleanupPrivate(); updatePrivateNotice()
     }
 
 
@@ -1154,6 +1154,7 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
         container.removeAllViews()
         val t = cur() ?: return
         if (t.home && t.priv) {
+            setBars(true)
             (privateInfo.parent as? ViewGroup)?.removeView(privateInfo)
             (privateInfo as TextView).text = "Private tab\n\nHistory, thumbnails and tab syncing are off for this tab. " +
                 (if (t.isolated) "Cookies and site data are kept apart from your normal tabs and are deleted when you close your private tabs."
@@ -1162,6 +1163,7 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
             urlBar.setText("")
             progress.visibility = View.INVISIBLE; pillFill.set(0)
         } else if (t.home) {
+            setBars(true)   // the speed dial has nothing to scroll, so the bars must be showing
             (startPage.root.parent as? ViewGroup)?.removeView(startPage.root)
             container.addView(startPage.root, FrameLayout.LayoutParams(-1, -1))
             urlBar.setText("")

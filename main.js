@@ -448,6 +448,27 @@ function securityLevel(url, host) {
   return { level: 'internal', label: '' };
 }
 
+// ---------- print preview ----------
+// Electron has no print preview of its own, so the page is rendered to a PDF and opened in a tab: the built-in PDF viewer
+// shows every page, and has Print and Save buttons.
+const printFiles = [];
+async function printPreview() {
+  const t = activeTab();
+  if (!t || t.deferredUrl) return;
+  const url = t.wc.getURL();
+  if (!/^https?:|^file:|^my:/i.test(url)) return;
+  try {
+    const data = await t.wc.printToPDF({ printBackground: true, preferCSSPageSize: true });
+    const f = path.join(os.tmpdir(), 'mbrowser-print-' + Date.now() + '.pdf');
+    fs.writeFileSync(f, data, { mode: 0o600 });
+    printFiles.push(f);
+    newTab(require('url').pathToFileURL(f).href, { after: t.id, private: t.private });
+  } catch (e) {
+    dialog.showMessageBox({ type: 'warning', title: 'Print preview', message: 'Could not make a preview of this page', detail: String(e.message || e) });
+  }
+}
+app.on('will-quit', () => { for (const f of printFiles) { try { fs.unlinkSync(f); } catch { /* gone */ } } });
+
 // ---------- state sent to the chrome views ----------
 function stateFor() {
   const t = cur.tabs.get(cur.activeId);
@@ -1134,7 +1155,8 @@ const COMMANDS = [
   { id: 'page-zoom-out', label: 'Zoom Out', keys: ['Ctrl+-'], run: () => zoom(-0.1) },
   { id: 'page-zoom-reset', label: 'Reset Zoom', keys: ['Ctrl+0'], run: () => zoom(0) },
   { id: 'page-fullscreen', label: 'Toggle Fullscreen', keys: ['F11'], run: () => { cur.win.setFullScreen(!cur.win.isFullScreen()); } },
-  { id: 'page-print', label: 'Print', keys: ['Ctrl+P'], run: () => activeWc()?.print() },
+  { id: 'page-print', label: 'Print preview…', keys: ['Ctrl+P'], run: () => printPreview() },
+  { id: 'page-print-system', label: 'Print with system dialog…', keys: [], run: () => activeWc()?.print({ silent: false, printBackground: true }, () => {}) },
   { id: 'page-translate', label: 'Translate Page', keys: [], run: () => translateTab(null) },
   { id: 'page-source', label: 'View Page Source', keys: ['Ctrl+U'], run: () => { const u = activeWc()?.getURL(); if (u && isWeb(u)) newTab('view-source:' + u, { after: cur.activeId }); } },
   { id: 'page-devtools', label: 'Developer Tools', keys: ['F12'], run: () => activeWc()?.toggleDevTools() },
