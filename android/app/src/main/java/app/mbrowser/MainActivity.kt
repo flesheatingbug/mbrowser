@@ -79,6 +79,9 @@ class MainActivity : BaseActivity() {
         for(var k=ins.indexOf(pw)-1;k>=0;k--){var ty=(ins[k].type||'text').toLowerCase();if(['text','email','tel'].indexOf(ty)>-1&&ins[k].value){user=ins[k].value;break;}}
         var key=user+'\u0000'+pw.value;if(key===last)return;last=key;
         try{mbNative.loginSubmitted(location.href,user,pw.value);}catch(e){}}
+      var told='';function seen(){var p=document.querySelector('input[type=password]');if(!p||p.offsetParent===null||told===location.href)return;told=location.href;try{mbNative.loginForm(location.href);}catch(e){}}
+      seen();setTimeout(seen,800);setTimeout(seen,2500);document.addEventListener('focusin',function(e){if(e.target&&e.target.tagName==='INPUT')seen();},true);
+      try{var mo=new MutationObserver(function(){clearTimeout(window.__mbSeen);window.__mbSeen=setTimeout(seen,400);});mo.observe(document.documentElement,{childList:true,subtree:true});}catch(e){}
       document.addEventListener('submit',grab,true);
       document.addEventListener('click',function(e){var b=e.target.closest&&e.target.closest('button,input[type=submit]');if(b&&b.type==='submit')grab();},true);
       document.addEventListener('keydown',function(e){if(e.key==='Enter')grab();},true);})();"""
@@ -924,6 +927,7 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
         w.addJavascriptInterface(object {
             @JavascriptInterface fun blockRefresh(b: Boolean) { refreshBlocked = b }
             @JavascriptInterface fun cast() { runOnUiThread { castAction(tab) } }
+            @JavascriptInterface fun loginForm(url: String) { runOnUiThread { onLoginForm(tab, url) } }
             @JavascriptInterface fun loginSubmitted(url: String, user: String, pass: String) { runOnUiThread { offerSaveLogin(tab, url, user, pass) } }
             @JavascriptInterface fun cosmetic(host: String, ids: String, classes: String, first: Int): String {
                 if (!prefs.blockTrackers || prefs.blockerOff(host)) return ""   // the per-site switch turns off page-element hiding too
@@ -1581,9 +1585,14 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
 
     // ---------- offer to save a login that was just submitted ----------
     private fun offerSaveLogin(t: Tab, url: String, user: String, pass: String) {
-        if (t.priv || pass.isEmpty() || !Vault.exists(this)) return
+        if (t.priv || pass.isEmpty()) return
+        if (!Vault.exists(this)) {
+            com.google.android.material.snackbar.Snackbar.make(findViewById(R.id.content), "Passwords aren't set up on this phone", 8000)
+                .setAction("Set up") { startActivity(Intent(this, PasswordsActivity::class.java)) }.show()
+            return
+        }
         Vault.tryAutoUnlock(this)
-        if (!Vault.unlocked()) return
+        if (!Vault.unlocked()) { unlockDialog { offerSaveLogin(t, url, user, pass) }; return }
         val origin = Vault.originOf(url) ?: return
         val existing = Vault.findByOrigin(origin).find { it.optString("username") == user }
         if (existing != null && existing.optString("password") == pass) return
@@ -1600,15 +1609,59 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
             .setNegativeButton("Not now", null).show()
     }
 
+    // ---------- unlock prompt when a login page needs the passwords ----------
+    private var offeredFor = ""
+
+    /** A login form appeared: unlock the passwords if they are locked, then offer the saved login for this site. */
+    private fun onLoginForm(t: Tab, url: String) {
+        if (t.priv || t !== cur() || !Vault.exists(this) || offeredFor == url) return
+        offeredFor = url
+        Vault.tryAutoUnlock(this)
+        if (!Vault.unlocked()) { if (Vault.isDevice(this)) return; unlockDialog { offerFill(t) }; return }
+        offerFill(t)
+    }
+
+    private fun offerFill(t: Tab) {
+        val origin = Vault.originOf(t.url) ?: return
+        val found = Vault.findByOrigin(origin)
+        if (found.isEmpty() || t !== cur()) return
+        com.google.android.material.snackbar.Snackbar.make(findViewById(R.id.content), "Fill saved login for " + Vault.hostOf(origin) + "?", 8000)
+            .setAction("Fill") { fillLogin() }.show()
+    }
+
+    /** Asks for the master password, with the choice of staying unlocked. [then] runs once it is unlocked. */
+    private fun unlockDialog(then: () -> Unit) {
+        val col = LinearLayout(this); col.orientation = LinearLayout.VERTICAL; col.setPadding((20 * resources.displayMetrics.density).toInt(), (8 * resources.displayMetrics.density).toInt(), (20 * resources.displayMetrics.density).toInt(), 0)
+        val pw = EditText(this); pw.hint = "Master password"; pw.setSingleLine()
+        pw.inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+        val keep = android.widget.CheckBox(this); keep.text = "Keep passwords unlocked"; keep.isChecked = prefs.vaultKeep != "app"
+        col.addView(pw); col.addView(keep)
+        val dlg = AlertDialog.Builder(this).setTitle("Unlock passwords").setView(col)
+            .setPositiveButton("Unlock", null).setNegativeButton("Not now", null).create()
+        dlg.setOnShowListener {
+            dlg.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val m = pw.text.toString()
+                if (keep.isChecked && prefs.vaultKeep == "app") prefs.vaultKeep = "always" else if (!keep.isChecked) prefs.vaultKeep = "app"
+                dlg.getButton(AlertDialog.BUTTON_POSITIVE).isEnabled = false
+                Thread {
+                    val ok = Vault.unlock(this, m)
+                    runOnUiThread {
+                        if (ok) { dlg.dismiss(); then() }
+                        else { pw.error = "Wrong password"; dlg.getButton(AlertDialog.BUTTON_POSITIVE).isEnabled = true }
+                    }
+                }.start()
+            }
+        }
+        dlg.show()
+    }
+
     // ---------- fill a saved login into the page ----------
     private fun fillLogin() {
         val t = cur()
         if (t == null || t.home) { Toast.makeText(this, "Open a login page first", Toast.LENGTH_SHORT).show(); return }
         Vault.tryAutoUnlock(this)
-        if (!Vault.unlocked()) {
-            Toast.makeText(this, "Unlock your passwords first", Toast.LENGTH_SHORT).show()
-            picker.launch(Intent(this, PasswordsActivity::class.java)); return
-        }
+        if (!Vault.exists(this)) { Toast.makeText(this, "Set up passwords first (Settings > Personal data)", Toast.LENGTH_LONG).show(); return }
+        if (!Vault.unlocked()) { unlockDialog { fillLogin() }; return }
         val origin = Vault.originOf(t.url) ?: return
         val found = Vault.findByOrigin(origin)
         when {

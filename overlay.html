@@ -277,9 +277,11 @@
       b.append(mk('h2', '', 'Unlock passwords'));
       b.append(mk('div', 'sub', 'Enter your master password to fill saved logins.'));
       master = mk('input'); master.type = 'password'; master.placeholder = 'Master password';
-      b.append(master, err);
+      const keepRow = mk('label', 'sub'); keepRow.style.cssText = 'display:flex;gap:8px;align-items:center;margin:8px 0';
+      const keep = mk('input'); keep.type = 'checkbox'; keep.checked = !!d.keep; keepRow.append(keep, document.createTextNode('Keep passwords unlocked on this computer'));
+      b.append(master, keepRow, err);
       const btns = mk('div', 'btns');
-      const go = mk('button', 'primary', 'Unlock'); go.onclick = () => run({ action: 'unlock', master: master.value, after: d.after });
+      const go = mk('button', 'primary', 'Unlock'); go.onclick = () => run({ action: 'unlock', master: master.value, after: d.after, keep: keep.checked });
       const no = mk('button', '', 'Cancel'); no.onclick = () => api.pwAction({ action: 'dismiss' });
       btns.append(go, no); b.append(btns);
     }

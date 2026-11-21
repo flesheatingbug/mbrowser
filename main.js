@@ -797,6 +797,7 @@ function wire(tab) {
       tab.status = 'Connecting to ' + (hostOf(details.url) || 'site') + '…';
     }
   });
+  wc.on('did-start-navigation', (d) => { if (d && d.isMainFrame && !d.isSameDocument) tab.unlockAsked = false; });
   wc.on('did-navigate', h((_e, url) => {
     if (tab.owner.pwPending && !tab.owner.pwPending.shown && Date.now() - tab.owner.pwPending.at < 20000) maybeShowPwSave(tab.owner);
     tab.status = 'Loading ' + (hostOf(url) || 'page') + '…';
@@ -1248,7 +1249,7 @@ function overlayBounds(mode) {
       const x = Math.max(0, Math.min(width - 330, Math.round(cur.contentRect.x + (d.x || 0))));
       return { x, y: Math.round(cur.contentRect.y + (d.y || 0)), width: 320, height: rows * 40 + 12 };
     }
-    const h = d.view === 'save' ? 196 + (d.needsCreate ? 100 : d.needsUnlock ? 56 : 0) : 186;
+    const h = d.view === 'save' ? 196 + (d.needsCreate ? 100 : d.needsUnlock ? 56 : 0) : 224;
     return { x: Math.max(0, width - 392), y: cur.contentRect.y, width: 384, height: h };
   }
   if (mode === 'tablist') {
@@ -1444,8 +1445,12 @@ function showPwFill(w, tab, rect, force = false) {
   if (!origin) return;
   if (cur.overlayMode && !(cur.overlayMode === 'pw' && cur.overlayData && cur.overlayData.view === 'fill')) return;
   if (!vault.unlocked()) {
-    // vault locked — don't show unlock prompt on field focus; user can unlock via key icon
-    if (force) showOverlay('pw', { view: 'fill', items: [], locked: true, x: 0, y: 0 });
+    if (force) { showOverlay('pw', { view: 'fill', items: [], locked: true, x: 0, y: 0 }); return; }
+    // a login form is here and the vault is locked: offer to unlock it (once per page), with a "keep unlocked" choice
+    if (!vault.isDevice() && !tab.unlockAsked) {
+      tab.unlockAsked = true;
+      showOverlay('pw', { view: 'unlock', after: 'fill', keep: !!S().passwords.remember });
+    }
     return;
   }
   const z = tab.wc.getZoomFactor() || 1;
@@ -2609,7 +2614,10 @@ function setupIpc() {
   ipcMain.on('pw:form', (e, has) => {
     const t = tabByWc.get(e.sender.id);
     if (!t) return;
-    if (!!has !== !!t.loginForm) { t.loginForm = !!has; use(t.owner); pushState(); }
+    if (!!has !== !!t.loginForm) {
+      t.loginForm = !!has; use(t.owner); pushState();
+      if (has && t.id === t.owner.activeId && vault && vault.exists() && !vault.unlocked() && S().passwords.enabled && !t.private) showPwFill(t.owner, t, { left: 0, bottom: 0 });
+    }
   });
   ipcMain.on('pw:focus', (e, rect) => {
     const t = tabByWc.get(e.sender.id);
@@ -2690,7 +2698,7 @@ function setupIpc() {
       return { ok: true };
     }
     if (act === 'manage') { hideOverlay(false); openInternal('passwords'); return { ok: true }; }
-    if (act === 'unlockPrompt') { showOverlay('pw', { view: 'unlock', after: 'fill' }); return { ok: true }; }
+    if (act === 'unlockPrompt') { showOverlay('pw', { view: 'unlock', after: 'fill', keep: !!S().passwords.remember }); return { ok: true }; }
     if (act === 'unlock' || act === 'create') {
       const master = String(a.master || '');
       if (act === 'create') {
@@ -2699,6 +2707,10 @@ function setupIpc() {
         if (master !== String(a.confirm || '')) return { error: 'The two passwords do not match.' };
         vault.create(master);
       } else if (!vault.unlock(master)) { await sleep(500); return { error: 'Wrong master password.' }; }
+      if (act === 'unlock' && typeof a.keep === 'boolean' && a.keep !== !!S().passwords.remember) {
+        applySetting('passwords.remember', a.keep);
+        if (!a.keep) delKey(KEYFILES.remember);
+      }
       afterUnlock();
       if (a.after === 'fill' && t && cur.pwField) showPwFill(cur, t, { left: cur.pwField.x / (t.wc.getZoomFactor() || 1), bottom: (cur.pwField.y - 4) / (t.wc.getZoomFactor() || 1) });
       else hideOverlay();
