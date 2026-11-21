@@ -613,7 +613,8 @@
     $('star').classList.toggle('on', s.bookmarked);
     $('shield').classList.toggle('off', !s.blockerOn || s.siteAllowed);
     $('shieldn').textContent = s.blocked > 0 && s.blockerOn && !s.siteAllowed ? s.blocked : '';
-    shownUrl = /^my:\/\/start/.test(s.url) || s.url === 'about:blank' ? '' : s.url;
+    const su = s.shown || s.url;
+    shownUrl = /^my:\/\/start/.test(su) || su === 'about:blank' ? '' : su;
     if (!editing) urlInput.value = shownUrl;
 
     const sec = $('sec');

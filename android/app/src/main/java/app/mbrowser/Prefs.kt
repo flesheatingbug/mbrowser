@@ -166,6 +166,12 @@ class Prefs(ctx: Context) {
     var homeActive: String
         get() = str(pk("homeActive"), "")
         set(v) = put(pk("homeActive"), v)
+    var lazyTabs: Boolean            // restored tabs load only when you open them
+        get() = bool("lazyTabs", true)
+        set(v) = putB("lazyTabs", v)
+    var rememberEngine: Boolean      // a search engine picked under the address bar becomes the default
+        get() = bool("rememberEngine", false)
+        set(v) = putB("rememberEngine", v)
     var beta: Boolean
         get() = bool("beta", false)
         set(v) = putB("beta", v)

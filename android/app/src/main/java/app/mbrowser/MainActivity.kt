@@ -417,6 +417,7 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
             lp.marginEnd = (10 * d).toInt()
             tv.setOnClickListener {
                 engineOverride = e
+                if (prefs.rememberEngine) Settings.setDefaultEngine(e.id)
                 urlBar.hint = "Search with ${e.name}"
                 showEngines()
                 val text = urlBar.text.toString().trim()
@@ -589,6 +590,7 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
             val u = o.optString("url")
             if (u.isNotEmpty()) { t.home = false; t.url = u; t.title = o.optString("title"); t.pending = u }
         }
+        if (!prefs.lazyTabs) tabs.forEach { t -> t.pending?.let { p -> t.pending = null; t.web.loadUrl(p) } }
         switchTo(sessionPrefs().getInt("current", 0))
         return true
     }
@@ -842,7 +844,26 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
                 val u = request.url
                 val scheme = u.scheme ?: return false
-                if (scheme == "http" || scheme == "https") return false
+                if (scheme == "http" || scheme == "https") {
+                    // a Play Store page opens in the Play Store app, like other browsers do
+                    if (request.isForMainFrame && request.hasGesture() && u.host == "play.google.com" && (u.path ?: "").startsWith("/store/apps/details")) {
+                        val id = u.getQueryParameter("id")
+                        if (!id.isNullOrEmpty()) {
+                            try { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=" + Uri.encode(id))).setPackage("com.android.vending")); return true } catch (_: Exception) { }
+                        }
+                    }
+                    return false
+                }
+                if (scheme == "intent") {   // intent:// links (Play Store, apps): open the app, else the page's own fallback address
+                    return try {
+                        val i = Intent.parseUri(u.toString(), Intent.URI_INTENT_SCHEME)
+                        i.addCategory(Intent.CATEGORY_BROWSABLE); i.component = null; i.selector = null
+                        try { startActivity(i) } catch (_: Exception) {
+                            i.getStringExtra("browser_fallback_url")?.let { f -> if (f.startsWith("http")) view.loadUrl(f) }
+                        }
+                        true
+                    } catch (_: Exception) { true }
+                }
                 return try { startActivity(Intent(Intent.ACTION_VIEW, u)); true } catch (_: Exception) { true }
             }
 
@@ -873,6 +894,13 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
                 }
                 tab.url = url; tab.home = false; tab.icon = favicon ?: tab.icon
                 if (tab === cur()) { urlBar.setText(url); progress.visibility = View.VISIBLE; pillFill.setColor(tc(R.attr.mbAccent)); pillFill.set(5); updateChrome() }
+            }
+
+            // redirects and in-page (single page app) navigation never reach onPageFinished: keep the address in step
+            override fun doUpdateVisitedHistory(view: WebView, url: String, isReload: Boolean) {
+                if (url.startsWith("about:") || tab.home) return
+                tab.url = url
+                if (tab === cur() && !urlBar.hasFocus()) { urlBar.setText(url); updateChrome() }
             }
 
             override fun onPageCommitVisible(view: WebView, url: String) {

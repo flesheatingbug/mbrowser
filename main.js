@@ -301,6 +301,8 @@ const themeCss = () => {
 };
 
 // ---------- search / url ----------
+// the engine picked under the address bar applies to the next search only (unless Search settings say to keep it)
+const effEngine = () => engineById(cur && cur.engineTemp ? cur.engineTemp : S().search.default);
 function engineById(id) {
   const list = S().search.engines;
   return list.find((e) => e.id === id) || list[0];
@@ -327,7 +329,7 @@ function normalize(input) {
     const e = S().search.engines.find((x) => x.nick && x.nick === m[1]);
     if (e) return searchUrl(e, m[2]);
   }
-  return searchUrl(engineById(S().search.default), input);
+  return searchUrl(effEngine(), input);
 }
 
 // Load what the user typed. If we had to guess "https://", remember it so we can fall back to http.
@@ -456,6 +458,7 @@ function stateFor() {
   return {
     activeId: cur.activeId,
     url,
+    shown: (() => { if (/^my:\/\/error/i.test(url)) { try { return new URL(url).searchParams.get('url') || url; } catch { /* keep */ } } return url; })(),
     canBack: wc ? wc.navigationHistory.canGoBack() : false,
     canForward: wc ? wc.navigationHistory.canGoForward() : false,
     bookmarked: bookmarks.some((b) => b.url === url && !b.deleted && !b.recycleBin),
@@ -477,7 +480,7 @@ function stateFor() {
     wheelScrollTabs: S().tabs.wheelScrolls !== false,
     clickTabScrollsTop: S().tabs.clickTabScrollsTop !== false,
     toolbarButtons: S().appearance.toolbar || {},
-    engine: (() => { const e = engineById(S().search.default) || {}; let host = ''; try { host = new URL(e.url.replace('%s', 'x')).origin; } catch { /* none */ } return { name: e.name || '', origin: host }; })(),
+    engine: (() => { const e = effEngine() || {}; let host = ''; try { host = new URL(e.url.replace('%s', 'x')).origin; } catch { /* none */ } return { name: e.name || '', origin: host }; })(),
     detectedLang: (t && t.detectedLang) || '',
     systemLang: app.getLocale().split('-')[0].toLowerCase(),
     defaultBarVisible: !cur.win.isFullScreen() && defaultBarWanted(),
@@ -712,6 +715,19 @@ if (BIS.length) dbg('troubleshooting switches off: ' + BIS.join(','));
 app.on('child-process-gone', (_e, d) => dbg('process gone: ' + d.type + ' name=' + (d.name || d.serviceName || '?') + ' ' + d.reason + ' code=' + d.exitCode + ' electron=' + process.versions.electron + ' chrome=' + process.versions.chrome + ' gpu=' + JSON.stringify(Object.keys(app.getGPUFeatureStatus ? app.getGPUFeatureStatus() : {}).length)));
 { let last = Date.now(); setInterval(() => { const now = Date.now(), lag = now - last - 1000; last = now; if (lag > 1500) dbg('main process was blocked for ' + lag + ' ms'); }, 1000).unref(); }
 
+// Links that belong to another app (Microsoft Store, mail, Steam...) are handed to the system after asking, like other browsers do.
+const EXTERNAL = { 'ms-windows-store': 'the Microsoft Store', mailto: 'your mail app', tel: 'your phone app', sms: 'your messages app', steam: 'Steam', spotify: 'Spotify',
+  discord: 'Discord', slack: 'Slack', zoommtg: 'Zoom', zoomus: 'Zoom', msteams: 'Microsoft Teams', vscode: 'Visual Studio Code', magnet: 'your torrent app', webcal: 'your calendar' };
+function externalScheme(url) { const m = /^([a-z][a-z0-9+.-]*):/i.exec(url || ''); const s = m && m[1].toLowerCase(); return s && EXTERNAL[s] ? s : null; }
+function openExternalLink(url, win) {
+  const s = externalScheme(url);
+  if (!s || url.length > 2000) return false;
+  dialog.showMessageBox(win && !win.isDestroyed() ? win : undefined, { type: 'question', buttons: ['Open', 'Cancel'], defaultId: 0, cancelId: 1,
+    title: 'Open ' + EXTERNAL[s], message: 'This page wants to open ' + EXTERNAL[s] + '.', detail: url.slice(0, 200) })
+    .then((r) => { if (r.response === 0) shell.openExternal(url).catch(() => {}); }).catch(() => {});
+  return true;
+}
+
 function wire(tab) {
   const wc = tab.wc;
   wc.on('unresponsive', () => { dbg('page not responding: ' + wc.getURL()); tab.status = 'Page not responding (details: ' + debugLogPath() + ')'; pushSoon(); });
@@ -747,7 +763,10 @@ function wire(tab) {
     }
   }));
   wc.on('update-target-url', h((_e, url) => { tab.hover = url; pushState(); }));
+  wc.on('will-navigate', (e, url) => { if (externalScheme(url)) { e.preventDefault(); use(tab.owner); openExternalLink(url, tab.owner.win); } });
   wc.on('did-navigate-in-page', h(() => pushState()));
+  wc.on('did-redirect-navigation', h(() => pushSoon()));
+  wc.on('did-frame-navigate', h((_e, _u, _c, _t, isMain) => { if (isMain) pushState(); }));
   wc.on('audio-state-changed', h(() => pushState()));
   wc.on('page-favicon-updated', h((_e, favs) => { tab.favicon = favs[0] || ''; pushState(); }));
   wc.on('did-start-navigation', (details) => {
@@ -794,6 +813,7 @@ function wire(tab) {
   let lastPopupIsAuth = false;
   wc.setWindowOpenHandler(({ url, disposition, features }) => {
     use(tab.owner);
+    if (externalScheme(url)) { openExternalLink(url, tab.owner.win); return { action: 'deny' }; }
     // Sign-in flows (Google, etc.) open a real popup that talks back to the page that opened it.
     // That only works as an actual window with an opener, so allow those; links become tabs.
     if (disposition === 'new-window' && features) {
@@ -1263,7 +1283,7 @@ function suggestItems(q) {
   const eng = nm && S().search.engines.find((e) => e.nick && e.nick === nm[1]);
   if (urlish) push({ kind: 'search', text, label: normalize(text), detail: 'Go to address', icon: '→' });
   else if (eng) push({ kind: 'search', text, label: `Search ${eng.name} for “${nm[2]}”`, detail: eng.name, icon: '🔍' });
-  else push({ kind: 'search', text, label: `Search for “${text}”`, detail: engineById(S().search.default).name, icon: '🔍' });
+  else push({ kind: 'search', text, label: `Search for “${text}”`, detail: effEngine().name, icon: '🔍' });
 
   cur.order.map((id) => cur.tabs.get(id))
     .filter((t) => t.id !== cur.activeId && match(t.wc.getTitle(), t.wc.getURL())).slice(0, 3)
@@ -1319,7 +1339,7 @@ function paletteItems(q) {
       out.push({ kind: 'url', url: h.url, label: h.title || h.url, detail: h.url });
     }
     const looksLikeUrl = /\.|:\/\//.test(q) && !/\s/.test(q.trim());
-    const item = { kind: 'search', text: q, label: `${looksLikeUrl ? 'Open' : 'Search'} “${q.trim()}”`, detail: looksLikeUrl ? '' : engineById(S().search.default).name };
+    const item = { kind: 'search', text: q, label: `${looksLikeUrl ? 'Open' : 'Search'} “${q.trim()}”`, detail: looksLikeUrl ? '' : effEngine().name };
     if (looksLikeUrl) out.unshift(item); else out.push(item);
   }
   return out.slice(0, 40);
@@ -2326,11 +2346,14 @@ function setupIpc() {
   on('tab:close', (_e, id) => closeTab(id));
   on('tab:menu', (_e, id) => tabMenu(id));
   on('engine:menu', () => {
-    const m = new Menu(); const def = engineById(S().search.default);
-    m.append(new MenuItem({ label: 'Search with…', enabled: false }));
+    const m = new Menu(); const def = effEngine(); const w = cur;
+    m.append(new MenuItem({ label: S().search.rememberSwitched ? 'Search with… (becomes the default)' : 'Search with… (this search only)', enabled: false }));
     for (const e of S().search.engines) {
       m.append(new MenuItem({ label: e.name + (e.nick ? '   (' + e.nick + ')' : ''), type: 'radio', checked: e.id === def.id,
-        click: () => { store.set('search.default', e.id); pushState(); } }));
+        click: () => {
+          if (S().search.rememberSwitched) { store.set('search.default', e.id); w.engineTemp = null; } else w.engineTemp = e.id === S().search.default ? null : e.id;
+          pushAll();
+        } }));
     }
     m.append(new MenuItem({ type: 'separator' }));
     m.append(new MenuItem({ label: 'Manage search engines…', click: () => newTab('my://settings#search') }));
@@ -2532,6 +2555,8 @@ function setupIpc() {
     const item = sg && sg.sel >= 0 ? sg.items[sg.sel] : null;
     if (cur.overlayMode === 'suggest') hideOverlay(false);
     cur.suggest = null;
+    const wEnter = cur;
+    setImmediate(() => { if (wEnter.engineTemp) { wEnter.engineTemp = null; if (windows.has(wEnter)) { use(wEnter); pushAll(); } } });
     if (item) { paletteRun(item); return; }
     const t = activeTab();
     if (t) { go(t, text); t.wc.focus(); }

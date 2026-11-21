@@ -402,6 +402,7 @@ class SettingsActivity : BaseActivity() {
             { listOf(80, 100, 120, 150).indexOf(prefs.textZoom).coerceAtLeast(1) },
             { prefs.textZoom = listOf(80, 100, 120, 150)[it] })
         switchRow("Beta features", "Shows features still being tested, such as casting to a TV. Off by default", { prefs.beta }, { prefs.beta = it })
+        switchRow("Load tabs only when opened", "After a restart, tabs wait until you switch to them (saves data and battery). Off: all load at once", { prefs.lazyTabs }, { prefs.lazyTabs = it })
         switchRow("Hide bars while scrolling", "The address bar and toolbar slide away as you read down a page", { prefs.hideBarsOnScroll }, { prefs.hideBarsOnScroll = it })
         switchRow("Pull down to refresh", "Off if it gets in the way of pages with their own drag gestures", { prefs.pullRefresh }, { prefs.pullRefresh = it })
         choiceRow("Identify as", UserAgents.MODES.map { it.second }, { UserAgents.MODES.indexOfFirst { it.first == prefs.uaMode }.coerceAtLeast(0) },
@@ -654,6 +655,7 @@ class SettingsActivity : BaseActivity() {
     private fun searchRows() {
         val engines = Settings.engines()
         val names = engines.map { it.name }
+        switchRow("Keep the engine I switch to", "Picking another engine under the address bar makes it the default. Off: it only applies to that search", { prefs.rememberEngine }, { prefs.rememberEngine = it })
         choiceRow("Search engine", names, { engines.indexOfFirst { it.id == Settings.defaultEngine().id }.coerceAtLeast(0) },
             { Settings.setDefaultEngine(engines[it].id) })
         actionRow("Add search engine", "Use %s where the search words go") {

@@ -370,6 +370,7 @@
   // ---- search engines ----
   function searchSection(m) {
     m.append(el('p', 'muted', 'Type a nickname and a space in the address bar to search with that engine, for example “w cats” for Wikipedia. Use %s where the search words go.'));
+    m.append(field({ path: 'search.rememberSwitched', label: 'Keep the engine I switch to', type: 'toggle', help: 'Picking another engine with the badge in the address bar makes it the default. Off: it only applies to that one search and the default stays as set below.' }));
     const engines = S.search.engines.map((e) => ({ ...e }));
     const table = el('table');
     const head = el('tr');
