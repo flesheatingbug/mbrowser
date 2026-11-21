@@ -653,7 +653,14 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
         swipe.isEnabled = prefs.pullRefresh
         for (t in tabs) {
             t.web.settings.textZoom = prefs.textZoom
+            applyAutofillPolicy(t.web)
         }
+    }
+
+    /** With "Block other password managers" on, Android's autofill services (Bitwarden, Google...) are kept out of the pages. */
+    private fun applyAutofillPolicy(w: WebView) {
+        if (Build.VERSION.SDK_INT < 26) return
+        w.importantForAutofill = if (prefs.blockOtherAutofill) View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS else View.IMPORTANT_FOR_AUTOFILL_AUTO
     }
 
     private fun applyUa(tab: Tab) {
@@ -848,6 +855,7 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
         tab.priv = priv; tab.isolated = isolated
         tab.desktop = prefs.desktopSite
         applyUa(tab)
+        applyAutofillPolicy(w)
 
         w.webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {

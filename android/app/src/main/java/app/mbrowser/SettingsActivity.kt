@@ -402,6 +402,7 @@ class SettingsActivity : BaseActivity() {
             { listOf(80, 100, 120, 150).indexOf(prefs.textZoom).coerceAtLeast(1) },
             { prefs.textZoom = listOf(80, 100, 120, 150)[it] })
         switchRow("Beta features", "Shows features still being tested, such as casting to a TV. Off by default", { prefs.beta }, { prefs.beta = it })
+        switchRow("Block other password managers", "Keeps Bitwarden, Google and other Android autofill services out of web pages, so only this browser's passwords are offered. Their accessibility-based overlays can't be blocked", { prefs.blockOtherAutofill }, { prefs.blockOtherAutofill = it })
         switchRow("Fill saved logins automatically", "Fill the login by itself when a page opens. Off: tap a login field and pick one from the list that appears under it", { prefs.autoFillLogins }, { prefs.autoFillLogins = it })
         switchRow("Load tabs only when opened", "After a restart, tabs wait until you switch to them (saves data and battery). Off: all load at once", { prefs.lazyTabs }, { prefs.lazyTabs = it })
         switchRow("Hide bars while scrolling", "The address bar and toolbar slide away as you read down a page", { prefs.hideBarsOnScroll }, { prefs.hideBarsOnScroll = it })
