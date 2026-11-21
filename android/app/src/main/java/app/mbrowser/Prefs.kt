@@ -172,6 +172,9 @@ class Prefs(ctx: Context) {
     var rememberEngine: Boolean      // a search engine picked under the address bar becomes the default
         get() = bool("rememberEngine", false)
         set(v) = putB("rememberEngine", v)
+    var autoFillLogins: Boolean       // fill the saved login by itself when a page has one saved login
+        get() = bool("autoFillLogins", true)
+        set(v) = putB("autoFillLogins", v)
     var beta: Boolean
         get() = bool("beta", false)
         set(v) = putB("beta", v)

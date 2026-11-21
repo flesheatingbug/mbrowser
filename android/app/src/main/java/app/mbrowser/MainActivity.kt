@@ -1625,6 +1625,7 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
         val origin = Vault.originOf(t.url) ?: return
         val found = Vault.findByOrigin(origin)
         if (found.isEmpty() || t !== cur()) return
+        if (prefs.autoFillLogins && found.size == 1) { injectLogin(t, found[0], quiet = true); return }   // one saved login: fill it straight away
         com.google.android.material.snackbar.Snackbar.make(findViewById(R.id.content), "Fill saved login for " + Vault.hostOf(origin) + "?", 8000)
             .setAction("Fill") { fillLogin() }.show()
     }
@@ -1672,7 +1673,7 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
         }
     }
 
-    private fun injectLogin(t: Tab, e: org.json.JSONObject) {
+    private fun injectLogin(t: Tab, e: org.json.JSONObject, quiet: Boolean = false) {
         val u = org.json.JSONObject.quote(e.optString("username")); val p = org.json.JSONObject.quote(e.optString("password"))
         val js = """(function(u,p){
             function set(el,v){var d=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value');d.set.call(el,v);
@@ -1685,7 +1686,7 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
             if(user&&u)set(user,u); if(pw)set(pw,p);
             return pw?'ok':(user?'user':'none');})($u,$p);"""
         t.web.evaluateJavascript(js) { r ->
-            Toast.makeText(this, if (r.contains("none")) "No login fields found on this page" else "Filled", Toast.LENGTH_SHORT).show()
+            if (!quiet || !r.contains("none")) Toast.makeText(this, if (r.contains("none")) "No login fields found on this page" else "Filled saved login", Toast.LENGTH_SHORT).show()
         }
     }
 
