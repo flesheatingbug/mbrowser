@@ -175,9 +175,10 @@ class Prefs(ctx: Context) {
     var autoFillLogins: Boolean       // fill the saved login by itself when a page has one saved login
         get() = bool("autoFillLogins", false)
         set(v) = putB("autoFillLogins", v)
-    var blockOtherAutofill: Boolean   // keep Android autofill services (other password managers) out of web pages
-        get() = bool("blockOtherAutofill", false)
-        set(v) = putB("blockOtherAutofill", v)
+    /** Which password manager works in pages: both | builtin (this browser's only) | system (Android autofill service such as Bitwarden only) */
+    var passwordMode: String
+        get() = str("passwordMode", "both")
+        set(v) = put("passwordMode", v)
     var beta: Boolean
         get() = bool("beta", false)
         set(v) = putB("beta", v)

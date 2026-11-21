@@ -657,10 +657,10 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
         }
     }
 
-    /** With "Block other password managers" on, Android's autofill services (Bitwarden, Google...) are kept out of the pages. */
+    /** "This browser only" keeps Android's autofill services (Bitwarden, Google...) out of pages; the other modes let them in. */
     private fun applyAutofillPolicy(w: WebView) {
         if (Build.VERSION.SDK_INT < 26) return
-        w.importantForAutofill = if (prefs.blockOtherAutofill) View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS else View.IMPORTANT_FOR_AUTOFILL_AUTO
+        w.importantForAutofill = if (prefs.passwordMode == "builtin") View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS else View.IMPORTANT_FOR_AUTOFILL_AUTO
     }
 
     private fun applyUa(tab: Tab) {
@@ -1603,7 +1603,7 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
 
     // ---------- offer to save a login that was just submitted ----------
     private fun offerSaveLogin(t: Tab, url: String, user: String, pass: String) {
-        if (t.priv || pass.isEmpty()) return
+        if (t.priv || pass.isEmpty() || prefs.passwordMode == "system") return
         if (!Vault.exists(this)) {
             com.google.android.material.snackbar.Snackbar.make(findViewById(R.id.content), "Passwords aren't set up on this phone", 8000)
                 .setAction("Set up") { startActivity(Intent(this, PasswordsActivity::class.java)) }.show()
@@ -1632,7 +1632,7 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
 
     /** A login form appeared: unlock the passwords if they are locked, then offer the saved login for this site. */
     private fun onLoginForm(t: Tab, url: String) {
-        if (!prefs.autoFillLogins || t !== cur() || !Vault.exists(this) || offeredFor == url) return
+        if (prefs.passwordMode == "system" || !prefs.autoFillLogins || t !== cur() || !Vault.exists(this) || offeredFor == url) return
         offeredFor = url
         Vault.tryAutoUnlock(this)
         if (!Vault.unlocked()) { if (Vault.isDevice(this)) return; unlockDialog { offerFill(t) }; return }
@@ -1651,7 +1651,7 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
     /** The saved-logins list under a username or password field, like other password managers show. Works in private tabs too. */
     private fun showLoginPopup(t: Tab, url: String, x: Int, top: Int, bottom: Int, w: Int) {
         loginPopup?.dismiss()
-        if (t !== cur() || t.home) return
+        if (prefs.passwordMode == "system" || t !== cur() || t.home) return   // the Android autofill service handles it
         val d = resources.displayMetrics.density
         fun px(v: Int) = (v * d).toInt()
         val origin = Vault.originOf(url)
