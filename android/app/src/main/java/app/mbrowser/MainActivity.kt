@@ -666,8 +666,14 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
 
     /** "This browser only" keeps Android's autofill services (Bitwarden, Google...) out of pages; the other modes let them in. */
     private fun applyAutofillPolicy(w: WebView) {
+        val own = prefs.passwordMode == "builtin"
+        // Chromium's WebView starts autofill sessions itself and ignores the view flag, so the page setting has to be off too
+        @Suppress("DEPRECATION") w.settings.saveFormData = !own
         if (Build.VERSION.SDK_INT < 26) return
-        w.importantForAutofill = if (prefs.passwordMode == "builtin") View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS else View.IMPORTANT_FOR_AUTOFILL_AUTO
+        val flag = if (own) View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS else View.IMPORTANT_FOR_AUTOFILL_AUTO
+        w.importantForAutofill = flag
+        (w.parent as? View)?.importantForAutofill = flag
+        if (own) try { getSystemService(android.view.autofill.AutofillManager::class.java)?.cancel() } catch (_: Throwable) { }
     }
 
     private fun applyUa(tab: Tab) {
