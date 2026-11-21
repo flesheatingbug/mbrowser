@@ -155,9 +155,17 @@ class Prefs(ctx: Context) {
         get() = str("appIcon", "classic")
         set(v) = put("appIcon", v)
     /** Features still being tested (casting, for now). Off unless switched on in settings. */
+    // Home network settings belong to the profile that is signed in, so one profile having it on never turns it on in another
+    private fun pk(k: String) = k + "." + profileId.ifEmpty { "local" }
     var homeNetwork: Boolean
-        get() = bool("homeNetwork", false)
-        set(v) = putB("homeNetwork", v)
+        get() = bool(pk("homeNet"), false)
+        set(v) = putB(pk("homeNet"), v)
+    var homeServers: String
+        get() = str(pk("homeServers"), "[]")
+        set(v) = put(pk("homeServers"), v)
+    var homeActive: String
+        get() = str(pk("homeActive"), "")
+        set(v) = put(pk("homeActive"), v)
     var beta: Boolean
         get() = bool("beta", false)
         set(v) = putB("beta", v)

@@ -18,6 +18,7 @@ services:
       - SESSION_DAYS=${SESSION_DAYS:-7}
       - ALLOW_TUNNEL=${ALLOW_TUNNEL:-false}
       - TUNNEL_ALLOW=${TUNNEL_ALLOW:-}
+      - TUNNEL_KEY_AUTH=${TUNNEL_KEY_AUTH:-false}
     volumes:
       - ${CONFIG_PATH:-./config}:/config
     ports:

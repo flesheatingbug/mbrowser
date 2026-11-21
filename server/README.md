@@ -29,6 +29,7 @@ Settings live in `.env`, the same way as with linuxserver.io containers:
 | `ADMIN_USER` / `ADMIN_PASSWORD` | empty | Create the first administrator from the environment (only while no account exists) |
 | `TRUST_PROXY` | `true` | Trust `X-Forwarded-For` / `-Proto` from your reverse proxy |
 | `SESSION_DAYS` | `7` | How long a web login lasts |
+| `TUNNEL_KEY_AUTH` | `false` | Home network normally needs the account password (and one-time code). `true` also lets a plain sync key open the tunnel |
 | `TUNNEL_ALLOW` | _(empty)_ | Limit the tunnel to these networks, e.g. `192.168.1.0/24,192.168.2.10`. Empty = any private address |
 | `ALLOW_TUNNEL` | `false` | Beta home-network tunnel (`/api/tunnel`); private addresses only; needs Websockets support behind NPM |
 

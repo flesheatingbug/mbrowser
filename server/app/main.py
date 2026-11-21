@@ -39,6 +39,9 @@ class Config:
         self.tunnel = env.get('ALLOW_TUNNEL', 'false').lower() in ('1', 'true', 'yes')
         # Optional: limit the tunnel to these networks / addresses, e.g. TUNNEL_ALLOW=192.168.1.0/24,192.168.2.10
         # (empty = any private address). Strongly recommended, so it cannot reach other containers on this host.
+        # Tunnel sign-in: by default a browser must log in with the account password (and one-time code) to get a tunnel-only
+        # token. TUNNEL_KEY_AUTH=true also lets a plain sync key open the tunnel (the old behaviour).
+        self.tunnel_key = env.get('TUNNEL_KEY_AUTH', 'false').lower() in ('1', 'true', 'yes')
         self.tunnel_allow = []
         for part in env.get('TUNNEL_ALLOW', '').split(','):
             part = part.strip()
@@ -129,10 +132,42 @@ route('POST', G + r'/users/(\d+)/toggle', 'admin')(guiapi.user_toggle)
 
 # ---- home-network tunnel status (Bearer key): lets the browser check the switch before using it
 def _tunnel_status(ctx, req):
-    return 200, {'enabled': bool(ctx.cfg.tunnel)}
+    return 200, {'enabled': bool(ctx.cfg.tunnel), 'keyAuth': bool(ctx.cfg.tunnel_key), 'tunnelToken': req.token_row['kind'] == 'tunnel'}
 
 
 route('GET', r'/api/tunnel/status', 'token')(_tunnel_status)
+
+
+def _tunnel_info(ctx, req):
+    return 200, {'enabled': bool(ctx.cfg.tunnel), 'keyAuth': bool(ctx.cfg.tunnel_key)}
+
+
+route('GET', r'/api/tunnel/info', 'none')(_tunnel_info)
+
+
+def _tunnel_login(ctx, req):
+    """Sign in with the account (password + one-time code if enabled) and get a token that only opens the tunnel."""
+    if not ctx.cfg.tunnel:
+        raise ApiError(403, 'The home-network tunnel is switched off on this server. Set ALLOW_TUNNEL=true and restart it.')
+    b = req.json()
+    user = guiapi._check_credentials(ctx, req, b)
+    profiles = ctx.store.list_profiles(user['id'])
+    pid = profiles[0]['id'] if profiles else ctx.store.create_profile(user['id'], 'Default')
+    device = re.sub(r'\s+', ' ', str(b.get('device') or 'Browser')).strip()[:40] or 'Browser'
+    _, token = ctx.store.replace_token(pid, 'Home network: ' + device, 'tunnel')
+    return 200, {'token': token, 'user': {'username': user['username']}}
+
+
+route('POST', r'/api/tunnel/login', 'none')(_tunnel_login)
+
+
+def _tunnel_logout(ctx, req):
+    if req.token_row['kind'] == 'tunnel':
+        ctx.store.delete_token(req.token_row['id'])
+    return 200, {'ok': True}
+
+
+route('POST', r'/api/tunnel/logout', 'token')(_tunnel_logout)
 
 # ---- sync API (Bearer key)
 def _with_profile(fn):
@@ -343,7 +378,7 @@ class Handler(BaseHTTPRequestHandler):
         """GET /api/tunnel with 'Upgrade: mbtunnel' and 'X-Target: host:port' turns this connection into a raw pipe to that device."""
         if not ctx.cfg.tunnel:
             raise ApiError(403, 'The home-network tunnel is switched off on this server. Set ALLOW_TUNNEL=true and restart it to use it.')
-        self._auth_token(ctx, Req(self, 'GET', '/api/tunnel', {}, b''))
+        self._auth_token(ctx, Req(self, 'GET', '/api/tunnel', {}, b''), tunnel=True)
         if self.headers.get('Upgrade', '').lower() != 'mbtunnel':
             raise ApiError(400, 'Not a tunnel request.')
         host, _, port_s = self.headers.get('X-Target', '').rpartition(':')
@@ -426,7 +461,7 @@ class Handler(BaseHTTPRequestHandler):
                 raise ApiError(415, 'Send JSON (Content-Type: application/json).')
 
             if auth == 'token':
-                self._auth_token(ctx, req)
+                self._auth_token(ctx, req, tunnel=path.startswith('/api/tunnel'))
             else:
                 sess = ctx.store.session(req.cookie('mb_session'), ctx.cfg.session_days)
                 req.session = sess
@@ -460,7 +495,7 @@ class Handler(BaseHTTPRequestHandler):
                 sys.stdout.write('%s %s %s %d %dms\n' % (time.strftime('%H:%M:%S'), method, path, status, (time.time() - t0) * 1000))
                 sys.stdout.flush()
 
-    def _auth_token(self, ctx, req):
+    def _auth_token(self, ctx, req, tunnel=False):
         kip = 'token-ip:' + req.ip
         if ctx.limiter.blocked(kip, 60, 300):
             raise ApiError(429, 'Too many failed attempts. Wait a few minutes.')
@@ -470,7 +505,13 @@ class Handler(BaseHTTPRequestHandler):
         if not row:
             ctx.limiter.fail(kip, 300)
             raise ApiError(401, 'bad token')
+        # tunnel tokens open the tunnel only; sync keys open the tunnel only if the server allows it
+        if row['kind'] == 'tunnel' and not tunnel:
+            raise ApiError(401, 'bad token')
+        if tunnel and row['kind'] != 'tunnel' and not ctx.cfg.tunnel_key:
+            raise ApiError(403, 'This server needs a Home network sign-in (account password and one-time code), not a sync key.', needLogin=True)
         ctx.store.touch_token(row, self.headers.get('X-Device', ''))
+        req.token_row = row
         req.profile_id = row['profile_id']
 
     do_GET = do_POST = do_PUT = do_PATCH = do_DELETE = do_HEAD = _handle

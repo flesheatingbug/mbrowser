@@ -304,6 +304,11 @@ class Store:
             c.execute("DELETE FROM tokens WHERE profile_id=? AND kind='device' AND name=?", (pid, name))
         return self.create_token(pid, name, 'device')
 
+    def replace_token(self, pid, name, kind):
+        with self.adb() as c:
+            c.execute("DELETE FROM tokens WHERE profile_id=? AND kind=? AND name=?", (pid, kind, name))
+        return self.create_token(pid, name, kind)
+
     def list_tokens(self, pid):
         with self.adb() as c:
             return [dict(r) for r in c.execute('SELECT * FROM tokens WHERE profile_id=? ORDER BY id', (pid,)).fetchall()]

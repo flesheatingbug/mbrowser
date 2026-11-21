@@ -37,6 +37,8 @@ services:
       # Strongly recommended with the tunnel: only these networks/addresses are reachable (comma separated).
       # Leave empty and every private address is reachable, including other containers on this Docker host.
       - TUNNEL_ALLOW=
+      # Browsers sign in with the account password (and one-time code) to use the tunnel. true = a plain sync key may open it too (less secure).
+      - TUNNEL_KEY_AUTH=false
 
       # days a web-UI login stays valid
       - SESSION_DAYS=7

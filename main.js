@@ -485,7 +485,7 @@ function stateFor() {
     theme: themeVars(),
     blocked: wc ? blockedCounts.get(wc.id) || 0 : 0,
     blockerOn: S().privacy.blockTrackers,
-    home: { avail: syncReady(), on: homeActive },
+    home: { avail: homeActive || !!homeCfg() || !!S().general.homeNetwork, on: homeActive, ready: !!homeCfg() },
     exts: extButtons(),
     siteAllowed: !!host && allow.some((h) => host === h || host.endsWith('.' + h)),
     private: !!(t && t.private),
@@ -1283,7 +1283,7 @@ function suggestItems(q) {
     agg.set(h.url, a);
   }
   [...agg.values()].sort((a, b) => b.score - a.score).slice(0, 5)
-    .forEach((h) => push({ kind: 'url', url: h.url, label: h.title || h.url, detail: h.url, icon: '🕘' }));
+    .forEach((h) => push({ kind: 'url', url: h.url, label: h.title || h.url, detail: h.url, icon: '🕘', forgettable: true }));
 
   return out.slice(0, 8);
 }
@@ -2151,6 +2151,7 @@ const loadedExt = new Map();   // path -> extension id
 const betaOn = () => !!S().general.beta;
 const { extractCrx, storeId, crxUrl } = require('./lib/crx');
 const hometunnel = require('./lib/hometunnel');
+const homenet = require('./lib/homenet');
 function readExtManifest(dir) {
   try {
     const m = JSON.parse(fs.readFileSync(path.join(dir, 'manifest.json'), 'utf8'));
@@ -2242,6 +2243,20 @@ function applySetting(p, value) {
 // Private addresses go through the sync server's tunnel (lib/hometunnel.js) so they reach the HOME network.
 let homeProxy = null;
 let homeActive = false;
+// Servers, sign-ins and the on/off switch are all per profile (userData is per profile).
+let hnStore = null;
+const HN = () => hnStore || (hnStore = homenet.create({
+  file: file('homenet.json'),
+  encrypt: (s) => (safeStorage.isEncryptionAvailable() ? 'e:' + safeStorage.encryptString(s).toString('base64') : 'p:' + s),
+  decrypt: (s) => (s.startsWith('e:') ? safeStorage.decryptString(Buffer.from(s.slice(2), 'base64')) : s.slice(2)),
+}));
+function homeCfg() {
+  const c = HN().activeCfg();
+  if (!c) return null;
+  const device = S().sync.deviceName || 'mbrowser';
+  if (c.key) return syncReady() && S().sync.server.replace(/\/+$/, '') === c.server ? { ...c, token: S().sync.token, device } : null;
+  return c.token ? { ...c, device } : null;
+}
 async function applyHomeNetwork({ startup = false } = {}) {
   const want = !!S().general.homeNetwork;
   const sessions = () => [session.defaultSession, session.fromPartition('private')];
@@ -2256,19 +2271,14 @@ async function applyHomeNetwork({ startup = false } = {}) {
     dialog.showMessageBox({ type: 'warning', title: 'Home network mode', message: 'Could not turn on home network mode', detail });
   };
   if (!want) { await stop(); pushAll(); return; }
-  if (!syncReady()) { if (startup) return; return fail('Home network mode needs your sync server. Connect one in Settings → Sync first.'); }
+  const cfg = homeCfg();
+  if (!cfg) { if (startup) { pushAll(); return; } return fail('Add a server and sign in under Settings → Home network first.'); }
   if (!startup) {   // check the server before switching anything
-    try {
-      const c = S().sync;
-      const r = await fetch(c.server.replace(/\/+$/, '') + '/api/tunnel/status', { headers: { authorization: 'Bearer ' + c.token }, signal: AbortSignal.timeout(10000) });
-      if (r.status === 404) return fail('Your sync server is too old for this. Update it, then try again.');
-      if (r.status === 401) return fail('The sync server rejected the key, or a proxy in front of it answered 401.');
-      if (!r.ok) return fail('The sync server answered HTTP ' + r.status + '.');
-      if (!(await r.json()).enabled) return fail('The tunnel is switched off on your server. Add ALLOW_TUNNEL=true to its settings and restart it.');
-    } catch (e) { return fail('Could not reach the sync server: ' + e.message); }
+    const problem = await homenet.check(cfg);
+    if (problem) return fail(problem);
   }
   try {
-    if (!homeProxy) homeProxy = await hometunnel.startProxy(() => ({ server: S().sync.server, token: S().sync.token, device: S().sync.deviceName || 'mbrowser' }));
+    if (!homeProxy) homeProxy = await hometunnel.startProxy(() => homeCfg() || { server: '', token: '' });
     const pac = 'data:application/x-ns-proxy-autoconfig;base64,' + Buffer.from(hometunnel.pacScript(homeProxy.port)).toString('base64');
     for (const s of sessions()) await s.setProxy({ mode: 'pac_script', pacScript: pac });
     homeActive = true;
@@ -2380,7 +2390,41 @@ function setupIpc() {
   });
   handle('extensions:pin', (_e, p, shown) => { const x = extList.find((v) => v.path === p); if (x) { x.hidden = !shown; saveExt(); pushAll(true); } return extView(); }, { chrome: false, page: true });
   handle('extensions:options', (_e, p) => { const x = extList.find((v) => v.path === p); if (x) openExtOptions(x); return true; }, { chrome: false, page: true });
-  on('home:toggle', () => { applySetting('general.homeNetwork', !S().general.homeNetwork); });
+  on('home:toggle', () => {
+    if (!homeActive && !homeCfg()) { newTab('my://settings#homenet'); return; }
+    applySetting('general.homeNetwork', !S().general.homeNetwork);
+  });
+  // settings page: servers, sign-in, sign-out (all per profile)
+  const hnView = () => {
+    if (!HN().view().servers.length && syncReady()) HN().add('My sync server', S().sync.server);
+    const v = HN().view();
+    return { ...v, syncUrl: syncReady() ? S().sync.server.replace(/\/+$/, '') : '' };
+  };
+  const hnRefresh = () => { if (S().general.homeNetwork) applyHomeNetwork().catch(() => {}); else pushAll(); };
+  handle('homenet:list', () => hnView(), { chrome: false, page: true });
+  handle('homenet:add', (_e, name, url) => { const r = HN().add(name, url); pushAll(); return { ...hnView(), error: r.error }; }, { chrome: false, page: true });
+  handle('homenet:remove', async (_e, id) => {
+    const s = HN().get(id);
+    if (s && s.token) await homenet.logout(s.url, s.token);
+    HN().remove(id); hnRefresh(); return hnView();
+  }, { chrome: false, page: true });
+  handle('homenet:select', (_e, id) => { HN().select(id); hnRefresh(); return hnView(); }, { chrome: false, page: true });
+  handle('homenet:setKey', (_e, id, on) => { HN().setKey(id, !!on); hnRefresh(); return hnView(); }, { chrome: false, page: true });
+  handle('homenet:login', async (_e, id, f) => {
+    const s = HN().get(id);
+    if (!s || !f) return { ...hnView(), error: 'Unknown server.' };
+    const r = await homenet.login(s.url, { username: String(f.username || ''), password: String(f.password || ''), otp: f.otp, device: S().sync.deviceName || 'mbrowser' });
+    if (r.token) HN().setToken(id, r.token, r.user);
+    pushAll();
+    return { ...hnView(), error: r.error, needTotp: r.needTotp };
+  }, { chrome: false, page: true });
+  handle('homenet:logout', async (_e, id) => {
+    const s = HN().get(id);
+    if (s && s.token) await homenet.logout(s.url, s.token);
+    HN().setToken(id, '', '');
+    if (homeActive && HN().activeCfg() && HN().activeCfg().id === id) await applyHomeNetwork().catch(() => {});
+    pushAll(); return hnView();
+  }, { chrome: false, page: true });
   handle('lock:info', () => ({ hasPassword: lockHasPw() }));
   handle('lock:unlock', async (_e, pw) => {
     if (!locked) return { ok: true };
@@ -2460,6 +2504,22 @@ function setupIpc() {
     showSuggestions(sg.items, sel);
     const it = sel >= 0 ? sg.items[sel] : null;
     cur.toolbarView.webContents.send('url:fill', it ? (it.kind === 'search' ? it.text : it.url) : sg.typed);
+  });
+  on('suggest:forget', (_e, url) => {
+    if (typeof url !== 'string') return;
+    const gone = history.filter((h) => h.url === url);
+    if (!gone.length) return;
+    history = history.filter((h) => h.url !== url);
+    const now = Date.now();
+    historyBin.push(...gone.map((h) => ({ url: h.url, title: h.title, time: h.time, binTime: now })));
+    if (historyBin.length > 5000) historyBin = historyBin.slice(-5000);
+    save('history.json', history); save('history-bin.json', historyBin);
+    const sg = cur.suggest;
+    if (!sg || cur.overlayMode !== 'suggest') return;
+    const items = suggestItems(sg.typed);
+    if (!items.length) { cur.suggest = null; hideOverlay(false); return; }
+    cur.suggest = { items, sel: -1, typed: sg.typed };
+    showSuggestions(items, -1);
   });
   on('suggest:close', () => {
     const w = cur;

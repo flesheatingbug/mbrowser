@@ -45,6 +45,7 @@ class SettingsActivity : BaseActivity() {
             Pg("data", "Personal data", "Sync & backup, passwords", R.drawable.ic_cloud) { dataPage() },
             Pg("privacy", "Privacy & security", "Ad blocker, clear browsing data", R.drawable.ic_shield) { privacyPage() },
             Pg("search", "Search", "Search engines", R.drawable.ic_search) { searchRows() },
+            Pg("homenet", "Home network", "Open your home devices from anywhere", R.drawable.ic_devices) { homeNetPage() },
             Pg("about", "About", "Updates, source code", R.drawable.ic_info) { aboutPage() },
         )
     }
@@ -319,6 +320,81 @@ class SettingsActivity : BaseActivity() {
         }
     }
 
+    // ---------- home network ----------
+    private fun homeNetPage() {
+        HomeNet.seed(prefs)
+        var sw: SwitchCompat? = null
+        var reverting = false
+        sw = switchRow("Home network mode", "Addresses on a home network (192.168.x.x, router.lan, a bare name like nas) open on YOUR home network through your own sync server, wherever you are. Everything else goes direct. The server needs ALLOW_TUNNEL=true. This switch and the servers below belong to this profile only.", { prefs.homeNetwork }, { on ->
+            if (!reverting) {
+                if (on) HomeNet.turnOn(this, prefs) { err ->
+                    if (err != null) { toast(err); reverting = true; sw?.isChecked = false; reverting = false } else toast("Home network is on")
+                } else HomeNet.turnOff(this, prefs)
+            }
+        })
+        header("Servers")
+        val list = HomeNet.servers(prefs)
+        if (list.isEmpty()) actionRow("No servers yet", "Add the address of a sync server below") { }
+        for (s in list) {
+            val status = if (s.key) "Uses this profile's sync key (less secure)" else if (s.token.isNotEmpty()) "Signed in as ${s.user}" else "Not signed in"
+            val inUse = if (s.id == (HomeNet.activeCfg(prefs)?.id ?: prefs.homeActive.ifEmpty { list.first().id })) "  ·  in use" else ""
+            actionRow(s.name + inUse, s.url + "\n" + status) { serverMenu(s) }
+        }
+        actionRow("Add a server", "Another home you want to reach") { addServerDialog() }
+    }
+
+    private fun refreshHome() { HomeNet.apply(this, prefs); build() }
+
+    private fun serverMenu(s: HomeNet.Srv) {
+        val items = ArrayList<Pair<String, () -> Unit>>()
+        items.add("Use this server" to { prefs.homeActive = s.id; refreshHome() })
+        if (!s.key) {
+            if (s.token.isNotEmpty()) items.add("Sign out" to {
+                Thread { HomeNet.logout(s.url, s.token) }.start()
+                HomeNet.update(prefs, s.id) { it.copy(token = "", user = "") }; refreshHome()
+            }) else items.add("Sign in" to { signInDialog(s, "", "", null) })
+        }
+        if (prefs.syncConfigured && prefs.server.trimEnd('/') == s.url)
+            items.add((if (s.key) "Sign in with a password instead" else "Use my sync key instead (less secure)") to {
+                HomeNet.update(prefs, s.id) { it.copy(key = !s.key) }; refreshHome() })
+        items.add("Remove" to { HomeNet.remove(prefs, s.id); refreshHome() })
+        AlertDialog.Builder(this).setTitle(s.name).setItems(items.map { it.first }.toTypedArray()) { _, i -> items[i].second() }.show()
+    }
+
+    private fun addServerDialog() {
+        val col = LinearLayout(this); col.orientation = LinearLayout.VERTICAL; col.setPadding(dp(20), dp(8), dp(20), 0)
+        val name = EditText(this); name.hint = "Name (e.g. Home)"; name.setSingleLine()
+        val url = EditText(this); url.hint = "https://sync.example.com"; url.setSingleLine(); url.inputType = android.text.InputType.TYPE_TEXT_VARIATION_URI
+        if (prefs.syncConfigured && HomeNet.servers(prefs).none { it.url == prefs.server.trimEnd('/') }) url.setText(prefs.server)
+        col.addView(name); col.addView(url)
+        AlertDialog.Builder(this).setTitle("Add a server").setView(col)
+            .setPositiveButton("Add") { _, _ -> HomeNet.add(prefs, name.text.toString(), url.text.toString())?.let { toast(it) }; build() }
+            .setNegativeButton("Cancel", null).show()
+    }
+
+    private fun signInDialog(s: HomeNet.Srv, user0: String, pw0: String, note: String?) {
+        val col = LinearLayout(this); col.orientation = LinearLayout.VERTICAL; col.setPadding(dp(20), dp(8), dp(20), 0)
+        val msg = TextView(this); msg.text = note ?: "Use the same account name and password as the server's web page."; msg.textSize = 13f; msg.setTextColor(tc(R.attr.mbMuted))
+        val u = EditText(this); u.hint = "User name"; u.setSingleLine(); u.setText(user0)
+        val p = EditText(this); p.hint = "Password"; p.setSingleLine(); p.inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD; p.setText(pw0)
+        val o = EditText(this); o.hint = "One-time code (if you use one)"; o.setSingleLine(); o.inputType = android.text.InputType.TYPE_CLASS_NUMBER
+        col.addView(msg); col.addView(u); col.addView(p); col.addView(o)
+        AlertDialog.Builder(this).setTitle("Sign in to " + s.name).setView(col)
+            .setPositiveButton("Sign in") { _, _ ->
+                val un = u.text.toString().trim(); val pw = p.text.toString(); val otp = o.text.toString()
+                Thread {
+                    val r = HomeNet.login(s.url, un, pw, otp, prefs.device)
+                    runOnUiThread {
+                        if (r.token != null) {
+                            HomeNet.update(prefs, s.id) { it.copy(token = r.token, user = r.user) }
+                            toast("Signed in"); refreshHome()
+                        } else signInDialog(s, un, pw, r.error)
+                    }
+                }.start()
+            }
+            .setNegativeButton("Cancel", null).show()
+    }
+
     // ---------- pages ----------
     private fun browserPage() {
         switchRow("Request desktop sites", "For new tabs", { prefs.desktopSite }, { prefs.desktopSite = it })
@@ -326,16 +402,6 @@ class SettingsActivity : BaseActivity() {
             { listOf(80, 100, 120, 150).indexOf(prefs.textZoom).coerceAtLeast(1) },
             { prefs.textZoom = listOf(80, 100, 120, 150)[it] })
         switchRow("Beta features", "Shows features still being tested, such as casting to a TV. Off by default", { prefs.beta }, { prefs.beta = it })
-        var homeSw: SwitchCompat? = null
-        var reverting = false
-        homeSw = switchRow("Home network", "Addresses on a home network (192.168.x.x, router.lan, a bare name like nas) open on YOUR home network through your sync server, wherever you are. Everything else goes direct. The server needs ALLOW_TUNNEL=true", { prefs.homeNetwork }, { on ->
-            if (!reverting) {
-                if (on) HomeNet.turnOn(this) { err ->
-                    if (err != null) { toast(err); reverting = true; homeSw?.isChecked = false; reverting = false }
-                    else toast("Home network is on")
-                } else HomeNet.turnOff(this, prefs)
-            }
-        })
         switchRow("Hide bars while scrolling", "The address bar and toolbar slide away as you read down a page", { prefs.hideBarsOnScroll }, { prefs.hideBarsOnScroll = it })
         switchRow("Pull down to refresh", "Off if it gets in the way of pages with their own drag gestures", { prefs.pullRefresh }, { prefs.pullRefresh = it })
         choiceRow("Identify as", UserAgents.MODES.map { it.second }, { UserAgents.MODES.indexOfFirst { it.first == prefs.uaMode }.coerceAtLeast(0) },

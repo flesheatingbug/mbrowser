@@ -86,6 +86,7 @@
 ### Home network mode
 - Type `192.168.1.1`, `router.lan` or `nas:8080` and it opens **your home network's** router or NAS, from anywhere, on desktop and Android. Everything else browses normally from where you are.
 - It works through your own sync server: the browser opens an authenticated tunnel to the server, which connects to the device. Nothing goes through anyone else's service.
+- It has its own **Home network** page in settings: you sign in with your server account (password, and the one-time code if you use one), and the sign-in is remembered per profile with a Sign out button. Each profile has its own switch and servers, and you can save several servers and pick which one to use.
 - Switch it on in the status bar (desktop), the menu or Settings (Android). It needs `ALLOW_TUNNEL=true` on the server; see the security notes in [Sync server setup](#environment-variables).
 
 ### Profiles
@@ -264,12 +265,13 @@ The web interface and API will be available at **http://your-server:4242**.
 | `TRUST_PROXY` | `true` | Trust `X-Forwarded-For` from a reverse proxy |
 | `SESSION_DAYS` | `7` | Web login session lifetime |
 | `ALLOW_TUNNEL` | `false` | Lets Home network mode (desktop and Android) reach private LAN addresses through the server (needs Websockets support on Nginx Proxy Manager) |
+| `TUNNEL_KEY_AUTH` | `false` | Home network normally needs the account password (and one-time code). `true` also lets a plain sync key open the tunnel |
 | `TUNNEL_ALLOW` | _(empty)_ | Limit the tunnel to these networks, e.g. `192.168.1.0/24,192.168.2.10`. Empty = any private address. Recommended |
 
 ### Home network mode: security
 It is off unless you set `ALLOW_TUNNEL=true`. What protects it, and what to know:
-- Every tunnel needs a valid sync key, and only reaches **private** addresses (192.168.x.x, 10.x.x.x, 172.16-31.x.x, fc00::/7). Never public addresses, localhost or link-local, so it cannot be used as an open proxy to the internet.
-- Whoever holds a sync key can reach your LAN through the server while the tunnel is on, so treat keys like VPN credentials and delete keys for lost devices.
+- Every tunnel needs a Home network sign-in: your account password plus the one-time code if the account has one (a sync key alone is refused unless you set `TUNNEL_KEY_AUTH=true`). The sign-in gives a token that opens the tunnel only, not your synced data, and Sign out revokes it. Tunnels only reaches **private** addresses (192.168.x.x, 10.x.x.x, 172.16-31.x.x, fc00::/7). Never public addresses, localhost or link-local, so it cannot be used as an open proxy to the internet.
+- Whoever can sign in to the account can reach your LAN through the server while the tunnel is on, so use a strong password and the one-time code. Remove a lost device's "Home network" key from the server's web page.
 - Set `TUNNEL_ALLOW` to the networks you actually want (for example your router and NAS). Without it, "private" also includes other containers on the server's Docker networks.
 - Use HTTPS to your server so the browser-to-server leg is encrypted. The server-to-device leg is whatever the device speaks (usually plain http on your LAN).
 - While the mode is on, the small local proxy listens on `127.0.0.1`, so other programs on the same computer or phone could use it too. It adds no way into your LAN beyond what your sync key already allows, but it is why the mode is off by default.

@@ -498,6 +498,16 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
             t2.setTextColor(tc(R.attr.mbMuted)); t2.textSize = 13f; t2.maxLines = 1; t2.ellipsize = android.text.TextUtils.TruncateAt.END
             row.addView(t1); row.addView(t2)
             row.setOnClickListener { navigate(h.url) }
+            row.setOnLongClickListener {
+                val keys = Store.historyList().filter { bare(it.url).trimEnd('/') == bare(h.url).trimEnd('/') }.map { Store.visitKey(it) }.toSet()
+                if (keys.isEmpty()) { Toast.makeText(this, "Bookmarks aren't removed from here", Toast.LENGTH_SHORT).show() }
+                else androidx.appcompat.app.AlertDialog.Builder(this)
+                    .setTitle("Remove from suggestions?")
+                    .setMessage(bare(h.url) + "\n\nThis deletes its history entries. They stay in the bin for 30 days.")
+                    .setPositiveButton("Remove") { _, _ -> Store.removeVisits(keys); showSuggestions(urlBar.text.toString()) }
+                    .setNegativeButton("Cancel", null).show()
+                true
+            }
             list.addView(row, LinearLayout.LayoutParams(-1, -2))
         }
         scroll.visibility = View.VISIBLE
@@ -1921,7 +1931,7 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
                 .setPositiveButton("Copy") { _, _ -> (getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager).setPrimaryClip(android.content.ClipData.newPlainText("blocked", text)) }
                 .setNegativeButton("Close", null).show()
         })
-        if (prefs.syncConfigured) row(R.drawable.ic_devices, if (prefs.homeNetwork) "Home network: ON (tap to turn off)" else "Home network: off (tap to turn on)", go {
+        if (HomeNet.servers(prefs).isNotEmpty() || prefs.syncConfigured) row(R.drawable.ic_devices, if (prefs.homeNetwork) "Home network: ON (tap to turn off)" else "Home network: off (tap to turn on)", go {
             if (prefs.homeNetwork) { HomeNet.turnOff(this, prefs); Toast.makeText(this, "Home network off", Toast.LENGTH_SHORT).show() }
             else HomeNet.turnOn(this, prefs) { err -> Toast.makeText(this, err ?: "Home network on: home addresses now open on your home network", Toast.LENGTH_LONG).show() }
         })

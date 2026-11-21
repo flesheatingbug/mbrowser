@@ -44,6 +44,7 @@ contextBridge.exposeInMainWorld('api', {
   winClose: send('win:close'),
   suggestQuery: send('suggest:query'),
   suggestNav: send('suggest:nav'),
+  suggestForget: send('suggest:forget'),
   suggestClose: send('suggest:close'),
   urlEnter: send('url:enter'),
   onUrlFill: (cb) => ipcRenderer.on('url:fill', (_e, t) => cb(t)),

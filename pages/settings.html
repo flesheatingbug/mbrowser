@@ -23,6 +23,9 @@
   #settings-search:focus { border-color:var(--accent); }
   main { flex:1; max-width:820px; padding:40px 56px 100px; }
   .row { display:flex; align-items:center; justify-content:space-between; gap:20px; padding:14px 0; border-bottom:1px solid var(--line); }
+  .row:has(.hnform) { flex-wrap:wrap; }
+  .hnform { flex-basis:100%; display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+  .hnform input { width:200px; }
   .row.col { flex-direction:column; align-items:stretch; }
   .row label { flex:1; }
   .row .help { display:block; color:var(--muted); font-size:12px; margin-top:3px; }
@@ -59,7 +62,7 @@
   const CATS = [
     ['general', 'General'], ['appearance', 'Appearance'], ['startpage', 'Start Page'], ['tabs', 'Tabs'], ['search', 'Search'],
     ['privacy', 'Privacy'], ['adblocker', 'Adblocker'], ['passwords', 'Passwords'], ['downloads', 'Downloads'], ['extensions', 'Extensions'], ['keyboard', 'Keyboard'],
-    ['sync', 'Sync'], ['server', 'Server Admin'], ['import', 'Import'], ['profiles', 'Profiles'], ['about', 'About'],
+    ['sync', 'Sync'], ['homenet', 'Home network'], ['server', 'Server Admin'], ['import', 'Import'], ['profiles', 'Profiles'], ['about', 'About'],
   ];
   const BETA_CATS = new Set(['extensions']);   // whole pages that are beta features
   const FIELDS = {
@@ -70,7 +73,6 @@
       { path: 'general.autoUpdate', label: 'Check for updates automatically', type: 'toggle', help: 'Looks every few hours and shows a notice in the status bar. Turn off to only check from the menu.' },
       { path: 'general.askDefaultBrowser', label: 'Ask to make mbrowser the default browser (Windows)', type: 'toggle', help: 'Shows a notice under the toolbar while another browser is the default.' },
       { path: 'general.beta', label: 'Beta features', type: 'toggle', help: 'Shows features that are still being tested, such as Extensions. Off by default and only for this computer. Turning it off hides them again.' },
-      { path: 'general.homeNetwork', label: 'Home network mode', type: 'toggle', help: 'While on, addresses on a home network (192.168.x.x, 10.x.x.x, router.lan, a bare name like nas) open on YOUR HOME network through your sync server, not on the network this computer is on. Everything else goes direct. Needs ALLOW_TUNNEL=true on the server. A status-bar chip shows when it is on.' },
       { path: 'general.newTab', label: 'New tab page', type: 'select', options: [['start', 'Start page'], ['home', 'Homepage'], ['blank', 'Blank page']] },
       { path: 'pages.defaultZoom', label: 'Default page zoom (%)', type: 'number', min: 30, max: 300, help: 'Applies to newly opened tabs.' },
     ],
@@ -145,6 +147,64 @@
 
   const TB_ITEMS = [['back', 'Back'], ['forward', 'Forward'], ['reload', 'Reload'], ['address', 'Address bar'], ['shield', 'Tracker blocker'], ['downloads', 'Downloads'], ['star', 'Bookmark star'], ['profile', 'Profile']];
   const TB_EXTRA = [['key', 'Saved logins key (inside the address bar)'], ['siteinfo', 'Site information (inside the address bar)']];
+  async function homenetSection(m) {
+    m.append(el('p', 'muted', 'Open devices on your home network from anywhere. Typing 192.168.1.1, router.lan or nas:8080 then opens YOUR home router or NAS, not whatever network this computer is on. Everything else browses normally. It works through your own sync server (which needs ALLOW_TUNNEL=true). Servers, sign-ins and the switch below belong to this profile only.'));
+    m.append(field({ path: 'general.homeNetwork', label: 'Home network mode', type: 'toggle', help: 'A status-bar chip shows when it is on. Turning it on checks the server first.' }));
+    const box = el('div'); m.append(box);
+    const msg = el('p', 'muted'); 
+    let st = null;
+    const draw = (v) => {
+      st = v; box.textContent = '';
+      if (v.error) msg.textContent = v.error; else msg.textContent = '';
+      box.append(el('h3', null, 'Servers'));
+      if (!v.servers.length) box.append(el('p', 'muted', 'No servers yet. Add the address of a sync server below.'));
+      for (const s of v.servers) {
+        const row = el('div', 'row');
+        const lab = el('div', 'lab'); lab.append(el('b', null, s.name), el('div', 'help', s.url));
+        lab.append(el('div', 'help', s.key ? 'Uses this profile\u2019s sync key (less secure)' : (s.signedIn ? 'Signed in as ' + s.user : 'Not signed in')));
+        const right = el('div', 'right');
+        const use = el('label', 'help', 'Use this one '); const rd = el('input'); rd.type = 'radio'; rd.name = 'hn-active'; rd.checked = v.active === s.id;
+        rd.onchange = async () => draw(await browser.homenetSelect(s.id)); use.append(rd); right.append(use);
+        if (!s.key) {
+          if (s.signedIn) { const lo = el('button', null, 'Sign out'); lo.onclick = async () => draw(await browser.homenetLogout(s.id)); right.append(lo); }
+          else { const li = el('button', null, 'Sign in'); li.onclick = () => form(s, row); right.append(li); }
+        }
+        if (v.syncUrl && v.syncUrl === s.url) {
+          const k = el('label', 'help', 'Use sync key '); const kc = el('input'); kc.type = 'checkbox'; kc.checked = s.key;
+          kc.title = 'Skips the password. The server must allow it (TUNNEL_KEY_AUTH=true). Less secure.';
+          kc.onchange = async () => draw(await browser.homenetSetKey(s.id, kc.checked)); k.append(kc); right.append(k);
+        }
+        const rm = el('button', null, 'Remove'); rm.onclick = async () => draw(await browser.homenetRemove(s.id)); right.append(rm);
+        row.append(lab, right); box.append(row);
+      }
+      box.append(el('h3', null, 'Add a server'));
+      const name = el('input'); name.placeholder = 'Name (e.g. Home)';
+      const url = el('input'); url.placeholder = 'https://sync.example.com';
+      const add = el('button', null, 'Add');
+      add.onclick = async () => { const r = await browser.homenetAdd(name.value, url.value); draw(r); };
+      const bar = el('div', 'row'); bar.append(name, url, add); box.append(bar);
+      box.append(msg);
+    };
+    const form = (s, row) => {
+      if (row.querySelector('.hnform')) return;
+      const f = el('div', 'hnform');
+      const u = el('input'); u.placeholder = 'User name'; u.autocomplete = 'username';
+      const p = el('input'); p.type = 'password'; p.placeholder = 'Password'; p.autocomplete = 'current-password';
+      const o = el('input'); o.placeholder = 'One-time code (if you use one)'; o.inputMode = 'numeric'; o.autocomplete = 'one-time-code';
+      const go = el('button', null, 'Sign in'); const note = el('div', 'help');
+      const submit = async () => {
+        go.disabled = true; note.textContent = 'Signing in…';
+        const r = await browser.homenetLogin(s.id, { username: u.value, password: p.value, otp: o.value });
+        go.disabled = false;
+        if (r.error) { note.textContent = r.error; if (r.needTotp) o.focus(); return; }
+        draw(r);
+      };
+      go.onclick = submit; [u, p, o].forEach((i) => i.addEventListener('keydown', (e) => { if (e.key === 'Enter') submit(); }));
+      f.append(u, p, o, go, note); row.append(f); u.focus();
+    };
+    draw(await browser.homenetList());
+  }
+
   async function extensionsSection(m) {
     m.append(el('p', 'muted', 'Beta. Install an extension from the Chrome Web Store (paste its link), or load an unpacked one (a folder containing manifest.json). Only part of the Chrome extension API exists in this browser: content scripts and simple extensions usually work; extensions that rely on a background service worker, blocking network requests or toolbar popups may not. Extensions apply to normal tabs, not private ones. Turning one off may need a restart to take full effect.'));
     const box = el('div'); m.append(box);
@@ -645,6 +705,7 @@
 
     if (cur === 'search') { searchSection(m); return; }
     if (cur === 'extensions') { await extensionsSection(m); return; }
+    if (cur === 'homenet') { await homenetSection(m); return; }
     if (cur === 'keyboard') { await keyboardSection(m); return; }
     if (cur === 'about') {
       const build = await browser.appBuildNumber();

@@ -71,6 +71,9 @@
   #suggest .ic { width:18px; text-align:center; flex:none; }
   #suggest .l { flex:1; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
   #suggest .d { color:var(--muted); font-size:12px; max-width:45%; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+  #suggest .x { flex:none; width:22px; height:22px; border-radius:11px; display:none; place-items:center; font-size:16px; opacity:.7; }
+  #suggest .srow:hover .x, #suggest .srow.sel .x { display:grid; }
+  #suggest .x:hover { background:rgba(128,128,128,.35); opacity:1; }
   #suggest .srow.sel .d { color:var(--onaccent); opacity:.75; }
   #security { display:none; padding:16px 18px; overflow-y:auto; height:100%; }
   #security h2 { font-size:15px; margin:0 0 4px; }
@@ -340,6 +343,11 @@
       const l = document.createElement('span'); l.className = 'l'; l.textContent = it.label;
       const d = document.createElement('span'); d.className = 'd'; d.textContent = it.detail || '';
       row.append(ic, l, d);
+      if (it.forgettable) {
+        const x = document.createElement('span'); x.className = 'x'; x.textContent = '\u00d7'; x.title = 'Remove from history';
+        x.onmousedown = (e) => { e.preventDefault(); e.stopPropagation(); api.suggestForget(it.url); };
+        row.append(x);
+      }
       row.onmousedown = (e) => { e.preventDefault(); api.paletteRun(it); };
       box.appendChild(row);
     });
