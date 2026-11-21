@@ -83,6 +83,7 @@ class Store:
         c = sqlite3.connect(path, timeout=15)
         c.row_factory = sqlite3.Row
         try:
+            c.execute('PRAGMA synchronous=NORMAL')   # safe with WAL, far fewer fsyncs per write
             if path not in self._ready:
                 with self._lock:
                     c.execute('PRAGMA journal_mode=WAL')

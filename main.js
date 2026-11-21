@@ -256,7 +256,21 @@ const file = (name) => path.join(app.getPath('userData'), name);
 const load = (name, fallback) => {
   try { return JSON.parse(fs.readFileSync(file(name), 'utf8')); } catch { return fallback; }
 };
-const save = (name, data) => fs.writeFileSync(file(name), JSON.stringify(data, null, 2));
+const save = (name, data) => { pendingSaves.delete(name); fs.writeFileSync(file(name), JSON.stringify(data, null, 2)); };
+// hot paths (a history entry per page load) write a moment later instead of rewriting the whole file each time
+const pendingSaves = new Map();
+function saveSoon(name, get) {
+  if (pendingSaves.has(name)) { pendingSaves.get(name).get = get; return; }
+  const job = { get, timer: setTimeout(() => flushSave(name), 2000) };
+  pendingSaves.set(name, job);
+}
+function flushSave(name) {
+  const job = pendingSaves.get(name);
+  if (!job) return;
+  clearTimeout(job.timer);
+  try { save(name, job.get()); } catch { pendingSaves.delete(name); }
+}
+const flushSaves = () => { for (const n of [...pendingSaves.keys()]) flushSave(n); };
 
 let bookmarks = [];  // { url, title, added, updated, deleted }
 let history = [];    // { url, title, time }
@@ -467,7 +481,7 @@ async function printPreview() {
     dialog.showMessageBox({ type: 'warning', title: 'Print preview', message: 'Could not make a preview of this page', detail: String(e.message || e) });
   }
 }
-app.on('will-quit', () => { for (const f of printFiles) { try { fs.unlinkSync(f); } catch { /* gone */ } } });
+app.on('will-quit', () => { flushSaves(); for (const f of printFiles) { try { fs.unlinkSync(f); } catch { /* gone */ } } });
 
 // ---------- state sent to the chrome views ----------
 function stateFor() {
@@ -805,7 +819,7 @@ function wire(tab) {
     if (!tab.private && isWeb(url)) {
       history.push({ url, title: wc.getTitle(), time: Date.now() });
       if (history.length > 5000) history = history.slice(-5000);
-      save('history.json', history);
+      saveSoon('history.json', () => history);
     }
     pushState();
   }));
@@ -4651,6 +4665,7 @@ app.on('certificate-error', (event, _wc, url, _error, _cert, callback) => {
 
 let quitCleared = false;
 app.on('before-quit', (e) => {
+  flushSaves();
   // Session flush: only needed if windows are still open (e.g. app.quit() called
   // programmatically before any window closes). onWindowClosed handles the normal case.
   clearTimeout(sessionTimer);
