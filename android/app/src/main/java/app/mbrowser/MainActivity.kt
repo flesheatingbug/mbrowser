@@ -82,6 +82,11 @@ class MainActivity : BaseActivity() {
       var told='';function seen(){var p=document.querySelector('input[type=password]');if(!p||p.offsetParent===null||told===location.href)return;told=location.href;try{mbNative.loginForm(location.href);}catch(e){}}
       seen();setTimeout(seen,800);setTimeout(seen,2500);document.addEventListener('focusin',function(e){if(e.target&&e.target.tagName==='INPUT')seen();},true);
       try{var mo=new MutationObserver(function(){clearTimeout(window.__mbSeen);window.__mbSeen=setTimeout(seen,400);});mo.observe(document.documentElement,{childList:true,subtree:true});}catch(e){}
+      function okField(el){return el&&el.tagName==='INPUT'&&['text','email','tel','password','search',''].indexOf((el.type||'').toLowerCase())>-1&&el.offsetParent!==null;}
+      document.addEventListener('focusin',function(e){var el=e.target;if(!okField(el))return;
+        if(el.type!=='password'&&!document.querySelector('input[type=password]')&&!/user|email|login|account/i.test((el.name||'')+(el.id||'')+(el.autocomplete||'')))return;
+        var r=el.getBoundingClientRect(),d=window.devicePixelRatio||1;try{mbNative.loginFocus(location.href,r.left*d,r.top*d,r.bottom*d,r.width*d);}catch(x){}},true);
+      document.addEventListener('focusout',function(){try{mbNative.loginBlur();}catch(x){}},true);
       document.addEventListener('submit',grab,true);
       document.addEventListener('click',function(e){var b=e.target.closest&&e.target.closest('button,input[type=submit]');if(b&&b.type==='submit')grab();},true);
       document.addEventListener('keydown',function(e){if(e.key==='Enter')grab();},true);})();"""
@@ -599,6 +604,7 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
     }
 
     override fun onPause() {
+        loginPopup?.dismiss()
         saveTabs()
         // a page is playing audio: keep it going while the screen is off or another app is in front
         if ((getSystemService(AUDIO_SERVICE) as android.media.AudioManager).isMusicActive) PlaybackService.start(this)
@@ -887,6 +893,7 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
             }
 
             override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
+                loginPopup?.dismiss()
                 tab.blocked.clear(); tab.hiddenCss = ""
                 if (tabs.getOrNull(current)?.web === view) setBars(true)
                 if (url.startsWith("about:")) return
@@ -914,7 +921,7 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
                 if (url.startsWith("about:")) return
                 if (tab.fresh) { tab.fresh = false; view.clearHistory() }
                 view.evaluateJavascript(DRAG_GUARD_JS, null)
-                if (!tab.priv) view.evaluateJavascript(LOGIN_CAPTURE_JS, null)
+                view.evaluateJavascript(LOGIN_CAPTURE_JS, null)   // also in private tabs: filling works there, saving does not (see offerSaveLogin)
                 if (prefs.blockTrackers) view.evaluateJavascript(HIDE_JS, null)
                 if (prefs.beta && caster?.available != false) view.evaluateJavascript(CAST_JS, null)
                 tab.url = url
@@ -927,6 +934,8 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
         w.addJavascriptInterface(object {
             @JavascriptInterface fun blockRefresh(b: Boolean) { refreshBlocked = b }
             @JavascriptInterface fun cast() { runOnUiThread { castAction(tab) } }
+            @JavascriptInterface fun loginFocus(url: String, x: Float, top: Float, bottom: Float, w: Float) { runOnUiThread { showLoginPopup(tab, url, x.toInt(), top.toInt(), bottom.toInt(), w.toInt()) } }
+            @JavascriptInterface fun loginBlur() { runOnUiThread { ui.postDelayed({ loginPopup?.dismiss() }, 250) } }
             @JavascriptInterface fun loginForm(url: String) { runOnUiThread { onLoginForm(tab, url) } }
             @JavascriptInterface fun loginSubmitted(url: String, user: String, pass: String) { runOnUiThread { offerSaveLogin(tab, url, user, pass) } }
             @JavascriptInterface fun cosmetic(host: String, ids: String, classes: String, first: Int): String {
@@ -1154,6 +1163,7 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
     }
 
     private fun render() {
+        loginPopup?.dismiss()
         swipe.isRefreshing = false
         container.removeAllViews()
         val t = cur() ?: return
@@ -1614,7 +1624,7 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
 
     /** A login form appeared: unlock the passwords if they are locked, then offer the saved login for this site. */
     private fun onLoginForm(t: Tab, url: String) {
-        if (t.priv || t !== cur() || !Vault.exists(this) || offeredFor == url) return
+        if (!prefs.autoFillLogins || t !== cur() || !Vault.exists(this) || offeredFor == url) return
         offeredFor = url
         Vault.tryAutoUnlock(this)
         if (!Vault.unlocked()) { if (Vault.isDevice(this)) return; unlockDialog { offerFill(t) }; return }
@@ -1625,9 +1635,61 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
         val origin = Vault.originOf(t.url) ?: return
         val found = Vault.findByOrigin(origin)
         if (found.isEmpty() || t !== cur()) return
-        if (prefs.autoFillLogins && found.size == 1) { injectLogin(t, found[0], quiet = true); return }   // one saved login: fill it straight away
-        com.google.android.material.snackbar.Snackbar.make(findViewById(R.id.content), "Fill saved login for " + Vault.hostOf(origin) + "?", 8000)
-            .setAction("Fill") { fillLogin() }.show()
+        if (found.size == 1) injectLogin(t, found[0], quiet = true) else showLoginPopup(t, t.url, 0, 0, 0, 0)
+    }
+
+    private var loginPopup: android.widget.PopupWindow? = null
+
+    /** The saved-logins list under a username or password field, like other password managers show. Works in private tabs too. */
+    private fun showLoginPopup(t: Tab, url: String, x: Int, top: Int, bottom: Int, w: Int) {
+        loginPopup?.dismiss()
+        if (t !== cur() || t.home) return
+        val d = resources.displayMetrics.density
+        fun px(v: Int) = (v * d).toInt()
+        val origin = Vault.originOf(url)
+        data class Row(val title: String, val sub: String, val icon: Int, val run: () -> Unit)
+        val rows = ArrayList<Row>()
+        if (!Vault.exists(this)) rows.add(Row("Set up passwords", "Save logins on this phone", R.drawable.ic_key) { startActivity(Intent(this, PasswordsActivity::class.java)) })
+        else {
+            Vault.tryAutoUnlock(this)
+            if (!Vault.unlocked()) rows.add(Row("Unlock passwords", "Fill your saved logins", R.drawable.ic_key) { unlockDialog { showLoginPopup(t, url, x, top, bottom, w) } })
+            else {
+                if (origin != null) for (e in Vault.findByOrigin(origin))
+                    rows.add(Row(Vault.hostOf(origin), e.optString("username").ifBlank { "(no user name)" }, R.drawable.ic_globe) { injectLogin(t, e) })
+                rows.add(Row("Go to my vault", "All saved passwords", R.drawable.ic_key) { startActivity(Intent(this, PasswordsActivity::class.java)) })
+            }
+        }
+        val col = LinearLayout(this); col.orientation = LinearLayout.VERTICAL
+        val bg = GradientDrawable(); bg.cornerRadius = px(10).toFloat(); bg.setColor(tc(R.attr.mbCard)); bg.setStroke(px(1), tc(R.attr.mbLine))
+        col.background = bg; col.elevation = px(8).toFloat()
+        lateinit var pop: android.widget.PopupWindow
+        for (r in rows) {
+            val line = LinearLayout(this); line.orientation = LinearLayout.HORIZONTAL; line.gravity = Gravity.CENTER_VERTICAL
+            line.setPadding(px(14), px(10), px(14), px(10))
+            val tv = android.util.TypedValue(); theme.resolveAttribute(android.R.attr.selectableItemBackground, tv, true); line.setBackgroundResource(tv.resourceId)
+            val ic = ImageView(this); ic.setImageResource(r.icon); ic.imageTintList = android.content.res.ColorStateList.valueOf(tc(R.attr.mbMuted))
+            line.addView(ic, LinearLayout.LayoutParams(px(24), px(24)).also { it.marginEnd = px(14) })
+            val txt = LinearLayout(this); txt.orientation = LinearLayout.VERTICAL
+            val a = TextView(this); a.text = r.title; a.textSize = 16f; a.setTextColor(tc(R.attr.mbText)); a.maxLines = 1; a.ellipsize = android.text.TextUtils.TruncateAt.END
+            val b = TextView(this); b.text = r.sub; b.textSize = 14f; b.setTextColor(tc(R.attr.mbMuted)); b.maxLines = 1; b.ellipsize = android.text.TextUtils.TruncateAt.END
+            txt.addView(a); txt.addView(b)
+            line.addView(txt, LinearLayout.LayoutParams(0, -2, 1f))
+            line.setOnClickListener { pop.dismiss(); r.run() }
+            col.addView(line, LinearLayout.LayoutParams(-1, -2))
+        }
+        val screenW = resources.displayMetrics.widthPixels
+        val width = minOf(maxOf(w, px(280)), screenW - px(16))
+        pop = android.widget.PopupWindow(col, width, ViewGroup.LayoutParams.WRAP_CONTENT, false)   // not focusable: the keyboard and the field keep focus
+        pop.isOutsideTouchable = true
+        loginPopup = pop
+        col.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
+        val loc = IntArray(2); t.web.getLocationOnScreen(loc)
+        val vis = android.graphics.Rect(); window.decorView.getWindowVisibleDisplayFrame(vis)
+        var yy = loc[1] + bottom + px(4)
+        if (bottom == 0) yy = loc[1] + px(80)
+        if (yy + col.measuredHeight > vis.bottom) yy = maxOf(vis.top, loc[1] + top - col.measuredHeight - px(4))   // no room below (keyboard): above the field
+        val xx = (loc[0] + x).coerceIn(px(8), maxOf(px(8), screenW - width - px(8)))
+        try { pop.showAtLocation(t.web, Gravity.NO_GRAVITY, xx, yy) } catch (_: Exception) { }
     }
 
     /** Asks for the master password, with the choice of staying unlocked. [then] runs once it is unlocked. */

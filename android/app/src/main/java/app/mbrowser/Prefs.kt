@@ -173,7 +173,7 @@ class Prefs(ctx: Context) {
         get() = bool("rememberEngine", false)
         set(v) = putB("rememberEngine", v)
     var autoFillLogins: Boolean       // fill the saved login by itself when a page has one saved login
-        get() = bool("autoFillLogins", true)
+        get() = bool("autoFillLogins", false)
         set(v) = putB("autoFillLogins", v)
     var beta: Boolean
         get() = bool("beta", false)
