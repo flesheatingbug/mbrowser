@@ -144,6 +144,7 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
     private lateinit var pillFill: PillProgress
     private lateinit var container: FrameLayout
     private lateinit var swipe: SwipeRefreshLayout
+    private lateinit var stopSpin: Runnable
     private lateinit var switcher: View
     private lateinit var switcherList: RecyclerView
     private lateinit var switcherTitle: TextView
@@ -259,10 +260,16 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
         swipe.setColorSchemeColors(tc(R.attr.mbAccent))
         swipe.setProgressBackgroundColorSchemeColor(tc(R.attr.mbCard))
         // only a web page that is scrolled to its top can be pulled down; the speed dial never refreshes
+        stopSpin = Runnable { swipe.isRefreshing = false; refreshBlocked = false }
         swipe.setOnChildScrollUpCallback { _, _ -> val t = cur(); t == null || t.home || t.web.scrollY > 0 || refreshBlocked }
         swipe.setOnRefreshListener {
             val t = cur()
-            if (t != null && !t.home) t.web.reload() else swipe.isRefreshing = false
+            if (t != null && !t.home) {
+                t.web.reload()
+                // a reload that never reports back (stalled renderer, same-document load) must not leave the spinner up
+                swipe.removeCallbacks(stopSpin)
+                swipe.postDelayed(stopSpin, 6000)
+            } else swipe.isRefreshing = false
         }
         findViewById<View>(R.id.appLogo).setOnClickListener { showMenu(it) }
         applyLogo()
@@ -954,7 +961,7 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
                 } catch (_: Exception) { "" }
             }
         }, "mbNative")
-        w.setOnTouchListener { _, ev -> if (ev.actionMasked == MotionEvent.ACTION_DOWN) refreshBlocked = false; false }
+        w.setOnTouchListener { _, ev -> if (ev.actionMasked == MotionEvent.ACTION_DOWN) { refreshBlocked = false; if (swipe.isRefreshing && w.progress >= 100) swipe.isRefreshing = false }; false }
         w.webChromeClient = object : WebChromeClient() {
             // the fullscreen button of a video player (YouTube and others)
             override fun onShowCustomView(view: View, callback: CustomViewCallback) {
@@ -986,7 +993,10 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
             override fun onHideCustomView() { exitFullScreen() }
             override fun onShowFileChooser(view: WebView, cb: android.webkit.ValueCallback<Array<android.net.Uri>>, params: FileChooserParams): Boolean = showFileChooser(cb, params)
             override fun onProgressChanged(view: WebView, newProgress: Int) {
-                if (tab === cur()) { progress.progress = newProgress; pillFill.set(newProgress) }
+                if (tab === cur()) {
+                    progress.progress = newProgress; pillFill.set(newProgress)
+                    if (newProgress >= 100) swipe.isRefreshing = false
+                }
             }
             override fun onReceivedTitle(view: WebView, title: String?) { tab.title = title ?: "" }
             override fun onReceivedTouchIconUrl(view: WebView, url: String, precomposed: Boolean) {
