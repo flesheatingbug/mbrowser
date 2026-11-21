@@ -42,7 +42,10 @@ class SettingsActivity : BaseActivity() {
             Pg("browser", "Browser", "Identify as, text size, translate", R.drawable.ic_globe) { browserPage() },
             Pg("appearance", "Appearance", "Themes, button style, logo", R.drawable.ic_tune) { appearancePage() },
             Pg("start", "Start page", "Speed dials, thumbnails", R.drawable.ic_home) { startPageSettings() },
-            Pg("data", "Personal data", "Sync & backup, passwords", R.drawable.ic_cloud) { dataPage() },
+            Pg("data", "Personal data", "Sync & backup", R.drawable.ic_cloud) { dataPage() },
+            Pg("passwords", "Passwords", "Saved logins, autofill, unlock", R.drawable.ic_key) { passwordsPage() },
+            Pg("bookmarks", "Bookmarks", "Manage and sync", R.drawable.ic_bookmarks) { bookmarksPage() },
+            Pg("history", "History", "Browse, sync and clear", R.drawable.ic_history) { historyPage() },
             Pg("privacy", "Privacy & security", "Ad blocker, clear browsing data", R.drawable.ic_shield) { privacyPage() },
             Pg("search", "Search", "Search engines", R.drawable.ic_search) { searchRows() },
             Pg("homenet", "Home network", "Open your home devices from anywhere", R.drawable.ic_devices) { homeNetPage() },
@@ -402,10 +405,6 @@ class SettingsActivity : BaseActivity() {
             { listOf(80, 100, 120, 150).indexOf(prefs.textZoom).coerceAtLeast(1) },
             { prefs.textZoom = listOf(80, 100, 120, 150)[it] })
         switchRow("Beta features", "Shows features still being tested, such as casting to a TV. Off by default", { prefs.beta }, { prefs.beta = it })
-        choiceRow("Password manager in pages", listOf("This browser's and Android autofill (e.g. Bitwarden)", "This browser's only", "Android autofill only (e.g. Bitwarden)"),
-            { listOf("both", "builtin", "system").indexOf(prefs.passwordMode).coerceAtLeast(0) },
-            { prefs.passwordMode = listOf("both", "builtin", "system")[it]; toast("Applied to open tabs when you return to the browser") })
-        switchRow("Fill saved logins automatically", "Fill the login by itself when a page opens. Off: tap a login field and pick one from the list that appears under it", { prefs.autoFillLogins }, { prefs.autoFillLogins = it })
         switchRow("Load tabs only when opened", "After a restart, tabs wait until you switch to them (saves data and battery). Off: all load at once", { prefs.lazyTabs }, { prefs.lazyTabs = it })
         switchRow("Hide bars while scrolling", "The address bar and toolbar slide away as you read down a page", { prefs.hideBarsOnScroll }, { prefs.hideBarsOnScroll = it })
         switchRow("Pull down to refresh", "Off if it gets in the way of pages with their own drag gestures", { prefs.pullRefresh }, { prefs.pullRefresh = it })
@@ -537,25 +536,38 @@ class SettingsActivity : BaseActivity() {
             }
         }
         switchRow("Sync automatically", "When the app opens and closes", { prefs.autoSync }, { prefs.autoSync = it })
-        switchRow("Sync bookmarks", null, { prefs.syncBookmarks }, { prefs.syncBookmarks = it })
-        switchRow("Sync passwords", "The encrypted vault, unlocked with your master password", { prefs.syncVault }, { prefs.syncVault = it })
         switchRow("Sync settings and speed dials", "Search engines, speed dials and other settings shared with your desktop browser", { prefs.syncSettings }, { prefs.syncSettings = it })
-        switchRow("Sync history", null, { prefs.syncHistory }, { prefs.syncHistory = it })
         switchRow("Sync open tabs", "Lets your other devices see this phone's tabs", { prefs.syncTabs }, { prefs.syncTabs = it })
-        header("Passwords")
-        actionRow("Password manager", "Saved logins, unlock and sync") { startActivity(Intent(this, PasswordsActivity::class.java)) }
+    }
+
+    private fun passwordsPage() {
+        actionRow("Password manager", "Saved logins, add, edit and unlock") { startActivity(Intent(this, PasswordsActivity::class.java)) }
+        choiceRow("Password manager in pages", listOf("This browser's and Android autofill (e.g. Bitwarden)", "This browser's only", "Android autofill only (e.g. Bitwarden)"),
+            { listOf("both", "builtin", "system").indexOf(prefs.passwordMode).coerceAtLeast(0) },
+            { prefs.passwordMode = listOf("both", "builtin", "system")[it]; toast("Applied to open tabs when you return to the browser") })
+        switchRow("Fill saved logins automatically", "Fill the login by itself when a page opens. Off: tap a login field and pick one from the list that appears under it", { prefs.autoFillLogins }, { prefs.autoFillLogins = it })
+        actionRow("Keep passwords unlocked", VaultPolicy.describe(prefs) + "\nHow long before you need to unlock them again") { VaultPolicy.show(this) { build() } }
+        switchRow("Sync passwords", "The encrypted vault, unlocked with your master password", { prefs.syncVault }, { prefs.syncVault = it })
+    }
+
+    private fun bookmarksPage() {
+        actionRow("Bookmarks", "Open your bookmarks") { startActivity(Intent(this, BookmarksActivity::class.java)) }
+        switchRow("Sync bookmarks", "Keep them the same on your other devices", { prefs.syncBookmarks }, { prefs.syncBookmarks = it })
+    }
+
+    private fun historyPage() {
+        actionRow("History", "Open your browsing history") { startActivity(Intent(this, HistoryActivity::class.java)) }
+        switchRow("Sync history", "Keep it the same on your other devices", { prefs.syncHistory }, { prefs.syncHistory = it })
+        actionRow("Clear history", "Removes all browsing history on this device") { confirm("Clear all browsing history on this device?") { Store.clearHistory(); toast("History cleared") } }
     }
 
     private fun privacyPage() {
-        header("Passwords")
-        actionRow("Keep passwords unlocked", VaultPolicy.describe(prefs) + "\nHow long before you need to unlock them again") { VaultPolicy.show(this) { build() } }
         switchRow("Block ads and trackers", "Uses the EasyList, EasyPrivacy and uBlock filter lists", { prefs.blockTrackers }, { prefs.blockTrackers = it })
         actionRow("Filter lists", AdBlock.status + "\nTap to update now") {
             toast("Updating the filter lists…")
             Thread { val m = AdBlock.download(this); runOnUiThread { toast(m); build() } }.start()
         }
         header("Clear browsing data")
-        actionRow("Clear history", null) { confirm("Clear all browsing history on this device?") { Store.clearHistory(); toast("History cleared") } }
         actionRow("Clear cookies and site data", "Signs you out of websites") {
             confirm("Clear cookies and site data?") {
                 CookieManager.getInstance().removeAllCookies(null); WebStorage.getInstance().deleteAllData(); toast("Cleared")

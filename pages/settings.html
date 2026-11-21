@@ -61,7 +61,7 @@
 <script>
   const CATS = [
     ['general', 'General'], ['appearance', 'Appearance'], ['startpage', 'Start Page'], ['tabs', 'Tabs'], ['search', 'Search'],
-    ['privacy', 'Privacy'], ['adblocker', 'Adblocker'], ['passwords', 'Passwords'], ['downloads', 'Downloads'], ['extensions', 'Extensions'], ['keyboard', 'Keyboard'],
+    ['privacy', 'Privacy'], ['adblocker', 'Adblocker'], ['passwords', 'Passwords'], ['bookmarks', 'Bookmarks'], ['history', 'History'], ['downloads', 'Downloads'], ['extensions', 'Extensions'], ['keyboard', 'Keyboard'],
     ['sync', 'Sync'], ['homenet', 'Home network'], ['server', 'Server Admin'], ['import', 'Import'], ['profiles', 'Profiles'], ['about', 'About'],
   ];
   const BETA_CATS = new Set(['extensions']);   // whole pages that are beta features
@@ -94,8 +94,6 @@
       { path: 'startPage.showAddButton', label: 'Show the "+ Add" button', type: 'toggle' },
       { path: 'startPage.columns', label: 'Max columns (0 = auto)', type: 'number', min: 0, max: 12, help: 'Tiles wrap to fewer columns when the window is narrow. 0 fits as many as possible.' },
       { path: 'startPage.showDashboard', label: 'Show the server dashboard tab', type: 'toggle', help: 'Links to the sync server dashboard. Only shown when a server is configured.' },
-      { path: 'startPage.extraTabs.bookmarks', label: 'Show Bookmarks tab on start page', type: 'toggle' },
-      { path: 'startPage.extraTabs.history', label: 'Show History tab on start page', type: 'toggle' },
       { path: 'startPage.extraTabs.notes', label: 'Show Notes tab on start page', type: 'toggle' },
     ],
     tabs: [
@@ -112,7 +110,6 @@
       { path: 'privacy.customBlocklist', label: 'Extra domains to block', type: 'textarea', help: 'One domain per line. Subdomains are included.' },
       { path: 'privacy.allowSites', label: 'Sites where blocking is off', type: 'lines', help: 'One hostname per line.' },
       { path: 'privacy.certExceptions', label: 'Sites with accepted certificate errors', type: 'lines', help: 'Hostnames you chose to open despite an untrusted (e.g. self-signed) certificate. One per line; delete a line to stop trusting it.' },
-      { path: 'privacy.clearOnExit.history', label: 'Clear history when the browser closes', type: 'toggle' },
       { path: 'privacy.clearOnExit.cookies', label: 'Clear cookies and site data when the browser closes', type: 'toggle' },
       { path: 'privacy.clearOnExit.cache', label: 'Clear the cache when the browser closes', type: 'toggle' },
     ],
@@ -131,6 +128,13 @@
       { path: 'privacy.doNotTrack', label: 'Send "Do Not Track" and Global Privacy Control headers', type: 'toggle' },
       { path: 'privacy.allowSites', label: 'Sites where blocking is off', type: 'lines', help: 'One hostname per line. Blocking is fully disabled for these sites.' },
       { path: 'privacy.customBlocklist', label: 'Extra domains to block', type: 'textarea', help: 'One domain per line. Subdomains are included automatically.' },
+    ],
+    bookmarks: [
+      { path: 'startPage.extraTabs.bookmarks', label: 'Show Bookmarks tab on start page', type: 'toggle', help: 'Bookmarks are managed at my://bookmarks (Ctrl+Shift+O) and sync with your server.' },
+    ],
+    history: [
+      { path: 'startPage.extraTabs.history', label: 'Show History tab on start page', type: 'toggle', help: 'History is at my://history (Ctrl+H) and syncs with your server.' },
+      { path: 'privacy.clearOnExit.history', label: 'Clear history when the browser closes', type: 'toggle' },
     ],
     sync: [
       { path: 'sync.device', label: 'Device name', type: 'text', help: 'Shown on your other devices. Defaults to the hostname.' },
