@@ -86,7 +86,7 @@ class MainActivity : BaseActivity() {
       document.addEventListener('focusin',function(e){var el=e.target;if(!okField(el))return;
         if(el.type!=='password'&&!document.querySelector('input[type=password]')&&!/user|email|login|account/i.test((el.name||'')+(el.id||'')+(el.autocomplete||'')))return;
         var r=el.getBoundingClientRect(),d=window.devicePixelRatio||1;try{mbNative.loginFocus(location.href,r.left*d,r.top*d,r.bottom*d,r.width*d);}catch(x){}},true);
-      document.addEventListener('focusout',function(){try{mbNative.loginBlur();}catch(x){}},true);
+      document.addEventListener('focusout',function(){clearTimeout(window.__mbBlur);window.__mbBlur=setTimeout(function(){var a=document.activeElement;if(!a||a.tagName!=='INPUT'){try{mbNative.loginBlur();}catch(x){}}},300);},true);
       document.addEventListener('submit',grab,true);
       document.addEventListener('click',function(e){var b=e.target.closest&&e.target.closest('button,input[type=submit]');if(b&&b.type==='submit')grab();},true);
       document.addEventListener('keydown',function(e){if(e.key==='Enter')grab();},true);})();"""
@@ -935,7 +935,7 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
             @JavascriptInterface fun blockRefresh(b: Boolean) { refreshBlocked = b }
             @JavascriptInterface fun cast() { runOnUiThread { castAction(tab) } }
             @JavascriptInterface fun loginFocus(url: String, x: Float, top: Float, bottom: Float, w: Float) { runOnUiThread { showLoginPopup(tab, url, x.toInt(), top.toInt(), bottom.toInt(), w.toInt()) } }
-            @JavascriptInterface fun loginBlur() { runOnUiThread { ui.postDelayed({ loginPopup?.dismiss() }, 250) } }
+            @JavascriptInterface fun loginBlur() { runOnUiThread { loginPopup?.dismiss() } }
             @JavascriptInterface fun loginForm(url: String) { runOnUiThread { onLoginForm(tab, url) } }
             @JavascriptInterface fun loginSubmitted(url: String, user: String, pass: String) { runOnUiThread { offerSaveLogin(tab, url, user, pass) } }
             @JavascriptInterface fun cosmetic(host: String, ids: String, classes: String, first: Int): String {
