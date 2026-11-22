@@ -202,13 +202,17 @@
   #dlbtn.dl-pop { animation: dl-btn-pop 0.35s cubic-bezier(.4,0,.2,1); }
   @keyframes dl-btn-pop {
     0%  { transform: scale(1); }
-    40% { transform: scale(1.55); }
+    40% { transform: scale(1.8); }
     70% { transform: scale(0.88); }
     100%{ transform: scale(1); }
   }
+  .dl-whoosh-trail { position:fixed; left:0; height:6px; border-radius:3px; pointer-events:none; z-index:99998;
+    background:linear-gradient(90deg, transparent, var(--accent)); box-shadow:0 0 14px 3px var(--accent); }
+  .dl-chip { position:fixed; z-index:99999; pointer-events:none; padding:5px 10px; border-radius:8px; font-size:12px; white-space:nowrap;
+    background:var(--accent); color:var(--onaccent, #fff); box-shadow:0 4px 14px rgba(0,0,0,.35); transition:opacity .35s ease; }
   .dl-whoosh-orb {
     position: fixed; pointer-events: none; z-index: 99999;
-    width: 34px; height: 34px; border-radius: 50%;
+    width: 40px; height: 40px; border-radius: 50%;
     background: var(--tab); border: 1.5px solid var(--accent);
     color: var(--accent); display: grid; place-items: center;
     will-change: left, top, transform, opacity;
@@ -482,29 +486,32 @@
     if (!tr.width) return; // button not visible yet
     const targetX = tr.left + tr.width / 2;
     const targetY = tr.top + tr.height / 2;
-    // Start from the lower-middle of the viewport (where page content lives)
-    const startX = window.innerWidth * 0.5;
-    const startY = window.innerHeight * 0.6;
-
+    // a glowing streak sweeps across the whole window to the download button, which then pops and shows a label
+    const trail = document.createElement('div');
+    trail.className = 'dl-whoosh-trail';
+    trail.style.cssText = `top:${targetY - 3}px;width:0;opacity:1;`;
     const orb = document.createElement('div');
     orb.className = 'dl-whoosh-orb';
-    orb.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v10M8 10l4 4 4-4"/><path d="M5 19h14"/></svg>';
-    orb.style.cssText = `left:${startX}px;top:${startY}px;transform:translate(-50%,-50%) scale(1);opacity:1;transition:none;`;
-    document.body.appendChild(orb);
-
-    // Force layout then kick off transition
+    orb.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v10M8 10l4 4 4-4"/><path d="M5 19h14"/></svg>';
+    orb.style.cssText = `left:0px;top:${targetY}px;transform:translate(-50%,-50%) scale(1);opacity:1;transition:none;`;
+    document.body.append(trail, orb);
     orb.getBoundingClientRect();
-    orb.style.transition = 'left 0.52s cubic-bezier(.4,.05,.15,1), top 0.44s cubic-bezier(.55,0,1,.8), transform 0.48s cubic-bezier(.55,0,1,.8), opacity 0.48s ease-in';
-    orb.style.left = targetX + 'px';
-    orb.style.top  = targetY + 'px';
-    orb.style.transform = 'translate(-50%,-50%) scale(0.1)';
-    orb.style.opacity = '0';
-
+    const ease = 'cubic-bezier(.3,.1,.2,1)';
+    trail.style.transition = `width .6s ${ease}`; trail.style.width = targetX + 'px';
+    orb.style.transition = `left .6s ${ease}, transform .6s ${ease}`; orb.style.left = targetX + 'px';
+    orb.style.transform = 'translate(-50%,-50%) scale(1.25)';
     setTimeout(() => {
-      orb.remove();
+      trail.style.transition = 'opacity .35s ease-out'; trail.style.opacity = '0';
+      orb.style.transition = 'transform .3s ease-in, opacity .3s ease-in'; orb.style.transform = 'translate(-50%,-50%) scale(0.2)'; orb.style.opacity = '0';
       btn.classList.add('dl-pop');
       btn.addEventListener('animationend', () => btn.classList.remove('dl-pop'), { once: true });
-    }, 500);
+      const chip = document.createElement('div');
+      chip.className = 'dl-chip'; chip.textContent = 'Download started';
+      chip.style.cssText = `top:${targetY - 13}px;right:${window.innerWidth - tr.left + 8}px;`;
+      document.body.appendChild(chip);
+      setTimeout(() => { chip.style.opacity = '0'; }, 2200);
+      setTimeout(() => { chip.remove(); trail.remove(); orb.remove(); }, 2600);
+    }, 600);
   }
 
   let _prevDlActive = false;
