@@ -1839,12 +1839,21 @@ function onWillDownload(_e, item) {
   };
   downloads.unshift(rec);
   dlItems.set(rec.id, item);
+  // while a download is in progress it is written to "<name>.part" and renamed when it has finished, so a finished file is easy to tell apart
+  let finalPath = '';
   if (!S().downloads.askWhere && !askThis) {
     const dir = downloadDir();
     fs.mkdirSync(dir, { recursive: true });
-    rec.path = uniquePath(dir, rec.name);
-    item.setSavePath(rec.path);
+    finalPath = uniquePath(dir, rec.name);
+  } else {
+    const win = (ownerTab && ownerTab.owner && ownerTab.owner.win) || (cur && cur.win) || undefined;
+    const dir = downloadDir();
+    try { fs.mkdirSync(dir, { recursive: true }); } catch { /* ignore */ }
+    const chosen = dialog.showSaveDialogSync(win, { defaultPath: path.join(dir, rec.name) });
+    if (!chosen) { item.cancel(); downloads.shift(); dlItems.delete(rec.id); pushSoon(); return; }
+    finalPath = chosen;
   }
+  item.setSavePath(finalPath + '.part');
   item.on('updated', (_ev, state) => {
     rec.received = item.getReceivedBytes();
     rec.total = item.getTotalBytes();
@@ -1854,8 +1863,14 @@ function onWillDownload(_e, item) {
   item.on('done', (_ev, state) => {
     rec.received = item.getReceivedBytes();
     rec.state = state;
-    rec.path = item.getSavePath() || rec.path;
-    if (rec.path) rec.name = path.basename(rec.path);
+    const part = finalPath + '.part';
+    if (state === 'completed') {
+      try { fs.renameSync(part, finalPath); rec.path = finalPath; } catch { rec.path = fs.existsSync(part) ? part : finalPath; }
+    } else if (state === 'cancelled') {
+      try { fs.unlinkSync(part); } catch { /* already gone */ }
+      rec.path = finalPath;
+    } else rec.path = fs.existsSync(part) ? part : finalPath;
+    rec.name = path.basename(finalPath);
     dlItems.delete(rec.id);
     pushSoon();
   });
