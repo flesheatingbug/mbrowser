@@ -89,6 +89,11 @@
 - It has its own **Home network** page in settings: you sign in with your server account (password, and the one-time code if you use one), and the sign-in is remembered per profile with a Sign out button. Each profile has its own switch and servers, and you can save several servers and pick which one to use.
 - Switch it on in the status bar (desktop), the menu or Settings (Android). It needs `ALLOW_TUNNEL=true` on the server; see the security notes in [Sync server setup](#environment-variables).
 
+### Extensions (beta)
+- Install unpacked Chrome extensions (MV2 or MV3) or paste a **Chrome Web Store link** to download and install directly
+- Content-script-only extensions work: they inject into pages, `chrome.storage` is available, and the toolbar button and popup open normally
+- **Permanent beta limitation:** Electron does not run MV3 background service workers. Extensions that rely on one — AdBlock, uBlock Origin, most large MV3 ad blockers — will install and their content scripts may inject, but the popup and options page will be blank because they cannot reach the background. Extensions with no service worker (OFMB, Stylus, most simple MV2 extensions) work as expected. Extensions apply to normal tabs only, not private windows. This limitation is in Electron itself and is unlikely to change.
+
 ### Profiles
 - Separate **profiles**, each in its own window with its own data, avatar and settings
 - Choose a default profile, reopen the last one on launch, or reset a profile or the whole app
