@@ -754,6 +754,7 @@ function newTab(target, opts = {}) {
   tabByWc.set(tab.wc.id, tab);
   insertOrder(id, tab, opts);
   wire(tab);
+  tab.wc.on('media-started-playing', () => { if (cur && cur.activeId !== tab.id) pauseBackgroundVideo(tab); });
   const url = target === undefined ? newTabUrl() : normalize(target);
   if (opts.background && S().tabs.lazyBackground !== false) {
     tab.deferredUrl = url;
@@ -909,6 +910,11 @@ function wire(tab) {
   wc.on('before-input-event', (event, input) => { use(tab.owner); handleShortcut(event, input); });
 }
 
+// optional: videos in tabs you are not looking at are paused, and carry on when you come back
+const PAUSE_VIDEO_JS = `(()=>{document.querySelectorAll('video').forEach(v=>{if(!v.paused&&!v.ended){v.__mbPaused=true;v.pause();}});})()`;
+const RESUME_VIDEO_JS = `(()=>{document.querySelectorAll('video').forEach(v=>{if(v.__mbPaused){v.__mbPaused=false;v.play().catch(()=>{});}});})()`;
+function pauseBackgroundVideo(t) { if (S().tabs.pauseBackgroundVideo) t.wc.executeJavaScript(PAUSE_VIDEO_JS).catch(() => {}); }
+
 function switchTab(id) {
   const next = cur.tabs.get(id);
   if (!next) return;
@@ -919,7 +925,8 @@ function switchTab(id) {
   }
   if (cur.overlayMode && cur.overlayMode !== 'suggest') hideOverlay(false);
   const prev = cur.tabs.get(cur.activeId);
-  if (prev && prev !== next) cur.win.contentView.removeChildView(prev.view);
+  if (prev && prev !== next) { cur.win.contentView.removeChildView(prev.view); pauseBackgroundVideo(prev); }
+  next.wc.executeJavaScript(RESUME_VIDEO_JS).catch(() => {});
   const changed = cur.activeId !== id;
   cur.activeId = id;
   if (changed || !cur.win.contentView.children.includes(next.view)) cur.win.contentView.addChildView(next.view);
@@ -2439,8 +2446,9 @@ function setupIpc() {
   });
   on('tab:dragend', (_e, id, dropEffect, outside) => tabDragEnd(id, dropEffect, !!outside));
   on('tab:mute', (_e, id) => toggleMute(id));
-  on('tab:next', () => { const idx = cur.order.indexOf(cur.activeId); if (idx < cur.order.length - 1) switchTab(cur.order[idx + 1]); });
-  on('tab:prev', () => { const idx = cur.order.indexOf(cur.activeId); if (idx > 0) switchTab(cur.order[idx - 1]); });
+  // the wheel on the tab strip carries on from the first tab after the last one (and back)
+  on('tab:next', () => { const n = cur.order.length; if (n > 1) switchTab(cur.order[(cur.order.indexOf(cur.activeId) + 1) % n]); });
+  on('tab:prev', () => { const n = cur.order.length; if (n > 1) switchTab(cur.order[(cur.order.indexOf(cur.activeId) - 1 + n) % n]); });
   on('tab:active-click', () => { const t = activeTab(); if (t && S().tabs.clickTabScrollsTop !== false) t.wc.executeJavaScript('window.scrollTo({top:0,behavior:"smooth"})').catch(()=>{}); });
   on('tab:new-private', () => newTab(undefined, { private: true }));
   on('menu:main', () => mainMenu());

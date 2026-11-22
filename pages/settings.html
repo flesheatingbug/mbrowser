@@ -101,7 +101,8 @@
       { path: 'tabs.newTabPosition', label: 'Open new tabs', type: 'select', options: [['end', 'At the end of the tab bar'], ['afterCurrent', 'Next to the current tab']] },
       { path: 'tabs.wheelScrolls', label: 'Scroll mouse wheel on the tab bar to switch tabs', type: 'toggle' },
       { path: 'tabs.clickTabScrollsTop', label: 'Click the active tab to scroll the page to the top', type: 'toggle', help: 'When you are scrolled down a page, clicking its tab scrolls back to the top.' },
-      { path: 'tabs.lazyBackground', label: 'Only load background tabs when you switch to them', type: 'toggle', help: 'Prevents audio, videos, and network activity from tabs opened in the background until you click them.' },
+      { path: 'tabs.lazyBackground', label: 'Only load background tabs when you switch to them (turn off to load them right away)', type: 'toggle', help: 'Prevents audio, videos, and network activity from tabs opened in the background until you click them.' },
+      { path: 'tabs.pauseBackgroundVideo', label: 'Pause videos in background tabs', type: 'toggle', help: 'A video that plays in a tab you are not looking at is paused, and carries on when you switch back to it.' },
     ],
     privacy: [
       { path: 'privacy.blockTrackers', label: 'Block ads and trackers', type: 'toggle', help: 'Blocks third-party requests to a built-in list of known ad and tracking domains. Click the shield in the toolbar to allow a single site.' },
