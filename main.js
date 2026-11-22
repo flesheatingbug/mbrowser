@@ -631,8 +631,13 @@ const AUTH_POPUP_HOSTS = new Set([
   'auth.openai.com', 'chat.openai.com',
   'accounts.firefox.com',
 ]);
+// payment and checkout sign-ins (PayPal, Shop Pay, Google Pay, Stripe) are popups that talk back to the shop page the same way
+const AUTH_POPUP_SUFFIXES = ['paypal.com', 'paypal.me', 'shop.app', 'pay.google.com', 'payments.google.com', 'stripe.com', 'klarna.com', 'adyen.com'];
 function isAuthHost(url) {
-  try { return AUTH_POPUP_HOSTS.has(new URL(url).hostname); } catch { return false; }
+  try {
+    const h = new URL(url).hostname;
+    return AUTH_POPUP_HOSTS.has(h) || AUTH_POPUP_SUFFIXES.some((x) => h === x || h.endsWith('.' + x));
+  } catch { return false; }
 }
 
 // ---------- tabs ----------
@@ -885,10 +890,10 @@ function wire(tab) {
     if (externalScheme(url)) { openExternalLink(url, tab.owner.win); return { action: 'deny' }; }
     // Sign-in flows (Google, etc.) open a real popup that talks back to the page that opened it.
     // That only works as an actual window with an opener, so allow those; links become tabs.
-    if (disposition === 'new-window' && features) {
+    if ((disposition === 'new-window' && features) || isAuthHost(url)) {
       lastPopupIsAuth = isAuthHost(url);
       return { action: 'allow', overrideBrowserWindowOptions: {
-        autoHideMenuBar: true, title: 'Sign in',
+        autoHideMenuBar: true, title: 'mbrowser', icon: appIconImage(),
         // Auth-domain popups get no preload and no CDP (both are detectable by
         // Google's trusted-platform check). Session UA is already Chrome.
         webPreferences: lastPopupIsAuth
