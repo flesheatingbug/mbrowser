@@ -59,6 +59,7 @@ class MainActivity : BaseActivity() {
         var title = ""
         @Volatile var url = ""
         var fresh = false               // the next page loaded is the first one after the speed dial: it starts a new history
+        var returnUrl = ""             // the page the Home button left: Back from the speed dial returns to it
         var pending: String? = null     // restored tab: loads when first shown
         var home = true                 // true until something has been loaded: shows the speed dial
         var thumb: Bitmap? = null
@@ -359,6 +360,7 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
                     switcher.visibility == View.VISIBLE -> hideSwitcher()
                     findViewById<View>(R.id.findBar).visibility == View.VISIBLE -> closeFind()
                     t != null && t.home && startPage.up() -> Unit
+                    t != null && t.home && returnFromHome(t) -> Unit
                     t != null && !t.home && t.web.canGoBack() -> t.web.goBack()
                     t != null && !t.home -> { leaveToHome(t); render() }
                     tabs.size > 1 -> closeTab(current)
@@ -958,7 +960,7 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
                 if (wantDesktop != tab.desktop && (url.startsWith("http://") || url.startsWith("https://"))) {
                     tab.desktop = wantDesktop; applyUa(tab); ui.post { tab.web.reload() }
                 }
-                tab.url = url; tab.home = false; tab.icon = favicon ?: tab.icon
+                tab.url = url; tab.home = false; tab.returnUrl = ""; tab.icon = favicon ?: tab.icon
                 if (tab === cur()) { urlBar.setText(url); progress.visibility = View.VISIBLE; pillFill.setColor(tc(R.attr.mbAccent)); pillFill.set(5); updateChrome() }
             }
 
@@ -1509,7 +1511,9 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
     private fun goHome() {
         val t = cur() ?: return
         hideSwitcher()
+        val left = if (!t.home) t.url else ""
         leaveToHome(t)
+        t.returnUrl = left
         startPage.resetPath()
         render()
     }
@@ -1522,9 +1526,20 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
         t.fresh = true
     }
 
+    /** Back from the speed dial after pressing Home: reopen the page that was left. */
+    private fun returnFromHome(t: Tab): Boolean {
+        val u = t.returnUrl
+        if (!t.home || u.isEmpty()) return false
+        t.returnUrl = ""
+        t.home = false; t.url = u; t.pending = null
+        t.web.loadUrl(u)
+        render()
+        return true
+    }
+
     private fun goBack() {
         val t = cur() ?: return
-        if (t.home) return
+        if (t.home) { returnFromHome(t); return }
         if (t.web.canGoBack()) t.web.goBack() else { leaveToHome(t); render() }
     }
 
@@ -2137,7 +2152,7 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
             quick.addView(b, lp)
         }
         val onPage = t != null && !t.home
-        circle(R.drawable.ic_back, "Back", t != null && !t.home) { goBack() }
+        circle(R.drawable.ic_back, "Back", t != null && (!t.home || t.returnUrl.isNotEmpty())) { goBack() }
         circle(R.drawable.ic_home, "Home", true) { goHome() }
         circle(R.drawable.ic_forward, "Forward", onPage && t!!.web.canGoForward()) { t?.let { if (it.web.canGoForward()) it.web.goForward() } }
         circle(R.drawable.ic_star, "Add page to…", onPage) { addPageTo() }
