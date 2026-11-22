@@ -633,6 +633,9 @@ const AUTH_POPUP_HOSTS = new Set([
 ]);
 // payment and checkout sign-ins (PayPal, Shop Pay, Google Pay, Stripe) are popups that talk back to the shop page the same way
 const AUTH_POPUP_SUFFIXES = ['paypal.com', 'paypal.me', 'shop.app', 'pay.google.com', 'payments.google.com', 'stripe.com', 'klarna.com', 'adyen.com'];
+function isPaymentHost(url) {
+  try { const h = new URL(url).hostname; return AUTH_POPUP_SUFFIXES.some((x) => h === x || h.endsWith('.' + x)); } catch { return false; }
+}
 function isAuthHost(url) {
   try {
     const h = new URL(url).hostname;
@@ -890,7 +893,8 @@ function wire(tab) {
     if (externalScheme(url)) { openExternalLink(url, tab.owner.win); return { action: 'deny' }; }
     // Sign-in flows (Google, etc.) open a real popup that talks back to the page that opened it.
     // That only works as an actual window with an opener, so allow those; links become tabs.
-    if ((disposition === 'new-window' && features) || isAuthHost(url)) {
+    // (a middle-click or Ctrl+click is a background tab and always becomes a tab; only payment hosts get a popup without window features)
+    if ((disposition === 'new-window' && features) || (disposition !== 'background-tab' && isPaymentHost(url))) {
       lastPopupIsAuth = isAuthHost(url);
       return { action: 'allow', overrideBrowserWindowOptions: {
         autoHideMenuBar: true, title: 'mbrowser', icon: appIconImage(),
