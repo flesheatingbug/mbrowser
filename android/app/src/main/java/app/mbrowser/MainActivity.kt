@@ -367,8 +367,10 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
             }
         })
 
-        cleanupPrivate()   // drop private storage left over if the app was killed with private tabs open
+        val privUrls = savedInstanceState?.getStringArrayList("privUrls")
+        if (privUrls.isNullOrEmpty()) cleanupPrivate()   // drop private storage left over if the app was killed with private tabs open
         if (!restoreTabs()) newTab(null)
+        restorePrivate(savedInstanceState)
         handleIntent(intent)
         if (Build.VERSION.SDK_INT >= 33 && prefs.firstRunDone && !sessionPrefs().getBoolean("askedNotif", false) &&
             checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
@@ -593,6 +595,35 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
             a.put(org.json.JSONObject().put("url", if (t.home) "" else t.url).put("title", t.title).put("desktop", t.desktop))
         }
         sessionPrefs().edit().putString("tabs", a.toString()).putInt("current", idx).apply()
+    }
+
+    // Private tabs are never written to disk. The system keeps this bundle in memory for as long as the app stays in your recent apps,
+    // so they survive the app being cleared from memory in the background, and are gone once you swipe the app away.
+    override fun onSaveInstanceState(out: Bundle) {
+        super.onSaveInstanceState(out)
+        val priv = tabs.filter { it.priv && !it.home }
+        if (priv.isEmpty()) return
+        out.putStringArrayList("privUrls", ArrayList(priv.map { it.url }))
+        out.putStringArrayList("privTitles", ArrayList(priv.map { it.title }))
+        val c = cur()
+        out.putInt("privCur", if (c != null && c.priv && !c.home) priv.indexOf(c) else -1)
+    }
+
+    private fun restorePrivate(b: Bundle?) {
+        val urls = b?.getStringArrayList("privUrls") ?: return
+        val titles = b.getStringArrayList("privTitles") ?: arrayListOf()
+        val normal = current
+        val made = ArrayList<Tab>()
+        urls.forEachIndexed { i, u ->
+            if (u.isEmpty()) return@forEachIndexed
+            val t = newTab(null, true)
+            t.home = false; t.url = u; t.title = titles.getOrElse(i) { "" }; t.pending = u
+            made.add(t)
+        }
+        if (made.isEmpty()) return
+        if (!prefs.lazyTabs) made.forEach { t -> t.pending?.let { p -> t.pending = null; t.web.loadUrl(p) } }
+        val pc = b.getInt("privCur", -1)
+        if (pc in made.indices) switchTo(tabs.indexOf(made[pc])) else switchTo(normal)
     }
 
     private fun restoreTabs(): Boolean {
@@ -1830,6 +1861,7 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
         onWallpaper = on
         startPage.setOnWallpaper(on)
         IconStyle.apply(this, on)
+        tintHome()
         val lightBars = !on && androidx.core.graphics.ColorUtils.calculateLuminance(tc(R.attr.mbBg)) > 0.5
         androidx.core.view.WindowCompat.getInsetsController(window, window.decorView).let {
             it.isAppearanceLightStatusBars = lightBars; it.isAppearanceLightNavigationBars = lightBars
@@ -1873,6 +1905,13 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
         b.scaleType = ImageView.ScaleType.CENTER
         b.contentDescription = Toolbars.NAMES[key]
         b.layoutParams = lp
+        if (key == "home") b.setOnLongClickListener { v ->
+            if (HomeNet.servers(prefs).isEmpty() && !prefs.syncConfigured) return@setOnLongClickListener false
+            val m = PopupMenu(this, v)
+            m.menu.add(0, 1, 0, if (prefs.homeNetwork) "Turn home network off" else "Turn home network on")
+            m.setOnMenuItemClickListener { toggleHomeNet(); true }
+            m.show(); true
+        }
         b.setOnClickListener {
             when (key) {
                 "downloads" -> startActivity(Intent(this, ItemsActivity::class.java).putExtra("mode", "downloads"))
@@ -1890,6 +1929,20 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
         return b
     }
 
+    private fun toggleHomeNet() {
+        if (prefs.homeNetwork) { HomeNet.turnOff(this, prefs); Toast.makeText(this, "Home network off", Toast.LENGTH_SHORT).show(); tintHome() }
+        else HomeNet.turnOn(this, prefs) { err ->
+            Toast.makeText(this, err ?: "Home network on", Toast.LENGTH_LONG).show(); tintHome()
+        }
+    }
+
+    /** The Home button turns green while the home network is on. */
+    private fun tintHome() {
+        val bar = findViewById<LinearLayout>(R.id.bottomBar) ?: return
+        val home = bar.findViewWithTag<View>("home") as? ImageView ?: return
+        if (prefs.homeNetwork) home.imageTintList = android.content.res.ColorStateList.valueOf(android.graphics.Color.parseColor("#22C55E"))
+    }
+
     private fun buildBottomBar() {
         val bar = findViewById<LinearLayout>(R.id.bottomBar)
         val keys = Toolbars.keys(prefs)
@@ -1897,6 +1950,7 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
         bar.removeAllViews()
         for (k in keys) bar.addView(barButton(k))
         IconStyle.apply(this, onWallpaper)
+        tintHome()
     }
 
     private fun serverApi() = Api(prefs.server, prefs.token, prefs.device)
@@ -2084,15 +2138,15 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
         row(R.drawable.ic_bookmarks, "Bookmarks", go { picker.launch(Intent(this, BookmarksActivity::class.java)) })
         row(R.drawable.ic_history, "History", go { picker.launch(Intent(this, HistoryActivity::class.java)) })
         row(R.drawable.ic_download, "Downloads", go { startActivity(Intent(this, ItemsActivity::class.java).putExtra("mode", "downloads")) })
-        row(R.drawable.ic_devices, "Tabs from other devices", go { picker.launch(Intent(this, ItemsActivity::class.java).putExtra("mode", "devices")) })
+        row(R.drawable.ic_devices, "Other devices", go { picker.launch(Intent(this, ItemsActivity::class.java).putExtra("mode", "devices")) })
         row(R.drawable.ic_key, "Passwords", go { picker.launch(Intent(this, PasswordsActivity::class.java)) })
         divider()
-        row(R.drawable.ic_desktop, (if (t?.desktop == true) "✓ " else "") + "Desktop site (remembered per site)", need { tab -> tab.desktop = !tab.desktop; if (!tab.home) prefs.setSiteMode(Thumbs.hostOf(tab.url), if (tab.desktop) "d" else "m"); applyUa(tab); tab.web.reload() })
+        row(R.drawable.ic_desktop, (if (t?.desktop == true) "✓ " else "") + "Desktop site", need { tab -> tab.desktop = !tab.desktop; if (!tab.home) prefs.setSiteMode(Thumbs.hostOf(tab.url), if (tab.desktop) "d" else "m"); applyUa(tab); tab.web.reload() })
         if (t != null && !t.home && prefs.blockTrackers) {
             val off = prefs.blockerOff(Thumbs.hostOf(t.url))
-            row(R.drawable.ic_shield, if (off) "Ads and trackers: allowed on this site" else "Ads and trackers: blocked on this site", need { tab -> prefs.setBlockerOff(Thumbs.hostOf(tab.url), !off); tab.web.reload() })
+            row(R.drawable.ic_shield, if (off) "Blocking: off for this site" else "Blocking: on for this site", need { tab -> prefs.setBlockerOff(Thumbs.hostOf(tab.url), !off); tab.web.reload() })
         }
-        if (t != null && !t.home && prefs.blockTrackers) row(R.drawable.ic_shield, "What was blocked on this page…", need { tab ->
+        if (t != null && !t.home && prefs.blockTrackers) row(R.drawable.ic_shield, "Blocked on this page", need { tab ->
             val b = tab.blocked.toList()
             val hid = tab.hiddenCss.trim()
             val text = "Blocked requests (" + b.size + "):\n" + (if (b.isEmpty()) "none" else b.joinToString("\n")) +
@@ -2101,23 +2155,19 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
                 .setPositiveButton("Copy") { _, _ -> (getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager).setPrimaryClip(android.content.ClipData.newPlainText("blocked", text)) }
                 .setNegativeButton("Close", null).show()
         })
-        if (HomeNet.servers(prefs).isNotEmpty() || prefs.syncConfigured) row(R.drawable.ic_devices, if (prefs.homeNetwork) "Home network: ON (tap to turn off)" else "Home network: off (tap to turn on)", go {
-            if (prefs.homeNetwork) { HomeNet.turnOff(this, prefs); Toast.makeText(this, "Home network off", Toast.LENGTH_SHORT).show() }
-            else HomeNet.turnOn(this, prefs) { err -> Toast.makeText(this, err ?: "Home network on: home addresses now open on your home network", Toast.LENGTH_LONG).show() }
-        })
-        if (prefs.beta && t != null && !t.home) row(R.drawable.ic_devices, if (caster?.connected == true) "Casting…" else "Cast media from this page…", need { tab -> castAction(tab) })
-        row(R.drawable.ic_search, "Find on this page", need { openFind() })
+        if (HomeNet.servers(prefs).isNotEmpty() || prefs.syncConfigured) row(R.drawable.ic_devices, if (prefs.homeNetwork) "Home network: on" else "Home network: off", go { toggleHomeNet() })
+        if (prefs.beta && t != null && !t.home) row(R.drawable.ic_devices, if (caster?.connected == true) "Casting…" else "Cast…", need { tab -> castAction(tab) })
+        row(R.drawable.ic_search, "Find in page", need { openFind() })
         row(R.drawable.ic_translate, "Translate page", need { tab -> newTab(Translate.pageUrl(tab.url, prefs.translateLang)) })
-        row(R.drawable.ic_translate, "Translate selected text", go {
+        row(R.drawable.ic_translate, "Translate text", go {
             if (lastSelection.isNotEmpty()) newTab(Translate.textUrl(lastSelection, prefs.translateLang))
             else promptFields(this, "Translate text", listOf("Type or paste text (or select some on a page first)"), listOf(""), "Translate") { v ->
                 if (v[0].isNotBlank()) newTab(Translate.textUrl(v[0], prefs.translateLang))
             }
         })
-        row(R.drawable.ic_key, "Fill saved login", go { fillLogin() })
+        row(R.drawable.ic_key, "Fill login", go { fillLogin() })
         row(R.drawable.ic_share, "Share page", need { tab -> startActivity(Intent.createChooser(
             Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, tab.url), "Share")) })
-        row(R.drawable.ic_add, "Add page to…", need { _ -> addPageTo() })
         divider()
         row(R.drawable.ic_sync, "Sync now", go {
             // not signed in to a server yet: go to where that's set up
