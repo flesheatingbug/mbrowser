@@ -219,7 +219,10 @@
     m.append(el('p', 'muted', 'Beta. Install an extension from the Chrome Web Store (paste its link), or load an unpacked one (a folder containing manifest.json). Only part of the Chrome extension API exists in this browser: content scripts and simple extensions usually work; extensions that rely on a background service worker, blocking network requests or toolbar popups may not. Extensions apply to normal tabs, not private ones. Turning one off may need a restart to take full effect.'));
     const box = el('div'); m.append(box);
     const msg = el('p', 'muted'); m.append(msg);
-    function draw(list) {
+    const reloadNote = el('p', 'muted'); reloadNote.style.cssText = 'display:none'; reloadNote.textContent = 'Reload open tabs for the extension to take effect.'; m.append(reloadNote);
+    function draw(listOrResult) {
+      const list = Array.isArray(listOrResult) ? listOrResult : (listOrResult && listOrResult.list) || [];
+      if (listOrResult && listOrResult.reloadNeeded) reloadNote.style.display = '';
       box.textContent = '';
       if (!list.length) box.append(el('p', 'muted', 'No extensions added yet.'));
       for (const e of list) {
@@ -242,10 +245,10 @@
     const store = el('div'); store.style.cssText = 'display:flex;gap:8px;margin:10px 0';
     const link = el('input'); link.type = 'text'; link.placeholder = 'Chrome Web Store link or extension id'; link.style.flex = '1';
     const inst = el('button', null, 'Install');
-    inst.onclick = async () => { inst.disabled = true; msg.textContent = 'Downloading…'; const r = await browser.extensionsAddStore(link.value); inst.disabled = false; msg.textContent = r.error || (r.list.length ? 'Done.' : ''); if (!r.error) link.value = ''; draw(r.list); };
+    inst.onclick = async () => { inst.disabled = true; msg.textContent = 'Downloading…'; const r = await browser.extensionsAddStore(link.value); inst.disabled = false; msg.textContent = r.error || (r.list && r.list.length ? 'Done.' : ''); if (!r.error) link.value = ''; draw(r); };
     store.append(link, inst); m.append(store);
     const add = el('button', null, 'Add unpacked extension…');
-    add.onclick = async () => { const r = await browser.extensionsAdd(); msg.textContent = r.error || ''; draw(r.list); };
+    add.onclick = async () => { const r = await browser.extensionsAdd(); msg.textContent = r.error || ''; draw(r); };
     m.append(add);
   }
 

@@ -2293,10 +2293,11 @@ function readExtManifest(dir) {
 }
 async function loadExtensions(ses) {
   if (!betaOn()) return;   // extensions are a beta feature
+  const loader = ses.extensions || ses;   // prefer new API (Electron 44+); fall back to deprecated ses.loadExtension
   for (const e of extList) {
     if (!e.enabled || loadedExt.has(e.path)) continue;
     try {
-      const x = await ses.loadExtension(e.path, { allowFileAccess: true });
+      const x = await loader.loadExtension(e.path, { allowFileAccess: true });
       loadedExt.set(e.path, x.id); e.id = x.id; e.error = '';
     } catch (err) { e.error = String(err && err.message || err).slice(0, 200); }
   }
@@ -3168,7 +3169,7 @@ function setupIpc() {
     saveExt();
     await loadExtensions(session.defaultSession);
     const e = extList.find((x) => x.path === dir);
-    return { list: extView(), error: e && e.error ? 'Could not load it: ' + e.error : '' };
+    return { list: extView(), error: e && e.error ? 'Could not load it: ' + e.error : '', reloadNeeded: !e?.error };
   }, PAGE_ONLY);
   // install straight from the Chrome Web Store: a store link or the 32-letter id
   handle('extensions:addStore', async (_e, text) => {
@@ -3181,7 +3182,7 @@ function setupIpc() {
       const buf = Buffer.from(await r.arrayBuffer());
       const dir = path.join(app.getPath('userData'), 'extensions', id);
       const old = extList.find((x) => x.path === dir);
-      if (old && loadedExt.has(dir)) { try { session.defaultSession.removeExtension(loadedExt.get(dir)); } catch { /* restart */ } loadedExt.delete(dir); }
+      if (old && loadedExt.has(dir)) { try { (session.defaultSession.extensions || session.defaultSession).removeExtension(loadedExt.get(dir)); } catch { /* restart */ } loadedExt.delete(dir); }
       fs.rmSync(dir, { recursive: true, force: true });
       extractCrx(buf, dir);
       const mf = readExtManifest(dir);
@@ -3192,7 +3193,7 @@ function setupIpc() {
       saveExt();
       await loadExtensions(session.defaultSession);
       const e = extList.find((x) => x.path === dir);
-      return { list: extView(), error: e && e.error ? 'Installed, but it could not start: ' + e.error : '' };
+      return { list: extView(), error: e && e.error ? 'Installed, but it could not start: ' + e.error : '', reloadNeeded: !e?.error };
     } catch (err) {
       return { list: extView(), error: 'Could not install: ' + String(err && err.message || err).slice(0, 200) };
     }
@@ -3202,17 +3203,17 @@ function setupIpc() {
     if (!e) return extView();
     e.enabled = !!on;
     if (!on && loadedExt.has(p)) {
-      try { session.defaultSession.removeExtension(loadedExt.get(p)); } catch { /* needs a restart */ }
+      try { (session.defaultSession.extensions || session.defaultSession).removeExtension(loadedExt.get(p)); } catch { /* needs a restart */ }
       loadedExt.delete(p);
     }
     saveExt();
     if (on) await loadExtensions(session.defaultSession);
     try { pushAll(true); } catch { /* ignore */ }
-    return extView();
+    return { list: extView(), reloadNeeded: !!on };
   }, PAGE_ONLY);
   handle('extensions:remove', (_e, p) => {
     const e = extList.find((x) => x.path === p);
-    if (e && loadedExt.has(p)) { try { session.defaultSession.removeExtension(loadedExt.get(p)); } catch { /* restart */ } loadedExt.delete(p); }
+    if (e && loadedExt.has(p)) { try { (session.defaultSession.extensions || session.defaultSession).removeExtension(loadedExt.get(p)); } catch { /* restart */ } loadedExt.delete(p); }
     extList = extList.filter((x) => x.path !== p);
     if (e && e.store) { try { fs.rmSync(p, { recursive: true, force: true }); } catch { /* ignore */ } }   // a store install lives in our own folder
     saveExt();
@@ -4709,7 +4710,7 @@ app.whenReady().then(async () => {
   setupSession(session.defaultSession);
   setupSession(session.fromPartition('private'));
   extList = load('extensions.json', []).filter((e) => e && typeof e.path === 'string');
-  loadExtensions(session.defaultSession).catch(() => {});
+  await loadExtensions(session.defaultSession).catch(() => {});
   applyHomeNetwork({ startup: true }).catch(() => {});
   setupIpc();
 
