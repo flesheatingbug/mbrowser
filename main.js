@@ -794,7 +794,13 @@ function wire(tab) {
   const wc = tab.wc;
   wc.on('unresponsive', () => { dbg('page not responding: ' + wc.getURL()); tab.status = 'Page not responding (details: ' + debugLogPath() + ')'; pushSoon(); });
   wc.on('responsive', () => { dbg('page responding again: ' + wc.getURL()); tab.status = ''; pushSoon(); });
-  wc.on('render-process-gone', (_e, d) => { dbg('page process gone: ' + d.reason + ' code=' + d.exitCode + ' ' + wc.getURL()); tab.status = 'Page crashed: ' + d.reason + ' (details: ' + debugLogPath() + ')'; pushSoon(); });
+  wc.on('render-process-gone', (_e, d) => {
+    // a heavy page that dies (out of memory, GPU hiccup) gets one automatic reload; a second crash within a minute is left alone
+    if (['crashed', 'oom', 'launch-failed', 'integrity-failure'].includes(d.reason) && !(tab.lastCrash && Date.now() - tab.lastCrash < 60000)) {
+      tab.lastCrash = Date.now(); setTimeout(() => { try { if (!wc.isDestroyed()) wc.reload(); } catch { /* gone */ } }, 800);
+    } else tab.lastCrash = Date.now();
+    dbg('page process gone: ' + d.reason + ' code=' + d.exitCode + ' ' + wc.getURL()); tab.status = 'Page crashed: ' + d.reason + ' (details: ' + debugLogPath() + ')'; pushSoon();
+  });
   // every event runs in the context of the window that currently owns the tab
   const h = (fn) => (...a) => { use(tab.owner); fn(...a); };
   wc.on('page-title-updated', h(() => pushState()));

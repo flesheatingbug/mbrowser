@@ -29,6 +29,9 @@
   #tabs-wrap { flex:1; min-width:0; display:flex; gap:2px; align-items:flex-end; overflow-x:auto; overflow-y:hidden;
     padding:6px 0 0; scrollbar-width:none; }
   #tabs-wrap::-webkit-scrollbar { display:none; }
+  /* a tab is being dragged over this window: show where it will land */
+  body.dropping::after { content:''; position:fixed; inset:0; border:2px solid var(--accent); border-radius:8px; pointer-events:none; z-index:50; background:color-mix(in srgb, var(--accent) 10%, transparent); }
+  .tab.dropbefore::before { content:''; position:absolute; left:-3px; top:6px; bottom:6px; width:3px; border-radius:2px; background:var(--accent); }
   .tab { position:relative; display:flex; align-items:center; gap:6px; flex:0 1 200px; min-width:42px; max-width:200px;
     height:32px; padding:0 8px; background:var(--tab); border-radius:8px 8px 0 0; cursor:default; transition:min-width .15s, max-width .15s; }
   .tab.active { background:var(--active); }
@@ -319,6 +322,12 @@
     if (id) api.moveTab(id, null);
   });
 
+  let dragDepth = 0;
+  const isTabDrag = (e) => e.dataTransfer && e.dataTransfer.types.includes(TAB_MIME);
+  document.addEventListener('dragenter', (e) => { if (isTabDrag(e)) { dragDepth++; document.body.classList.add('dropping'); } });
+  document.addEventListener('dragleave', (e) => { if (isTabDrag(e) && --dragDepth <= 0) { dragDepth = 0; document.body.classList.remove('dropping'); document.querySelectorAll('.dropbefore').forEach((n) => n.classList.remove('dropbefore')); } });
+  document.addEventListener('drop', () => { dragDepth = 0; document.body.classList.remove('dropping'); document.querySelectorAll('.dropbefore').forEach((n) => n.classList.remove('dropbefore')); }, true);
+  document.addEventListener('dragend', () => { dragDepth = 0; document.body.classList.remove('dropping'); });
   // a tab from another window can be dropped anywhere on this window's toolbar or tab strip
   document.addEventListener('dragover', (e) => { if (e.dataTransfer.types.includes(TAB_MIME)) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; } });
   document.addEventListener('drop', (e) => {
@@ -524,8 +533,13 @@
       e.dataTransfer.effectAllowed = 'move';
     };
     el.ondragover = (e) => {
-      if (e.dataTransfer.types.includes(TAB_MIME)) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }
+      if (e.dataTransfer.types.includes(TAB_MIME)) {
+        e.preventDefault(); e.dataTransfer.dropEffect = 'move';
+        document.querySelectorAll('.dropbefore').forEach((n) => { if (n !== el) n.classList.remove('dropbefore'); });
+        el.classList.add('dropbefore');
+      }
     };
+    el.ondragleave = () => el.classList.remove('dropbefore');
     el.ondrop = (e) => {
       e.preventDefault(); e.stopPropagation();
       const id = Number(e.dataTransfer.getData(TAB_MIME));
