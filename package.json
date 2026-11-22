@@ -44,7 +44,12 @@
       ],
       "icon": "assets/icons/white-m.png",
       "category": "Network;WebBrowser",
-      "artifactName": "mbrowser-linux.AppImage"
+      "artifactName": "mbrowser-linux.AppImage",
+      "mimeTypes": [
+        "text/html",
+        "x-scheme-handler/http",
+        "x-scheme-handler/https"
+      ]
     },
     "win": {
       "target": [

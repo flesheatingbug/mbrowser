@@ -838,8 +838,11 @@
         if (st.isDefault) btn.style.display = 'none';
         const note = el('span', 'msg', '');
         btn.onclick = async () => {
-          await browser.defaultSet().catch(() => null);
-          note.textContent = 'Windows opened Default apps. Choose mbrowser under Web browser.';
+          const r = await browser.defaultSet().catch(() => null);
+          if (/linux/i.test(navigator.userAgent)) {
+            note.textContent = r && r.ok ? 'Done. If your desktop still shows another browser, pick mbrowser under Default applications.' : 'Could not set it automatically. Pick mbrowser under Default applications in your system settings.';
+            if (r && r.ok) { btn.style.display = 'none'; label.textContent = 'mbrowser is your default browser.'; }
+          } else note.textContent = 'Windows opened Default apps. Choose mbrowser under Web browser.';
         };
         row.append(label, btn, note);
         m.append(row);

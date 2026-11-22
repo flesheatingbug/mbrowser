@@ -362,7 +362,30 @@ function newTabUrl() {
 }
 
 // ---------- default browser notice (Windows) ----------
+// Linux: an AppImage has no launcher entry of its own, so write one that lists the web types, then ask xdg to use it
+function linuxDesktopFile() { return path.join(os.homedir(), '.local', 'share', 'applications', 'mbrowser.desktop'); }
+function setDefaultLinux() {
+  try {
+    const f = linuxDesktopFile();
+    let txt = ''; try { txt = fs.readFileSync(f, 'utf8'); } catch { /* none yet */ }
+    if (!/x-scheme-handler\/https/.test(txt)) {
+      const exec = process.env.APPIMAGE ? `"${process.env.APPIMAGE}"` : `"${process.execPath}" "${app.getAppPath()}"`;
+      fs.mkdirSync(path.dirname(f), { recursive: true });
+      fs.writeFileSync(f, ['[Desktop Entry]', 'Type=Application', 'Name=mbrowser', 'GenericName=Web Browser',
+        'Comment=Browse your way. Your data. Your server.', `Exec=${exec} %U`, 'Icon=mbrowser', 'Terminal=false',
+        'Categories=Network;WebBrowser;', 'StartupWMClass=mbrowser',
+        'MimeType=text/html;x-scheme-handler/http;x-scheme-handler/https;', ''].join('\n'));
+      try { spawn('update-desktop-database', [path.dirname(f)], { stdio: 'ignore' }).on('error', () => {}); } catch { /* optional */ }
+    }
+    const run = (cmd, args) => { try { require('child_process').execFileSync(cmd, args, { stdio: 'ignore', timeout: 5000 }); return true; } catch { return false; } };
+    let ok = run('xdg-settings', ['set', 'default-web-browser', 'mbrowser.desktop']);
+    ok = run('xdg-mime', ['default', 'mbrowser.desktop', 'x-scheme-handler/http', 'x-scheme-handler/https']) || ok;
+    _dfc.t = 0;
+    return { ok };
+  } catch (e) { return { ok: false, error: String(e && e.message || e) }; }
+}
 function setDefaultBrowser() {
+  if (process.platform === 'linux') return setDefaultLinux();
   if (process.platform !== 'win32') return { ok: false };
   try { app.setAsDefaultProtocolClient('http'); app.setAsDefaultProtocolClient('https'); } catch { /* the settings page below still works */ }
   _dfc.t = 0;
@@ -373,7 +396,10 @@ function setDefaultBrowser() {
 let _dfc = { t: 0, isDefault: true };
 function isDefaultBrowser() {
   if (Date.now() - _dfc.t > 4000) {
-    try { _dfc.isDefault = app.isDefaultProtocolClient('http') && app.isDefaultProtocolClient('https'); } catch { _dfc.isDefault = true; }
+    try {
+      if (process.platform === 'linux') _dfc.isDefault = require('child_process').execFileSync('xdg-settings', ['get', 'default-web-browser'], { timeout: 3000 }).toString().trim() === 'mbrowser.desktop';
+      else _dfc.isDefault = app.isDefaultProtocolClient('http') && app.isDefaultProtocolClient('https');
+    } catch { _dfc.isDefault = process.platform !== 'linux'; }
     _dfc.t = Date.now();
   }
   return _dfc.isDefault;
@@ -3478,8 +3504,8 @@ function setupIpc() {
   handle('app:build-number', () => BUILD_NUMBER, BOTH);
   // default browser: Windows lists mbrowser under Settings > Default apps (registered by the installer); the user confirms there
   handle('default:status', () => ({
-    supported: process.platform === 'win32',
-    isDefault: process.platform === 'win32' && (_dfc.t = 0, isDefaultBrowser()),
+    supported: process.platform === 'win32' || process.platform === 'linux',
+    isDefault: (process.platform === 'win32' || process.platform === 'linux') && (_dfc.t = 0, isDefaultBrowser()),
   }), BOTH);
   handle('default:set', () => setDefaultBrowser(), BOTH);
   handle('app:versions', () => ({ electron: process.versions.electron, chrome: process.versions.chrome }), BOTH);
