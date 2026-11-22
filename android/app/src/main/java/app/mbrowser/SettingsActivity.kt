@@ -344,6 +344,18 @@ class SettingsActivity : BaseActivity() {
             actionRow(s.name + inUse, s.url + "\n" + status) { serverMenu(s) }
         }
         actionRow("Add a server", "Another home you want to reach") { addServerDialog() }
+        header("Addresses")
+        actionRow("Addresses that use the home network", (if (prefs.homeRanges.isBlank()) "The usual home ranges (192.168.x.x, 10.x.x.x, 172.16-31.x.x)" else prefs.homeRanges.lines().filter { it.isNotBlank() }.joinToString(", ")) + "\nTap to change") { rangesDialog() }
+    }
+
+    private fun rangesDialog() {
+        val e = EditText(this); e.setText(prefs.homeRanges); e.hint = "192.168.50.0/24\n10.8.0.0/16\nnas.example.com"
+        e.minLines = 4; e.gravity = android.view.Gravity.TOP
+        AlertDialog.Builder(this).setTitle("Home network addresses")
+            .setMessage("One per line: a range like 192.168.50.0/24, a single address, or a name like nas.example.com or .lan. Leave empty for the usual home ranges. Names without a dot and names ending in .local, .lan, .home or .internal always use it.")
+            .setView(e)
+            .setPositiveButton("Save") { _, _ -> prefs.homeRanges = e.text.toString().trim(); build() }
+            .setNegativeButton("Cancel", null).show()
     }
 
     private fun refreshHome() { HomeNet.apply(this, prefs); build() }

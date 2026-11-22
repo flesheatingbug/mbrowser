@@ -85,6 +85,7 @@ if (location.protocol === 'my:') {
     homenetAdd: invoke('homenet:add'),
     homenetRemove: invoke('homenet:remove'),
     homenetSelect: invoke('homenet:select'),
+    homenetSetRanges: invoke('homenet:setRanges'),
     homenetSetKey: invoke('homenet:setKey'),
     homenetLogin: invoke('homenet:login'),
     homenetLogout: invoke('homenet:logout'),

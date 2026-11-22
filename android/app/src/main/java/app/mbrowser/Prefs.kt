@@ -163,6 +163,9 @@ class Prefs(ctx: Context) {
     var homeServers: String
         get() = str(pk("homeServers"), "[]")
         set(v) = put(pk("homeServers"), v)
+    var homeRanges: String           // custom addresses for the home network, one per line (empty = the usual private ranges)
+        get() = str(pk("homeRanges"), "")
+        set(v) = put(pk("homeRanges"), v)
     var homeActive: String
         get() = str(pk("homeActive"), "")
         set(v) = put(pk("homeActive"), v)

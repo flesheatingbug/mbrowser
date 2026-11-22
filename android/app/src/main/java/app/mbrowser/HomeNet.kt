@@ -114,15 +114,48 @@ object HomeNet {
         } catch (_: Exception) { }
     }
 
+    private class Ranges(val nets: List<Pair<Long, Long>>, val names: List<String>)
+    @Volatile private var rangesText = "\u0000"; @Volatile private var ranges = Ranges(emptyList(), emptyList())
+
+    /** The custom list: 192.168.1.0/24, 10.0.0.5, nas.example.com or .lan, one per line or comma-separated. */
+    private fun parseRanges(text: String): Ranges {
+        val nets = ArrayList<Pair<Long, Long>>(); val names = ArrayList<String>()
+        for (raw in text.split('\n', ',', ';')) {
+            val t = raw.trim().lowercase()
+            if (t.isEmpty() || t.startsWith("#")) continue
+            val m = Regex("^(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})(?:/(\\d{1,2}))?$").find(t)
+            if (m != null) {
+                val o = (1..4).map { m.groupValues[it].toInt() }; val bits = m.groupValues[5].ifEmpty { "32" }.toInt()
+                if (o.any { it > 255 } || bits > 32) continue
+                val mask = if (bits == 0) 0L else (0xffffffffL shl (32 - bits)) and 0xffffffffL
+                val ip = ((o[0].toLong() shl 24) or (o[1].toLong() shl 16) or (o[2].toLong() shl 8) or o[3].toLong()) and mask
+                nets.add(ip to mask)
+            } else if (Regex("^\\.?[a-z0-9_.-]+$").matches(t)) names.add(t)
+        }
+        return Ranges(nets, names)
+    }
+
+    private fun customRanges(): Ranges {
+        val t = prefsRef?.homeRanges ?: ""
+        if (t != rangesText) { ranges = parseRanges(t); rangesText = t }
+        return ranges
+    }
+
     /** True for addresses that belong to a home network (and so go through the tunnel). */
     fun isHomeHost(hostIn: String): Boolean {
         val host = hostIn.trim('[', ']').lowercase()
         if (host.isEmpty() || host == "localhost" || host.startsWith("127.") || host == "::1") return false
+        val custom = customRanges()
         val v4 = Regex("^(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})$").find(host)
         if (v4 != null) {
+            if (custom.nets.isNotEmpty()) {
+                val ip = (v4.groupValues[1].toLong() shl 24) or (v4.groupValues[2].toLong() shl 16) or (v4.groupValues[3].toLong() shl 8) or v4.groupValues[4].toLong()
+                return custom.nets.any { (net, mask) -> (ip and mask) == net }
+            }
             val a = v4.groupValues[1].toInt(); val b = v4.groupValues[2].toInt()
             return a == 10 || (a == 172 && b in 16..31) || (a == 192 && b == 168)
         }
+        if (custom.names.any { if (it.startsWith(".")) host.endsWith(it) else host == it }) return true
         if (host.contains(':')) return host.startsWith("fc") || host.startsWith("fd")
         return !host.contains('.') || Regex("\\.(local|lan|home|home\\.arpa|internal)$").containsMatchIn(host)
     }

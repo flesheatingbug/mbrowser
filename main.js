@@ -2413,7 +2413,7 @@ async function applyHomeNetwork({ startup = false } = {}) {
   }
   try {
     if (!homeProxy) homeProxy = await hometunnel.startProxy(() => homeCfg() || { server: '', token: '' });
-    const pac = 'data:application/x-ns-proxy-autoconfig;base64,' + Buffer.from(hometunnel.pacScript(homeProxy.port)).toString('base64');
+    const pac = 'data:application/x-ns-proxy-autoconfig;base64,' + Buffer.from(hometunnel.pacScript(homeProxy.port, HN().getRanges())).toString('base64');
     for (const s of sessions()) await s.setProxy({ mode: 'pac_script', pacScript: pac });
     homeActive = true;
     pushAll();
@@ -2546,6 +2546,7 @@ function setupIpc() {
     if (s && s.token) await homenet.logout(s.url, s.token);
     HN().remove(id); hnRefresh(); return hnView();
   }, { chrome: false, page: true });
+  handle('homenet:setRanges', (_e, text) => { HN().setRanges(text); if (homeActive) applyHomeNetwork({ startup: true }).catch(() => {}); return hnView(); }, { chrome: false, page: true });
   handle('homenet:select', (_e, id) => { HN().select(id); hnRefresh(); return hnView(); }, { chrome: false, page: true });
   handle('homenet:setKey', (_e, id, on) => { HN().setKey(id, !!on); hnRefresh(); return hnView(); }, { chrome: false, page: true });
   handle('homenet:login', async (_e, id, f) => {

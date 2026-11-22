@@ -182,6 +182,11 @@
         const rm = el('button', null, 'Remove'); rm.onclick = async () => draw(await browser.homenetRemove(s.id)); right.append(rm);
         row.append(lab, right); box.append(row);
       }
+      box.append(el('h3', null, 'Addresses that use the home network'));
+      box.append(el('p', 'muted', 'One per line: a range such as 192.168.50.0/24, a single address, or a name such as nas.example.com or .lan. Leave it empty for the usual home ranges (192.168.x.x, 10.x.x.x, 172.16-31.x.x). Names without a dot and names ending in .local, .lan, .home or .internal always use it. If you use ALLOW_TUNNEL with TUNNEL_ALLOW on the server, it must allow the same ranges.'));
+      const ta = el('textarea'); ta.rows = 4; ta.style.cssText = 'width:100%;font-family:monospace;'; ta.placeholder = '192.168.50.0/24\n10.8.0.0/16'; ta.value = v.ranges || '';
+      const sv = el('button', null, 'Save addresses'); sv.onclick = async () => { const r = await browser.homenetSetRanges(ta.value); draw(r); msg.textContent = 'Saved.'; };
+      box.append(ta, sv);
       box.append(el('h3', null, 'Add a server'));
       const name = el('input'); name.placeholder = 'Name (e.g. Home)';
       const url = el('input'); url.placeholder = 'https://sync.example.com';
