@@ -319,6 +319,15 @@
     if (id) api.moveTab(id, null);
   });
 
+  // a tab from another window can be dropped anywhere on this window's toolbar or tab strip
+  document.addEventListener('dragover', (e) => { if (e.dataTransfer.types.includes(TAB_MIME)) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; } });
+  document.addEventListener('drop', (e) => {
+    if (!e.dataTransfer.types.includes(TAB_MIME)) return;
+    e.preventDefault();
+    const id = Number(e.dataTransfer.getData(TAB_MIME));
+    if (id) api.moveTab(id, null);
+  });
+
   // menu button in tab strip
   $('tabs-menu-btn').onclick = () => api.mainMenu();
 

@@ -1784,6 +1784,15 @@ function tabMenu(id) {
     { label: t.wc.audioMuted ? 'Unmute Tab' : 'Mute Tab', click: () => toggleMute(id) },
     { type: 'separator' },
     { label: 'Move Tab to New Window', enabled: cur.order.length > 1, click: () => tearOffTab(t) },
+    ...(() => {
+      const others = [...windows].filter((w) => w !== cur && !w.win.isDestroyed());
+      if (!others.length) return [];
+      return [{ label: 'Move Tab to Window', submenu: others.map((w, i) => {
+        const at = w.tabs.get(w.activeId);
+        const name = ((at && at.wc.getTitle()) || 'Window ' + (i + 1)).slice(0, 40);
+        return { label: (i + 1) + '. ' + name + (w.order.length > 1 ? '  (+' + (w.order.length - 1) + ')' : ''), click: () => moveTabToWindow(t, w, null) };
+      }) }];
+    })(),
     { label: 'Close Tab', click: () => closeTab(id) },
     { label: 'Close Other Tabs', click: () => closeOthers(id) },
   ]));
