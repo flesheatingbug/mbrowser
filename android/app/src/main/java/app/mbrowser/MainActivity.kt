@@ -874,7 +874,11 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
     }
 
     private fun newTab(url: String?, priv: Boolean = false): Tab {
-        val w = WebView(this)
+        val w = object : WebView(this) {
+            // adds "Web search" to the text-selection toolbar (Copy, Select all, Share ...)
+            override fun startActionMode(cb: android.view.ActionMode.Callback?, type: Int): android.view.ActionMode? =
+                super.startActionMode(if (cb == null) null else searchActionCallback(this, cb), type)
+        }
         w.setOnScrollChangeListener { v, _, y, _, oy -> if (tabs.getOrNull(current)?.web === v) onPageScroll(y, oy) }
         var isolated = false
         if (priv) {
@@ -1434,6 +1438,32 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
     }
 
     // ---------- navigation ----------
+    private fun searchActionCallback(web: WebView, cb: android.view.ActionMode.Callback) = object : android.view.ActionMode.Callback2() {
+        private val SEARCH = 0x5eac
+        override fun onCreateActionMode(mode: android.view.ActionMode, menu: android.view.Menu): Boolean {
+            val ok = cb.onCreateActionMode(mode, menu)
+            if (menu.findItem(SEARCH) == null) menu.add(0, SEARCH, 50, "Web search").setShowAsAction(android.view.MenuItem.SHOW_AS_ACTION_IF_ROOM)
+            return ok
+        }
+        override fun onPrepareActionMode(mode: android.view.ActionMode, menu: android.view.Menu) = cb.onPrepareActionMode(mode, menu)
+        override fun onActionItemClicked(mode: android.view.ActionMode, item: android.view.MenuItem): Boolean {
+            if (item.itemId != SEARCH) return cb.onActionItemClicked(mode, item)
+            web.evaluateJavascript("(function(){return String(window.getSelection())})()") {
+                val text = try { org.json.JSONArray("[" + (it ?: "\"\"") + "]").getString(0).trim() } catch (e: Exception) { "" }
+                if (text.isNotEmpty()) {
+                    val e = engineOverride ?: Settings.defaultEngine()
+                    newTab(e.url.replace("%s", java.net.URLEncoder.encode(text.take(300), "UTF-8")), tabs.firstOrNull { t -> t.web === web }?.priv == true)
+                }
+            }
+            mode.finish()
+            return true
+        }
+        override fun onDestroyActionMode(mode: android.view.ActionMode) = cb.onDestroyActionMode(mode)
+        override fun onGetContentRect(mode: android.view.ActionMode, view: View, outRect: android.graphics.Rect) {
+            if (cb is android.view.ActionMode.Callback2) cb.onGetContentRect(mode, view, outRect) else super.onGetContentRect(mode, view, outRect)
+        }
+    }
+
     private fun toUrl(input: String): String {
         val s = input.trim()
         if (s.isEmpty()) return ""
