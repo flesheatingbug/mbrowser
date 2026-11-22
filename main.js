@@ -2300,6 +2300,7 @@ async function loadExtensions(ses) {
       loadedExt.set(e.path, x.id); e.id = x.id; e.error = '';
     } catch (err) { e.error = String(err && err.message || err).slice(0, 200); }
   }
+  try { pushAll(true); } catch { /* no window yet */ }   // the toolbar buttons appear as soon as the extensions have loaded
 }
 // toolbar buttons (like Chrome): icon, popup and options page come from the extension's manifest
 const extInfoCache = new Map();
@@ -3205,6 +3206,7 @@ function setupIpc() {
     }
     saveExt();
     if (on) await loadExtensions(session.defaultSession);
+    try { pushAll(true); } catch { /* ignore */ }
     return extView();
   }, PAGE_ONLY);
   handle('extensions:remove', (_e, p) => {
@@ -3213,6 +3215,7 @@ function setupIpc() {
     extList = extList.filter((x) => x.path !== p);
     if (e && e.store) { try { fs.rmSync(p, { recursive: true, force: true }); } catch { /* ignore */ } }   // a store install lives in our own folder
     saveExt();
+    try { pushAll(true); } catch { /* ignore */ }
     return extView();
   }, PAGE_ONLY);
 
