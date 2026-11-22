@@ -155,6 +155,7 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
     private lateinit var tabCount: TextView
     private lateinit var btnReload: ImageButton
 
+    @Volatile private var refreshOutside = false   // the finger went down outside the area chosen for pull-to-refresh
     @Volatile private var refreshBlocked = false   // the finger went down on something the page wants to drag itself
     private var engineOverride: Engine? = null
     private var switcherMode = 0          // 0 tabs, 1 private, 2 other devices, 3 recently closed
@@ -262,7 +263,7 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
         swipe.setProgressBackgroundColorSchemeColor(tc(R.attr.mbCard))
         // only a web page that is scrolled to its top can be pulled down; the speed dial never refreshes
         stopSpin = Runnable { swipe.isRefreshing = false; refreshBlocked = false }
-        swipe.setOnChildScrollUpCallback { _, _ -> val t = cur(); t == null || t.home || t.web.scrollY > 0 || refreshBlocked }
+        swipe.setOnChildScrollUpCallback { _, _ -> val t = cur(); t == null || t.home || t.web.scrollY > 0 || refreshBlocked || refreshOutside }
         swipe.setOnRefreshListener {
             val t = cur()
             if (t != null && !t.home) {
@@ -1004,7 +1005,7 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
                 } catch (_: Exception) { "" }
             }
         }, "mbNative")
-        w.setOnTouchListener { _, ev -> if (ev.actionMasked == MotionEvent.ACTION_DOWN) { refreshBlocked = false; if (swipe.isRefreshing && w.progress >= 100) swipe.isRefreshing = false }; false }
+        w.setOnTouchListener { _, ev -> if (ev.actionMasked == MotionEvent.ACTION_DOWN) { refreshBlocked = false; refreshOutside = when (prefs.pullArea) { "top" -> ev.y > w.height / 3f; "bottom" -> ev.y < w.height * 2f / 3f; else -> false }; if (swipe.isRefreshing && w.progress >= 100) swipe.isRefreshing = false }; false }
         w.webChromeClient = object : WebChromeClient() {
             // the fullscreen button of a video player (YouTube and others)
             override fun onShowCustomView(view: View, callback: CustomViewCallback) {

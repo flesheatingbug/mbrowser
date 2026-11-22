@@ -420,6 +420,9 @@ class SettingsActivity : BaseActivity() {
         switchRow("Load tabs only when opened", "After a restart, tabs wait until you switch to them (saves data and battery). Off: all load at once", { prefs.lazyTabs }, { prefs.lazyTabs = it })
         switchRow("Hide bars while scrolling", "The address bar and toolbar slide away as you read down a page", { prefs.hideBarsOnScroll }, { prefs.hideBarsOnScroll = it })
         switchRow("Pull down to refresh", "Off if it gets in the way of pages with their own drag gestures", { prefs.pullRefresh }, { prefs.pullRefresh = it })
+        choiceRow("Pull-to-refresh area", listOf("Full screen", "Top of screen", "Bottom of screen"),
+            { listOf("full", "top", "bottom").indexOf(prefs.pullArea).coerceAtLeast(0) },
+            { prefs.pullArea = listOf("full", "top", "bottom")[it] })
         choiceRow("Identify as", UserAgents.MODES.map { it.second }, { UserAgents.MODES.indexOfFirst { it.first == prefs.uaMode }.coerceAtLeast(0) },
             { prefs.uaMode = UserAgents.MODES[it].first; toast("Applied to open tabs when you return to the browser") })
         choiceRow("Translate to", Translate.LANGS.map { it.second }, { Translate.LANGS.indexOfFirst { it.first == prefs.translateLang }.coerceAtLeast(0) },

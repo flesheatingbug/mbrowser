@@ -192,6 +192,10 @@ class Prefs(ctx: Context) {
     var pullRefresh: Boolean
         get() = bool("pullRefresh", true)
         set(v) = putB("pullRefresh", v)
+    // where a pull-down may start: full (anywhere), top (upper third) or bottom (lower third)
+    var pullArea: String
+        get() = str("pullArea", "full")
+        set(v) = p.edit().putString("pullArea", v).apply()
     var showAdd: Boolean
         get() = bool("showAdd", true)
         set(v) = putB("showAdd", v)
