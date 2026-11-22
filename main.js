@@ -2285,10 +2285,30 @@ const betaOn = () => !!S().general.beta;
 const { extractCrx, storeId, crxUrl } = require('./lib/crx');
 const hometunnel = require('./lib/hometunnel');
 const homenet = require('./lib/homenet');
+function resolveMsg(raw, dir) {
+  if (typeof raw !== 'string' || !raw.startsWith('__MSG_')) return raw;
+  const key = raw.slice(6, -2).toLowerCase();
+  // Try locale folders in preference order: en, en_US, en_GB, then first available
+  const localesDir = path.join(dir, '_locales');
+  let candidates;
+  try { candidates = fs.readdirSync(localesDir); } catch { return raw; }
+  const ordered = ['en', 'en_US', 'en_GB', ...candidates];
+  for (const loc of ordered) {
+    if (!candidates.includes(loc)) continue;
+    try {
+      const msgs = JSON.parse(fs.readFileSync(path.join(localesDir, loc, 'messages.json'), 'utf8'));
+      const hit = Object.keys(msgs).find((k) => k.toLowerCase() === key);
+      if (hit && msgs[hit].message) return String(msgs[hit].message);
+    } catch { /* try next */ }
+  }
+  return raw;
+}
 function readExtManifest(dir) {
   try {
     const m = JSON.parse(fs.readFileSync(path.join(dir, 'manifest.json'), 'utf8'));
-    return { name: String(m.name || path.basename(dir)).slice(0, 80), version: String(m.version || ''), mv: Number(m.manifest_version) || 0 };
+    const name = resolveMsg(m.name || path.basename(dir), dir);
+    const hasSW = !!(m.background && m.background.service_worker);
+    return { name: String(name).slice(0, 80), version: String(m.version || ''), mv: Number(m.manifest_version) || 0, hasSW };
   } catch { return null; }
 }
 async function loadExtensions(ses) {
@@ -2355,7 +2375,7 @@ function openExtPopup(w, e, rect) {
   });
   pw.loadURL(extUrl(e, i.popup)).catch(() => { if (!pw.isDestroyed()) pw.close(); });
 }
-const extView = () => extList.map((e) => ({ hidden: !!e.hidden, hasOptions: !!extInfo(e).options, path: e.path, enabled: !!e.enabled, name: e.name, version: e.version, mv: e.mv, loaded: loadedExt.has(e.path), error: e.error || '' }));
+const extView = () => extList.map((e) => ({ hidden: !!e.hidden, hasOptions: !!extInfo(e).options, path: e.path, enabled: !!e.enabled, name: e.name, version: e.version, mv: e.mv, hasSW: !!e.hasSW, loaded: loadedExt.has(e.path), error: e.error || '' }));
 function saveExt() { try { save('extensions.json', extList.map((e) => ({ path: e.path, enabled: e.enabled, hidden: !!e.hidden, name: e.name, version: e.version, mv: e.mv }))); } catch { /* ignore */ } }
 
 // ---------- clearing data ----------
@@ -3187,7 +3207,6 @@ function setupIpc() {
       extractCrx(buf, dir);
       const mf = readExtManifest(dir);
       if (!mf) throw new Error('The package has no readable manifest');
-      if (mf.name.startsWith('__MSG_')) { try { const loc = JSON.parse(fs.readFileSync(path.join(dir, '_locales', 'en', 'messages.json'), 'utf8')); const k = mf.name.slice(6, -2); const hit = Object.keys(loc).find((x) => x.toLowerCase() === k.toLowerCase()); if (hit) mf.name = String(loc[hit].message).slice(0, 80); } catch { /* keep the raw name */ } }
       extList = extList.filter((x) => x.path !== dir);
       extList.push({ path: dir, enabled: true, store: id, ...mf });
       saveExt();
@@ -4710,6 +4729,8 @@ app.whenReady().then(async () => {
   setupSession(session.defaultSession);
   setupSession(session.fromPartition('private'));
   extList = load('extensions.json', []).filter((e) => e && typeof e.path === 'string');
+  // Fill in fields not persisted to extensions.json (hasSW, re-resolved name)
+  for (const e of extList) { const m = readExtManifest(e.path); if (m) { e.hasSW = m.hasSW; if (e.name.startsWith('__MSG_')) e.name = m.name; } }
   await loadExtensions(session.defaultSession).catch(() => {});
   applyHomeNetwork({ startup: true }).catch(() => {});
   setupIpc();

@@ -228,6 +228,7 @@
       for (const e of list) {
         const row = el('div', 'row');
         const lab = el('label', null, e.name + (e.version ? '  v' + e.version : ''));
+        if (e.hasSW) { const badge = el('span', 'help', ' · needs background worker · popup may be blank'); badge.style.color = 'var(--muted)'; lab.append(badge); }
         lab.append(el('span', 'help', e.path + (e.error ? '  ·  ' + e.error : e.enabled ? (e.loaded ? '  ·  running' : '  ·  not loaded') : '')));
         const right = el('span'); right.style.cssText = 'display:flex;gap:8px;align-items:center';
         const cb = el('input'); cb.type = 'checkbox'; cb.checked = e.enabled; cb.title = 'Enabled';
