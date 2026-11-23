@@ -87,6 +87,16 @@
                 android:visibility="gone" />
 
             <ImageButton
+                android:id="@+id/btnReader"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="Reader view"
+                android:src="@drawable/ic_reader"
+                android:tint="?attr/mbMuted"
+                android:visibility="gone" />
+
+            <ImageButton
                 android:id="@+id/btnStar"
                 android:layout_width="44dp"
                 android:layout_height="44dp"

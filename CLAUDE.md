@@ -47,6 +47,8 @@ not npm's. Browser version in package.json: 0.9.0. Server: 1.0.0 (stdlib-only Py
 - Android live cast: only the video is hidden (not the page); CastRelay prefetches live segments.
 - Beta items in Settings show an amber BETA badge/highlight (`.beta` in pages/settings.html).
 
+- Reader view (both platforms): `assets/reader.js` (desktop) and `android/app/src/main/assets/reader.js` are identical copies; keep them in sync. Injected on demand: `check()` drives the address-bar button (shown on article-like pages), `toggle()` shows a shadow-DOM overlay with text size / font / theme controls. Desktop: `detectReadable`/`toggleReader` in main.js, Ctrl+Alt+R, `appearance.toolbar.reader`. Android: `btnReader`, menu row, Back closes it. Untested at runtime.
+
 ## Open items
 - All Tabs / recently closed including tabs from other synced sessions.
 - Google sign-in workaround. Translate on desktop (Android has it).

@@ -550,6 +550,7 @@ function stateFor() {
     blocked: wc ? blockedCounts.get(wc.id) || 0 : 0,
     blockerOn: S().privacy.blockTrackers,
     home: { avail: homeActive || !!homeCfg() || !!S().general.homeNetwork, on: homeActive, ready: !!homeCfg() },
+    reader: { avail: !!(t && (t.readable || t.readerOn)), on: !!(t && t.readerOn) },
     exts: extButtons(),
     siteAllowed: !!host && allow.some((h) => host === h || host.endsWith('.' + h)),
     private: !!(t && t.private),
@@ -754,6 +755,30 @@ function insertOrder(id, tab, opts) {
 // a new blank tab opens private when the tab you are on is private, regular otherwise
 function followPrivate() { try { return !!(cur && activeTab() && activeTab().private); } catch { return false; } }
 
+// reader view: assets/reader.js is injected on demand; a page that looks like an article gets a button in the address bar
+const READER_JS = (() => { try { return fs.readFileSync(path.join(__dirname, 'assets', 'reader.js'), 'utf8'); } catch { return ''; } })();
+function detectReadable(tab) {
+  if (!READER_JS || tab.readerOn) return;
+  const wc = tab.wc; if (!wc || wc.isDestroyed() || !isWeb(wc.getURL())) return;
+  clearTimeout(tab.readerTimer);
+  tab.readerTimer = setTimeout(async () => {
+    try {
+      const ok = !!(await wc.executeJavaScript(READER_JS + ';window.__mbReader.check()', false));
+      if (ok !== !!tab.readable) { tab.readable = ok; pushState(); }
+    } catch { /* page went away */ }
+  }, 700);
+}
+async function toggleReader(tab) {
+  if (!READER_JS || !tab || tab.wc.isDestroyed()) return;
+  try {
+    const r = await tab.wc.executeJavaScript(READER_JS + ';window.__mbReader.toggle()', true);
+    tab.readerOn = r === 'on';
+    if (r === 'none') flashStatus(tab, 'No article found on this page');
+    else if (r === 'on') tab.wc.focus();
+  } catch { /* ignore */ }
+  pushState();
+}
+
 function newTab(target, opts = {}) {
   const id = nextId++;
   const view = createView(!!opts.private);
@@ -825,7 +850,8 @@ function wire(tab) {
     layout();
   }));
   wc.on('did-start-loading', h(() => { tab.status = 'Connecting…'; tab.detectedLang = ''; cur.translateDismissed = false; pushState(); }));
-  wc.on('did-stop-loading', h(() => { tab.status = ''; pushState(); maybeThumb(tab); }));
+  wc.on('did-stop-loading', h(() => { tab.status = ''; pushState(); maybeThumb(tab); detectReadable(tab); }));
+  wc.on('did-navigate-in-page', h(() => detectReadable(tab)));
   wc.on('did-finish-load', h(() => {
     if (tab.focusUrlOnLoad) {
       tab.focusUrlOnLoad = false;
@@ -851,7 +877,7 @@ function wire(tab) {
   wc.on('did-start-navigation', (details) => {
     if (details && details.isMainFrame && !details.isSameDocument) {
       blockedCounts.set(wc.id, 0); blockedHostsLog.delete(wc.id);
-      tab.loginForm = false;
+      tab.loginForm = false; tab.readable = false; tab.readerOn = false;
       tab.status = 'Connecting to ' + (hostOf(details.url) || 'site') + '…';
     }
   });
@@ -1224,6 +1250,7 @@ const COMMANDS = [
   { id: 'page-print', label: 'Print preview…', keys: ['Ctrl+P'], run: () => printPreview() },
   { id: 'page-print-system', label: 'Print with system dialog…', keys: [], run: () => activeWc()?.print({ silent: false, printBackground: true }, () => {}) },
   { id: 'page-translate', label: 'Translate Page', keys: [], run: () => translateTab(null) },
+  { id: 'reader-view', label: 'Reader View', keys: ['Ctrl+Alt+R'], run: () => toggleReader(activeTab()) },
   { id: 'page-source', label: 'View Page Source', keys: ['Ctrl+U'], run: () => { const u = activeWc()?.getURL(); if (u && isWeb(u)) newTab('view-source:' + u, { after: cur.activeId }); } },
   { id: 'page-devtools', label: 'Developer Tools', keys: ['F12'], run: () => activeWc()?.toggleDevTools() },
   { id: 'page-screenshot', label: 'Capture Page Screenshot', keys: ['Ctrl+Shift+S'], run: screenshot },
@@ -2479,6 +2506,7 @@ const handle = (ch, fn, o) => ipcMain.handle(ch, guard(fn, o));
 const BOTH = { chrome: true, page: true };
 
 function setupIpc() {
+  on('reader:toggle', () => { toggleReader(activeTab()); });
   on('tab:new', (_e, url) => newTab(url || undefined, url ? {} : { private: followPrivate() }));
   on('tab:switch', (_e, id) => switchTab(id));
   on('tab:close', (_e, id) => closeTab(id));

@@ -151,7 +151,7 @@
   const get = (p) => p.split('.').reduce((o, k) => (o == null ? o : o[k]), S);
 
   const TB_ITEMS = [['back', 'Back'], ['forward', 'Forward'], ['reload', 'Reload'], ['address', 'Address bar'], ['shield', 'Tracker blocker'], ['downloads', 'Downloads'], ['star', 'Bookmark star'], ['profile', 'Profile']];
-  const TB_EXTRA = [['key', 'Saved logins key (inside the address bar)'], ['siteinfo', 'Site information (inside the address bar)']];
+  const TB_EXTRA = [['key', 'Saved logins key (inside the address bar)'], ['siteinfo', 'Site information (inside the address bar)'], ['reader', 'Reader view (inside the address bar, on article pages)']];
   async function homenetSection(m) {
     m.append(el('p', 'muted', 'Open devices on your home network from anywhere. Typing 192.168.1.1, router.lan or nas:8080 then opens YOUR home router or NAS, not whatever network this computer is on. Everything else browses normally. It works through your own sync server (which needs ALLOW_TUNNEL=true). Servers, sign-ins and the switch below belong to this profile only.'));
     m.append(field({ path: 'general.homeNetwork', label: 'Home network mode', type: 'toggle', help: 'A status-bar chip shows when it is on. Turning it on checks the server first.' }));

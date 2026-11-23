@@ -21,6 +21,7 @@ contextBridge.exposeInMainWorld('api', {
   activeTabClick: send('tab:active-click'),
   newPrivateTab: send('tab:new-private'),
   mainMenu: send('menu:main'),
+  readerToggle: send('reader:toggle'),
   profileMenu: send('profile:menu'),
   showSecurity: send('security:show'),
   pwAction: (a) => ipcRenderer.invoke('pw:action', a),

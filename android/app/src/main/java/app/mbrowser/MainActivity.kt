@@ -65,6 +65,8 @@ class MainActivity : BaseActivity() {
         var thumb: Bitmap? = null
         var icon: Bitmap? = null
         var desktop = false
+        var readable = false            // looks like an article: the reader button shows
+        var readerOn = false            // the reader view is open on this page
         var priv = false                // private tab: no history, thumbnails or syncing
         var isolated = false            // private tab with its own separate cookies and storage
         val blocked = java.util.concurrent.ConcurrentLinkedDeque<String>()   // requests the blocker stopped on this page, newest last
@@ -151,6 +153,7 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
     private lateinit var switcherTitle: TextView
     private lateinit var startPage: StartPage
     private lateinit var siteIcon: ImageView
+    private lateinit var btnReader: ImageButton
     private lateinit var btnStar: ImageButton
     private lateinit var tabCount: TextView
     private lateinit var btnReload: ImageButton
@@ -279,6 +282,8 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
         switcherList = findViewById(R.id.switcherList)
         switcherTitle = findViewById(R.id.switcherTitle)
         siteIcon = findViewById(R.id.siteIcon)
+        btnReader = findViewById(R.id.btnReader)
+        btnReader.setOnClickListener { cur()?.let { toggleReader(it) } }
         btnStar = findViewById(R.id.btnStar)
         tabCount = TextView(this)
         btnReload = findViewById(R.id.btnReload)
@@ -307,6 +312,7 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
             findViewById<View>(R.id.btnQr).visibility = if (focused) View.VISIBLE else View.GONE
             btnStar.visibility = View.GONE
             btnReload.visibility = if (focused) View.GONE else View.VISIBLE
+            updateReaderBtn()
             if (focused) { showEngines(); showSuggestions(""); pullHistoryForSuggestions() } else { engineOverride = null; findViewById<View>(R.id.engineStrip).visibility = View.GONE; findViewById<View>(R.id.suggestScroll).visibility = View.GONE }
         }
         btnReload.setOnClickListener {
@@ -360,6 +366,7 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
                     customView != null -> exitFullScreen()
                     switcher.visibility == View.VISIBLE -> hideSwitcher()
                     findViewById<View>(R.id.findBar).visibility == View.VISIBLE -> closeFind()
+                    t != null && t.readerOn -> toggleReader(t)
                     t != null && t.home && startPage.up() -> Unit
                     t != null && t.home && returnFromHome(t) -> Unit
                     t != null && !t.home && t.web.canGoBack() -> t.web.goBack()
@@ -960,6 +967,7 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
             override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
                 loginPopup?.dismiss()
                 tab.blocked.clear(); tab.hiddenCss = ""
+                tab.readable = false; tab.readerOn = false; if (tab === cur()) updateReaderBtn()
                 if (tabs.getOrNull(current)?.web === view) setBars(true)
                 if (url.startsWith("about:")) return
                 // a site you set to desktop or mobile keeps that choice; others follow the default
@@ -986,6 +994,7 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
                 if (url.startsWith("about:")) return
                 if (tab.fresh) { tab.fresh = false; view.clearHistory() }
                 view.evaluateJavascript(DRAG_GUARD_JS, null)
+                detectReadable(tab)
                 view.evaluateJavascript(LOGIN_CAPTURE_JS, null)   // also in private tabs: filling works there, saving does not (see offerSaveLogin)
                 if (prefs.blockTrackers) view.evaluateJavascript(HIDE_JS, null)
                 if (prefs.beta && caster?.available != false) view.evaluateJavascript(CAST_JS, null)
@@ -1274,6 +1283,39 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
         updateChrome()
     }
 
+    // ---------- reader view (assets/reader.js, shared with the desktop app) ----------
+    private val readerJs: String by lazy { try { assets.open("reader.js").bufferedReader().use { it.readText() } } catch (_: Exception) { "" } }
+
+    private fun updateReaderBtn() {
+        val t = cur()
+        val show = t != null && !t.home && (t.readable || t.readerOn) && !urlBar.hasFocus()
+        btnReader.visibility = if (show) View.VISIBLE else View.GONE
+        btnReader.imageTintList = tcl(if (t?.readerOn == true) R.attr.mbAccent else R.attr.mbMuted)
+    }
+
+    private fun detectReadable(tab: Tab) {
+        if (readerJs.isEmpty() || tab.readerOn) return
+        tab.web.postDelayed({
+            if (tabs.none { it === tab } || tab.readerOn) return@postDelayed
+            tab.web.evaluateJavascript(readerJs + ";window.__mbReader.check()") { r ->
+                val ok = r == "true"
+                if (ok != tab.readable) { tab.readable = ok; if (tab === cur()) updateReaderBtn() }
+            }
+        }, 700)
+    }
+
+    private fun toggleReader(tab: Tab) {
+        if (readerJs.isEmpty()) return
+        tab.web.evaluateJavascript(readerJs + ";window.__mbReader.toggle()") { r ->
+            when (r?.trim('"')) {
+                "on" -> tab.readerOn = true
+                "off" -> tab.readerOn = false
+                else -> { tab.readerOn = false; Toast.makeText(this, "No article found on this page", Toast.LENGTH_SHORT).show() }
+            }
+            if (tab === cur()) updateReaderBtn()
+        }
+    }
+
     private fun updateChrome() {
         val t = cur()
         tabCount.text = tabs.size.toString()
@@ -1282,6 +1324,7 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
         findViewById<View>(R.id.addressPill).setBackgroundResource(if (isPriv) R.drawable.bg_pill_private else R.drawable.bg_pill)
         urlBar.hint = if (isPriv) "Private: search or type URL" else "Search or type URL"
         val starred = t != null && !t.home && Store.isBookmarked(t.url)
+        updateReaderBtn()
         btnStar.setImageResource(if (starred) R.drawable.ic_star_filled else R.drawable.ic_star)
         btnStar.imageTintList = tcl(if (starred) R.attr.mbAccent else R.attr.mbText)
         if (t == null || t.home) {
@@ -1559,6 +1602,7 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
 
     private fun goBack() {
         val t = cur() ?: return
+        if (t.readerOn) { toggleReader(t); return }
         if (t.home) { returnFromHome(t); return }
         if (t.web.canGoBack()) t.web.goBack() else { leaveToHome(t); render() }
     }
@@ -2222,6 +2266,7 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
         })
         if (HomeNet.servers(prefs).isNotEmpty() || prefs.syncConfigured) row(R.drawable.ic_devices, if (prefs.homeNetwork) "Home network: on" else "Home network: off", go { toggleHomeNet() })
         if (prefs.beta && t != null && !t.home) row(R.drawable.ic_devices, if (caster?.connected == true) "Casting…" else "Cast…", need { tab -> castAction(tab) })
+        if (t != null && !t.home) row(R.drawable.ic_reader, if (t.readerOn) "Close reader view" else "Reader view", need { tab -> toggleReader(tab) })
         row(R.drawable.ic_search, "Find in page", need { openFind() })
         row(R.drawable.ic_translate, "Translate page", need { tab -> newTab(Translate.pageUrl(tab.url, prefs.translateLang)) })
         row(R.drawable.ic_translate, "Translate text", go {
