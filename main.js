@@ -751,6 +751,9 @@ function insertOrder(id, tab, opts) {
   cur.order.splice(idx, 0, id);
 }
 
+// a new blank tab opens private when the tab you are on is private, regular otherwise
+function followPrivate() { try { return !!(cur && activeTab() && activeTab().private); } catch { return false; } }
+
 function newTab(target, opts = {}) {
   const id = nextId++;
   const view = createView(!!opts.private);
@@ -1194,7 +1197,7 @@ function unlockNow() {
 
 const COMMANDS = [
   { id: 'lock-profile', label: 'Lock Profile', keys: ['Ctrl+Shift+L'], run: () => lockNow() },
-  { id: 'tab-new', label: 'New Tab', keys: ['Ctrl+T'], run: () => newTab() },
+  { id: 'tab-new', label: 'New Tab', keys: ['Ctrl+T'], run: () => newTab(undefined, { private: followPrivate() }) },
   { id: 'tab-new-private', label: 'New Private Tab', keys: ['Ctrl+Shift+N'], run: () => newTab(undefined, { private: true }) },
   { id: 'window-new', label: 'New Window', keys: ['Ctrl+N'], run: () => createWindow() },
   { id: 'window-new-private', label: 'New Private Window', keys: ['Ctrl+Shift+P'], run: () => createWindow({ private: true }) },
@@ -2476,7 +2479,7 @@ const handle = (ch, fn, o) => ipcMain.handle(ch, guard(fn, o));
 const BOTH = { chrome: true, page: true };
 
 function setupIpc() {
-  on('tab:new', (_e, url) => newTab(url || undefined));
+  on('tab:new', (_e, url) => newTab(url || undefined, url ? {} : { private: followPrivate() }));
   on('tab:switch', (_e, id) => switchTab(id));
   on('tab:close', (_e, id) => closeTab(id));
   on('tab:menu', (_e, id) => tabMenu(id));
