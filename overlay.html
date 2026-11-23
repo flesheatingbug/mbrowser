@@ -13,6 +13,15 @@
   
   :root { --bg:#1e1f22; --tab:#2b2d31; --active:#3a3d44; --fg:#e6e6e6; --muted:#9aa0a6; --line:#34363b; --accent:#7aa2f7; }
   * { box-sizing: border-box; }
+  #auth-card { position:absolute; left:50%; top:80px; transform:translateX(-50%); width:320px; box-sizing:border-box; padding:20px; border-radius:14px; background:var(--bg); color:var(--fg); border:1px solid var(--line); box-shadow:0 8px 30px rgba(0,0,0,.5); }
+  #auth-card h3 { margin:0 0 10px; font-size:16px; font-weight:600; }
+  #auth-site { font-size:13px; word-break:break-all; } #auth-note { font-size:12px; color:var(--muted); margin:2px 0 14px; }
+  #auth-card label { display:flex; align-items:center; justify-content:space-between; gap:10px; font-size:13px; margin-bottom:10px; }
+  #auth-card input { width:190px; box-sizing:border-box; padding:8px 10px; border-radius:8px; border:1px solid var(--line); background:transparent; color:var(--fg); font:inherit; outline:none; }
+  #auth-card input:focus { border-color:var(--accent); }
+  #auth-card .row { display:flex; justify-content:flex-end; gap:8px; margin-top:14px; }
+  #auth-card button { border:0; border-radius:18px; padding:8px 18px; font:inherit; font-size:13px; cursor:pointer; background:var(--tab); color:var(--fg); }
+  #auth-card #auth-ok { background:var(--accent); color:var(--onaccent); }
   .dz-half { position:absolute; top:0; bottom:0; width:50%; box-sizing:border-box; display:flex; align-items:center; justify-content:center; color:var(--fg); font-weight:600; transition:background .1s, border-color .1s; border:2px solid transparent; border-radius:8px; margin:6px; width:calc(50% - 12px); }
   #dz-l { left:0; } #dz-r { right:0; }
   .dz-half span { opacity:0; padding:8px 14px; border-radius:8px; background:var(--bg); }
@@ -140,6 +149,16 @@
   <div id="card-fill"></div>
   <div id="addr-fill"></div>
   <div id="bm-popup" style="display:none;padding:14px 16px"></div>
+  <div id="auth" style="display:none;position:absolute;inset:0;background:rgba(0,0,0,.45)">
+    <form id="auth-card" autocomplete="off">
+      <h3>Sign in</h3>
+      <div id="auth-site"></div>
+      <div id="auth-note"></div>
+      <label>Username<input id="auth-u" spellcheck="false" autocomplete="off"></label>
+      <label>Password<input id="auth-p" type="password" autocomplete="off"></label>
+      <div class="row"><button type="button" id="auth-cancel">Cancel</button><button type="submit" id="auth-ok">Sign in</button></div>
+    </form>
+  </div>
   <div id="dz" style="display:none;position:absolute;inset:0">
     <div id="dz-l" class="dz-half"><span>Drop to place on the left</span></div>
     <div id="dz-r" class="dz-half"><span>Drop to place on the right</span></div>
@@ -163,6 +182,14 @@
     $('tablist').style.display = m === 'tablist' ? 'flex' : 'none';
     $('pw').style.display = m === 'pw' ? 'block' : 'none';
     $('dz').style.display = m === 'dropzone' ? 'block' : 'none';
+    $('auth').style.display = m === 'auth' ? 'block' : 'none';
+    if (m === 'auth') {
+      const d = data || {};
+      $('auth-site').textContent = d.site || ''; $('auth-u').value = ''; $('auth-p').value = '';
+      $('auth-note').textContent = d.retry ? 'That username or password was not accepted.' : d.secure ? (d.realm ? 'Realm: ' + d.realm : '') : 'Your connection to this site is not private';
+      setTimeout(() => $('auth-u').focus(), 0);
+      return;
+    }
     if (m === 'dropzone') return;
     $('card-fill').style.display = m === 'card' ? 'block' : 'none';
     $('addr-fill').style.display = m === 'addr' ? 'block' : 'none';
@@ -194,6 +221,11 @@
       api.invoke('split:drop', id, side(e));
     });
   })();
+
+  // ---- HTTP sign-in dialog ----
+  $('auth-card').addEventListener('submit', (e) => { e.preventDefault(); api.authSubmit($('auth-u').value, $('auth-p').value); });
+  $('auth-cancel').addEventListener('click', () => api.closeOverlay());
+  $('auth-card').addEventListener('keydown', (e) => { if (e.key === 'Escape') api.closeOverlay(); });
 
   // ---- palette ----
   async function refresh() {

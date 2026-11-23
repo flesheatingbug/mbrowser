@@ -1533,7 +1533,7 @@ function overlayBounds(mode) {
   if (mode === 'security') {
     return { x: 70, y: cur.contentRect.y, width: Math.min(400, width - 90), height: Math.min(560, Math.max(380, height - 90)) };
   }
-  if (mode === 'dropzone') return { ...cur.contentRect };
+  if (mode === 'dropzone' || mode === 'auth') return { ...cur.contentRect };
   if (mode === 'bookmark') {
     return { x: Math.max(0, width - 332), y: cur.contentRect.y, width: 320, height: 300 };
   }
@@ -1555,10 +1555,44 @@ function showOverlay(mode, data = {}) {
 function hideOverlay(refocus = true) {
   if (!cur.overlayMode) return;
   if (cur.overlayMode === 'find') activeWc()?.stopFindInPage('clearSelection');
+  if (cur.overlayMode === 'auth') authDone(cur, null);
   cur.overlayMode = null;
   cur.win.contentView.removeChildView(cur.overlay);
   if (refocus) activeWc()?.focus();
 }
+
+// ---------- HTTP sign-in (Basic/Digest/NTLM) and proxy logins: a dialog over the page, answered through the 'login' event ----------
+const authSaved = new Map();   // "host|realm" -> {username, password}, kept in memory for this run only
+function authKey(d) { return (d.isProxy ? 'p:' : '') + d.host + ':' + d.port + '|' + d.realm; }
+function authDone(w, cred) {
+  const req = w.authReq; if (!req) return;
+  w.authReq = null;
+  if (cred) { authSaved.set(req.key, cred); req.callback(cred.username, cred.password); } else req.callback();
+  const next = (w.authQueue || []).shift();
+  if (next) setTimeout(() => authShow(w, next), 0);
+}
+function authShow(w, req) {
+  if (w.authReq) { (w.authQueue = w.authQueue || []).push(req); return; }
+  use(w);
+  if (cur.overlayMode) hideOverlay(false);
+  if (req.tabId != null && w.tabs.has(req.tabId) && w.activeId !== req.tabId) switchTab(req.tabId);
+  w.authReq = req;
+  showOverlay('auth', req.info);
+}
+app.on('login', (event, wc, details, authInfo, callback) => {
+  const tab = tabByWc.get(wc.id);
+  if (!tab || !tab.owner || !windows.has(tab.owner)) return;   // not one of our tabs: default (cancel)
+  event.preventDefault();
+  const key = authKey(authInfo);
+  const prev = authSaved.get(key);
+  const retry = authSaved.has(key) && tab.authTried === key;
+  tab.authTried = key;
+  if (prev && !retry) { callback(prev.username, prev.password); return; }
+  if (retry) authSaved.delete(key);
+  const url = (authInfo.isProxy ? 'proxy ' : (authInfo.scheme === 'https' || /^https/i.test(details.url) ? 'https' : 'http') + '://') + authInfo.host + ':' + authInfo.port;
+  const secure = /^https/i.test(details.url) && !authInfo.isProxy;
+  authShow(tab.owner, { key, callback, tabId: tab.id, info: { site: authInfo.isProxy ? 'Proxy ' + authInfo.host + ':' + authInfo.port : url.replace(/:(80|443)$/, ''), realm: authInfo.realm || '', secure, retry } });
+});
 
 // ---------- address bar suggestions ----------
 function suggestItems(q) {
@@ -2716,6 +2750,7 @@ function setupIpc() {
     cur.dragTab = id; cur.splitHover = null;
     setTimeout(() => { if (cur.dragTab === id && !cur.overlayMode) showOverlay('dropzone', { many: splitActive() }); }, 120);
   });
+  on('auth:submit', (_e, username, password) => { authDone(cur, { username: String(username || ''), password: String(password || '') }); if (cur.overlayMode === 'auth') hideOverlay(true); });
   handle('split:hover', (_e, side) => { cur.splitHover = side === 'left' || side === 'right' ? side : null; return true; });
   handle('split:drop', (_e, id, side) => { const tid = cur.dragTab != null ? cur.dragTab : id; cur.dragTab = null; cur.splitHover = null; if (Number.isInteger(tid) && cur.tabs.has(tid)) splitAdd(tid, side === 'left' ? 'left' : 'right'); hideOverlay(false); return true; });
   on('split:resize', (_e, idx, phase, dx) => {

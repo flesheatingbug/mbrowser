@@ -10,6 +10,7 @@ contextBridge.exposeInMainWorld('api', {
   tabMenu: send('tab:menu'),
   moveTab: send('tab:move'),
   dragEnd: send('tab:dragend'),
+  authSubmit: send('auth:submit'),
   dragStart: send('tab:dragstart'),
   stackTab: send('tab:stack'),
   splitResize: send('split:resize'),
