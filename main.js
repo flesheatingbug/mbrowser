@@ -879,8 +879,18 @@ const splitActive = () => !!(cur.split && cur.split.ids.length > 1 && cur.split.
 function evenFractions(n) { return Array.from({ length: n }, () => 1 / n); }
 function splitAdd(id, side) {
   const t = cur.tabs.get(id); if (!t || id == null) return;
-  const base = splitActive() ? cur.split.ids.slice() : (cur.activeId != null && cur.activeId !== id ? [cur.activeId] : []);
-  if (!base.length || base.includes(id)) return;
+  let base = splitActive() ? cur.split.ids.slice() : [];
+  if (base.includes(id)) return;
+  if (!base.length) {
+    // the tab you were on goes beside the dropped one; dragging the current tab itself pairs it with its neighbour in the strip
+    let other = cur.activeId !== id ? cur.activeId : null;
+    if (other == null) {
+      const i = cur.order.indexOf(id);
+      other = [cur.order[i + 1], cur.order[i - 1], ...cur.order].find((x) => x != null && x !== id && cur.tabs.has(x));
+    }
+    if (other == null) return;
+    base = [other];
+  }
   if (side === 'left') base.unshift(id); else base.push(id);
   cur.split = { ids: base, fr: evenFractions(base.length) };
   if (cur.activeId !== id) switchTab(id); else { layout(); pushState(); }
