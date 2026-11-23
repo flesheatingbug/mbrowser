@@ -131,7 +131,10 @@ fn new_tab(app: &Rc<App>, url: Option<&str>) -> WebView {
     {
         // links that ask for a new window (target=_blank, window.open) become tabs
         let app = app.clone();
-        WebViewExt::connect_create(&view, move |_, _| new_tab(&app, None).upcast::<gtk::Widget>());
+        view.connect_local("create", false, move |_| {
+            let v = new_tab(&app, None);
+            Some(v.upcast::<gtk::Widget>().to_value())
+        });
     }
 
     let idx = app.notebook.append_page(&view, Some(&tab));
