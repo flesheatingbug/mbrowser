@@ -1352,7 +1352,7 @@ function overlayBounds(mode) {
     return { x: 70, y: cur.contentRect.y, width: Math.min(400, width - 90), height: Math.min(560, Math.max(380, height - 90)) };
   }
   if (mode === 'bookmark') {
-    return { x: Math.max(0, width - 332), y: cur.contentRect.y, width: 320, height: 220 };
+    return { x: Math.max(0, width - 332), y: cur.contentRect.y, width: 320, height: 300 };
   }
   const w = Math.min(680, width - 40);
   return { x: Math.round((width - w) / 2), y: 60, width: w, height: Math.min(470, Math.max(120, height - 90)) };
@@ -2506,6 +2506,12 @@ const handle = (ch, fn, o) => ipcMain.handle(ch, guard(fn, o));
 const BOTH = { chrome: true, page: true };
 
 function setupIpc() {
+  // the bookmark popup grows or shrinks to fit its content (the folder list, the new-folder box)
+  on('overlay:resize', (_e, h) => {
+    if (!cur || cur.overlayMode !== 'bookmark' || !(h > 0)) return;
+    const b = overlayBounds('bookmark'); b.height = Math.max(150, Math.min(520, Math.round(h)));
+    cur.overlay.setBounds(b);
+  });
   on('reader:toggle', () => { toggleReader(activeTab()); });
   on('tab:new', (_e, url) => newTab(url || undefined, url ? {} : { private: followPrivate() }));
   on('tab:switch', (_e, id) => switchTab(id));

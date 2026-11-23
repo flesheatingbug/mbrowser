@@ -94,21 +94,22 @@
   .frow2.hdr2 { cursor:default; height:34px; border-bottom:1px solid var(--line); padding-bottom:4px; }
   .frow2.hdr2 .l2 { font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; font-weight:600; }
   #bm-popup { font-size:13px; }
-  #bm-popup .bm-title { font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-bottom:10px; font-size:14px; }
-  #bm-popup label { display:block; font-size:11px; color:var(--muted); margin-bottom:4px; margin-top:10px; }
+  #bm-popup .bm-title { font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-bottom:14px; font-size:14px; }
+  #bm-popup label { display:block; font-size:11px; letter-spacing:.04em; text-transform:uppercase; color:var(--muted); margin-bottom:6px; margin-top:4px; }
   #bm-popup select, #bm-popup input[type=text] { width:100%; background:var(--tab); border:1px solid var(--line); border-radius:7px; color:var(--fg); padding:6px 10px; font-size:13px; outline:none; font-family:inherit; }
   #bm-popup select:focus, #bm-popup input:focus { border-color:var(--accent); }
   #bm-popup { outline:none; }
-  #bm-popup .bm-folders { max-height:150px; overflow-y:auto; border:1px solid var(--line); border-radius:7px; background:var(--tab); padding:3px; }
-  #bm-popup .bm-f { padding:6px 9px; border-radius:5px; cursor:pointer; font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  #bm-popup .bm-folders { max-height:132px; overflow-y:auto; border:1px solid var(--line); border-radius:7px; background:var(--tab); padding:3px; }
+  #bm-popup .bm-f { padding:7px 10px; margin:1px 0; border-radius:5px; cursor:pointer; font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   #bm-popup .bm-f:hover { background:rgba(128,128,128,.18); }
   #bm-popup .bm-f.sel { background:var(--accent); color:var(--onaccent); }
-  #bm-popup .bm-row { display:flex; gap:6px; margin-top:12px; }
-  #bm-popup .bm-row button { flex:1; padding:7px 10px; font-size:12px; border-radius:7px; border:none; cursor:pointer; font-family:inherit; background:var(--tab); color:var(--fg); border:1px solid var(--line); }
+  #bm-popup .bm-row { display:flex; gap:8px; margin-top:16px; }
+  #bm-popup .bm-row button { flex:1; padding:9px 10px; font-size:12px; border-radius:7px; border:none; cursor:pointer; font-family:inherit; background:var(--tab); color:var(--fg); border:1px solid var(--line); }
   #bm-popup .bm-row button:hover { border-color:var(--muted); }
   #bm-popup .bm-row button.primary { background:var(--accent); color:var(--onaccent); border-color:transparent; }
   #bm-popup .bm-row button.danger { color:#ff6b6b; }
-  #bm-popup .bm-added { font-size:12px; color:var(--muted); margin-top:8px; }
+  #bm-popup .bm-added { font-size:12px; color:var(--muted); margin-top:10px; min-height:0; }
+  #bm-popup .bm-added:empty { display:none; }
 </style>
 </head>
 <body>
@@ -444,7 +445,7 @@
     const pick = (val, isNew) => {
       chosen = val;
       rows.forEach((r) => r.el.classList.toggle('sel', r.val === val && !!r.isNew === !!isNew));
-      newInput.style.display = isNew ? 'block' : 'none';
+      newInput.style.display = isNew ? 'block' : 'none'; if (box.__fit) setTimeout(box.__fit, 0);
       if (isNew) { newInput.value = ''; setTimeout(() => newInput.focus(), 0); chosen = ''; }
     };
     const add = (label, val, isNew) => {
@@ -496,6 +497,8 @@
       if (e.key === 'Enter') { e.preventDefault(); saveBtn.click(); }
       else if (e.key === 'Escape') { e.preventDefault(); api.closeOverlay(); }
     });
+    const fit = () => api.overlayResize(Math.ceil(box.getBoundingClientRect().height) + 2);
+    box.__fit = fit; fit(); setTimeout(fit, 60);
     box.tabIndex = -1;
     box.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target === box) saveBtn.click(); else if (e.key === 'Escape') api.closeOverlay(); });
     setTimeout(() => box.focus(), 0);
