@@ -109,6 +109,7 @@ if (location.protocol === 'my:') {
     vaultStatus: invoke('vault:status'),
     wallpaperPick: invoke('wallpaper:pick'),
     pickFolder: invoke('folder:pick'),
+    downloadDir: invoke('downloads:dir'),
     vaultOpen: invoke('vault:open'),
     vaultSetup: invoke('vault:setup'),
     vaultRemoteInfo: invoke('vault:remoteInfo'),

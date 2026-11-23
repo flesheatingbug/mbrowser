@@ -3483,6 +3483,7 @@ function setupIpc() {
   handle('data:clear', (_e, what) => (['history', 'cookies', 'cache', 'all'].includes(what) ? clearData(what) : false), BOTH);
   handle('downloads:list', () => downloads.map((d) => ({ ...d })), BOTH);
   handle('downloads:action', (_e, id, action) => downloadAction(id, action), BOTH);
+  handle('downloads:dir', () => downloadDir(), PAGE_ONLY);
   handle('folder:pick', async (_e, start) => {
     const r = await dialog.showOpenDialog({ title: 'Choose a download folder', defaultPath: (typeof start === 'string' && start) || downloadDir(), properties: ['openDirectory', 'createDirectory'] });
     return r.canceled || !r.filePaths[0] ? { canceled: true } : { path: r.filePaths[0] };
