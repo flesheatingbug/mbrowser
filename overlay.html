@@ -98,6 +98,11 @@
   #bm-popup label { display:block; font-size:11px; color:var(--muted); margin-bottom:4px; margin-top:10px; }
   #bm-popup select, #bm-popup input[type=text] { width:100%; background:var(--tab); border:1px solid var(--line); border-radius:7px; color:var(--fg); padding:6px 10px; font-size:13px; outline:none; font-family:inherit; }
   #bm-popup select:focus, #bm-popup input:focus { border-color:var(--accent); }
+  #bm-popup { outline:none; }
+  #bm-popup .bm-folders { max-height:150px; overflow-y:auto; border:1px solid var(--line); border-radius:7px; background:var(--tab); padding:3px; }
+  #bm-popup .bm-f { padding:6px 9px; border-radius:5px; cursor:pointer; font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  #bm-popup .bm-f:hover { background:rgba(128,128,128,.18); }
+  #bm-popup .bm-f.sel { background:var(--accent); color:var(--onaccent); }
   #bm-popup .bm-row { display:flex; gap:6px; margin-top:12px; }
   #bm-popup .bm-row button { flex:1; padding:7px 10px; font-size:12px; border-radius:7px; border:none; cursor:pointer; font-family:inherit; background:var(--tab); color:var(--fg); border:1px solid var(--line); }
   #bm-popup .bm-row button:hover { border-color:var(--muted); }
@@ -430,14 +435,32 @@
     const title = mk('div', 'bm-title', d.title || d.url || '');
     box.append(title);
 
-    const lFolder = mk('label', null, 'Bookmark folder');
-    // Datalist for autocomplete + free-form input
-    const dl = mk('datalist'); dl.id = 'bm-dl';
-    const noFolder = mk('option'); noFolder.value = ''; noFolder.textContent = '(no folder)'; dl.append(noFolder);
-    for (const f of (d.folders || [])) { const o = mk('option'); o.value = f; dl.append(o); }
-    const folderInput = mk('input'); folderInput.type = 'text'; folderInput.setAttribute('list', 'bm-dl');
-    folderInput.placeholder = 'No folder'; folderInput.value = d.folder || '';
-    box.append(lFolder, dl, folderInput);
+    const lFolder = mk('label', null, 'Folder');
+    // a list you pick from (no native dropdown, which opened off to the side) plus "New folder…" with its own input
+    let chosen = d.folder || '';
+    const list = mk('div', 'bm-folders');
+    const newInput = mk('input'); newInput.type = 'text'; newInput.placeholder = 'New folder name'; newInput.style.display = 'none'; newInput.style.marginTop = '6px';
+    const rows = [];
+    const pick = (val, isNew) => {
+      chosen = val;
+      rows.forEach((r) => r.el.classList.toggle('sel', r.val === val && !!r.isNew === !!isNew));
+      newInput.style.display = isNew ? 'block' : 'none';
+      if (isNew) { newInput.value = ''; setTimeout(() => newInput.focus(), 0); chosen = ''; }
+    };
+    const add = (label, val, isNew) => {
+      const el = mk('div', 'bm-f', (isNew ? '+ ' : val ? '\u{1F4C1} ' : '') + label);
+      el.onclick = () => pick(val, isNew);
+      list.append(el); rows.push({ el, val, isNew });
+    };
+    add('No folder', '', false);
+    const known = (d.folders || []).slice();
+    if (chosen && !known.includes(chosen)) known.push(chosen);
+    for (const f of known) add(f, f, false);
+    add('New folder…', '', true);
+    box.append(lFolder, list, newInput);
+    pick(chosen, false);
+    const folderInput = { get value() { return newInput.style.display !== 'none' ? newInput.value.trim() : chosen; } };
+    newInput.addEventListener('input', () => { chosen = newInput.value.trim(); });
 
     const sdNote = mk('div', 'bm-added');
     sdNote.textContent = d.inSpeedDial ? '✓ Already in Speed Dial' : '';
@@ -469,11 +492,13 @@
     box.append(row);
 
     // Enter saves, Escape closes
-    folderInput.addEventListener('keydown', (e) => {
+    newInput.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') { e.preventDefault(); saveBtn.click(); }
       else if (e.key === 'Escape') { e.preventDefault(); api.closeOverlay(); }
     });
-    setTimeout(() => folderInput.focus(), 0);
+    box.tabIndex = -1;
+    box.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target === box) saveBtn.click(); else if (e.key === 'Escape') api.closeOverlay(); });
+    setTimeout(() => box.focus(), 0);
   }
 
   // palette closes when it loses focus; the find bar stays
