@@ -448,6 +448,18 @@ function layoutSplitPanes(c) {
   (cur.splitResizers || []).forEach((r, k) => { if (k >= n - 1) r.setBounds(zeroB); });
 }
 
+// during a divider drag only the two panes beside it change size; everything else is left alone
+function layoutSplitPair(k) {
+  const c = cur.contentRect, n = cur.split.ids.length, room = Math.max(0, c.width - SPLIT_GAP * (n - 1));
+  let x = c.x;
+  for (let i = 0; i < n; i++) {
+    const w = i === n - 1 ? c.x + c.width - x : Math.round(room * cur.split.fr[i]);
+    if (i === k || i === k + 1) cur.tabs.get(cur.split.ids[i]).view.setBounds({ x, y: c.y, width: Math.max(0, w), height: c.height });
+    if (i === k && cur.splitResizers && cur.splitResizers[k]) cur.splitResizers[k].setBounds({ x: x + w, y: c.y, width: SPLIT_GAP, height: c.height });
+    x += w + SPLIT_GAP;
+  }
+}
+
 function layoutCore() {
   if (!cur || !cur.win || !cur.toolbarView) return;
   const { width, height } = cur.win.getContentBounds();
@@ -2793,7 +2805,7 @@ function setupIpc() {
     // resizing the pages re-flows them, which is slow on image-heavy sites: while dragging, lay out at most every 50ms, and always once more at the end
     const now = Date.now();
     if (phase === 'end') { cur.split.base = null; layout(); scheduleSessionSave(); }
-    else if (now - (cur.split.lastLayout || 0) >= 40) { cur.split.lastLayout = now; layoutSplitPanes(cur.contentRect); }
+    else if (now - (cur.split.lastLayout || 0) >= 16) { cur.split.lastLayout = now; layoutSplitPair(idx); }
   });
   on('bmbar:folder', (e, folder, x, y) => {
     const items = bookmarks.filter((b) => liveBm(b) && b.folder === folder).sort((a, c) => (a.added || 0) - (c.added || 0));
