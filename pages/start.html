@@ -1082,7 +1082,8 @@ function renderPanel() {
 
 document.addEventListener('click', (e) => {
   const p = $('panel');
-  if (p.style.display === 'block' && !p.contains(e.target)) {
+  // the panel redraws itself when you click a control, which detaches the clicked element: judge by the path the click took
+  if (p.style.display === 'block' && !p.contains(e.target) && !e.composedPath().includes(p)) {
     const gear = document.getElementById('tab-gear');
     if (!gear || !gear.contains(e.target)) p.style.display = 'none';
   }
