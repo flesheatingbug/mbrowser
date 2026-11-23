@@ -891,7 +891,7 @@ function unstack(id, whole) {
 }
 
 // split view: any number of tabs side by side (columns), dividers you can drag, tabs dragged onto the page add a pane
-const SPLIT_GAP = 8;
+const SPLIT_GAP = 10;
 const splitActive = () => !!(cur.split && cur.split.ids.length > 1 && cur.split.ids.includes(cur.activeId) && cur.split.ids.every((i) => cur.tabs.has(i)));
 function evenFractions(n) { return Array.from({ length: n }, () => 1 / n); }
 function splitAdd(id, side) {

@@ -6,8 +6,8 @@
 <style>
   html, body { margin:0; height:100%; background:transparent; overflow:hidden; }
   #h { position:absolute; inset:0; cursor:col-resize; display:flex; justify-content:center; }
-  body.split #h::after { width:4px; border-radius:2px; background:rgba(127,127,127,.35); }
-  body.split #h:hover::after, body.split #h.drag::after { background:var(--accent, #5b8cff); }
+  body.split #h::after { width:4px; border-radius:2px; background:rgba(127,127,127,.5); }
+  body.split #h:hover::after, body.split #h.hot::after, body.split #h.drag::after { background:var(--accent, #5b8cff); }
   #h::after { content:""; width:2px; height:100%; background:transparent; }
   #h:hover::after, #h.drag::after { background:var(--accent, #5b8cff); }
   body.split #h.drag::after { width:6px; opacity:.65; box-shadow:0 0 8px var(--accent, #5b8cff); }
@@ -22,6 +22,10 @@
   const split = new URLSearchParams(location.search).get('split');
   const send = (phase, dx) => split === null ? api.panelResize(phase, dx) : api.splitResize(Number(split), phase, dx);
   api.onState((s) => { document.documentElement.style.setProperty('--accent', s.theme.accent); });
+  // :hover can go stale when this view is moved under a still mouse, so track it by hand as well
+  document.addEventListener('pointermove', () => h.classList.add('hot'), true);
+  document.addEventListener('pointerleave', () => { if (!h.classList.contains('drag')) h.classList.remove('hot'); }, true);
+  document.documentElement.addEventListener('mouseleave', () => { if (!h.classList.contains('drag')) h.classList.remove('hot'); });
   h.addEventListener('pointerdown', (e) => {
     startX = e.screenX;
     h.setPointerCapture(e.pointerId);
@@ -34,7 +38,7 @@
   const end = (e) => {
     if (!h.hasPointerCapture(e.pointerId)) return;
     h.releasePointerCapture(e.pointerId);
-    h.classList.remove('drag');
+    h.classList.remove('drag'); h.classList.remove('hot');
     send('end', e.screenX - startX);
   };
   h.addEventListener('pointerup', end);
