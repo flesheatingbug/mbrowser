@@ -4,7 +4,7 @@
 (function () {
   if (window.__mbReader) return;
   var POS = /article|body|content|entry|post|story|text|main|page|blog|news/i;
-  var NEG = /comment|sidebar|side-bar|footer|foot|nav|share|sharing|related|promo|advert|(^|[^a-z])ad([^a-z]|$)|banner|social|menu|widget|popup|modal|cookie|subscribe|newsletter|recommend|outbrain|taboola|sponsor|breadcrumb|toolbar|tags|author-box/i;
+  var NEG = /byline|dateline|comment|sidebar|side-bar|footer|foot|nav|share|sharing|related|promo|advert|(^|[^a-z])ad([^a-z]|$)|banner|social|menu|widget|popup|modal|cookie|subscribe|newsletter|recommend|outbrain|taboola|sponsor|breadcrumb|toolbar|tags|author-box/i;
   var SKIP = { SCRIPT: 1, STYLE: 1, NOSCRIPT: 1, IFRAME: 1, FORM: 1, BUTTON: 1, INPUT: 1, SELECT: 1, TEXTAREA: 1, NAV: 1, ASIDE: 1, FOOTER: 1, HEADER: 0, SVG: 1, CANVAS: 1, VIDEO: 1, AUDIO: 1, OBJECT: 1, EMBED: 1, DIALOG: 1, TEMPLATE: 1 };
   var KEEP = { P: 1, H1: 1, H2: 1, H3: 1, H4: 1, H5: 1, H6: 1, UL: 1, OL: 1, LI: 1, BLOCKQUOTE: 1, PRE: 1, CODE: 1, EM: 1, I: 1, STRONG: 1, B: 1, A: 1, BR: 1, FIGURE: 1, FIGCAPTION: 1, IMG: 1, TABLE: 1, THEAD: 1, TBODY: 1, TR: 1, TD: 1, TH: 1, SUB: 1, SUP: 1, HR: 1, DL: 1, DT: 1, DD: 1, MARK: 1, SMALL: 1, U: 1, S: 1, DEL: 1, INS: 1, Q: 1, CITE: 1, ABBR: 1, TIME: 1, PICTURE: 1 };
 
@@ -105,7 +105,7 @@
   function extract() {
     var r = findRoot(); if (!r) return null;
     var out = document.createElement('div');
-    clean(r.el, out, 0);
+    clean(r.el, out, 1);
     var title = meta(['og:title', 'twitter:title']) || '';
     var h1 = (r.el.querySelector('h1') || document.querySelector('article h1') || document.querySelector('h1'));
     if (h1 && txt(h1).length > 8) title = txt(h1);
@@ -183,14 +183,14 @@
     apply();
     var wrap = document.createElement('div'); wrap.className = 'wrap';
     var bar = document.createElement('div'); bar.className = 'bar';
-    var lbl = document.createElement('span'); lbl.textContent = x.site + ' · ' + Math.max(1, Math.round(x.words / 230)) + ' min read';
+    var lbl = document.createElement('span'); lbl.textContent = x.site + ' \u00B7 ' + Math.max(1, Math.round(x.words / 230)) + ' min read';
     bar.appendChild(lbl);
     function btn(t, title, fn) { var b = document.createElement('button'); b.textContent = t; b.title = title; b.onclick = fn; bar.appendChild(b); return b; }
-    btn('A−', 'Smaller text', function () { size = Math.max(13, size - 1); store('size', String(size)); apply(); });
+    btn('A\u2212', 'Smaller text', function () { size = Math.max(13, size - 1); store('size', String(size)); apply(); });
     btn('A+', 'Larger text', function () { size = Math.min(32, size + 1); store('size', String(size)); apply(); });
     btn('Aa', 'Serif or sans-serif', function () { serif = !serif; store('serif', serif ? '1' : '0'); apply(); });
-    btn('◐', 'Light, sepia or dark', function () { theme = theme === 'light' ? 'sepia' : theme === 'sepia' ? 'dark' : 'light'; store('theme', theme); apply(); });
-    btn('✕', 'Close reader view (Esc)', close);
+    btn('Theme', 'Light, sepia or dark', function () { theme = theme === 'light' ? 'sepia' : theme === 'sepia' ? 'dark' : 'light'; store('theme', theme); apply(); });
+    btn('\u2715', 'Close reader view (Esc)', close);
     var art = document.createElement('article');
     var h = document.createElement('h1'); h.className = 't'; h.textContent = x.title; art.appendChild(h);
     var m = document.createElement('div'); m.className = 'meta'; m.textContent = x.byline ? 'By ' + x.byline : ''; if (x.byline) art.appendChild(m);

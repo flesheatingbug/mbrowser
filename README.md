@@ -26,6 +26,15 @@
 
 ---
 
+## See it in action
+
+<p align="center">
+  <img src="docs/demo/reader-view.gif" alt="Reader view turning a cluttered article page into clean text, then changing text size and theme" width="85%"><br>
+  <sub><b>Reader view:</b> ads, sidebars and cookie banners out, just the article. Text size, font and light/sepia/dark theme. (Rendered from the browser's own reader code on a sample page.)</sub>
+</p>
+
+---
+
 ## Downloads
 
 | Platform | Download |
