@@ -122,7 +122,7 @@
     ],
     downloads: [
       { path: 'downloads.askWhere', label: 'Ask where to save each file', type: 'toggle' },
-      { path: 'downloads.directory', label: 'Download folder', type: 'text', help: 'Leave empty to use your system Downloads folder.' },
+      { path: 'downloads.directory', label: 'Download folder', type: 'folder', help: 'Leave empty to use your system Downloads folder.' },
     ],
     adblocker: [
       { path: 'privacy.blockTrackers', label: 'Enable ad and tracker blocking', type: 'toggle', help: 'Blocks third-party requests matching the built-in domain list.' },
@@ -373,6 +373,15 @@
     } else if (def.type === 'textarea') {
       input = el('textarea'); input.value = val || '';
       input.onchange = () => set(def.path, input.value);
+    } else if (def.type === 'folder') {
+      input = el('input'); input.type = 'text'; input.value = val || ''; input.placeholder = 'System Downloads folder';
+      input.onchange = () => set(def.path, input.value.trim());
+      const browse = el('button', null, 'Browse…');
+      browse.onclick = async () => { const r = await browser.pickFolder(input.value); if (r && r.path) { input.value = r.path; set(def.path, r.path); } };
+      const clear = el('button', null, 'Default');
+      clear.onclick = () => { input.value = ''; set(def.path, ''); };
+      const wrap = el('div'); wrap.style.cssText = 'display:flex;gap:6px;align-items:center'; input.style.flex = '1';
+      wrap.append(input, browse, clear); input = wrap;
     } else {
       input = el('input'); input.type = def.type === 'password' ? 'password' : 'text'; input.value = val || '';
       input.onchange = () => set(def.path, input.value.trim());
