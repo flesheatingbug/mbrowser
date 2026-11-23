@@ -2716,7 +2716,7 @@ function setupIpc() {
     cur.dragTab = id;
     setTimeout(() => { if (cur.dragTab === id && !cur.overlayMode) showOverlay('dropzone', { many: splitActive() }); }, 120);
   });
-  handle('split:drop', (_e, id, side) => { if (Number.isInteger(id) && cur.tabs.has(id)) splitAdd(id, side === 'left' ? 'left' : 'right'); cur.dragTab = null; hideOverlay(false); return true; });
+  handle('split:drop', (_e, id, side) => { const tid = cur.dragTab != null ? cur.dragTab : id; cur.dragTab = null; if (Number.isInteger(tid) && cur.tabs.has(tid)) splitAdd(tid, side === 'left' ? 'left' : 'right'); hideOverlay(false); return true; });
   on('split:resize', (_e, idx, phase, dx) => {
     if (!splitActive() || !Number.isInteger(idx)) return;
     const n = cur.split.ids.length; if (idx < 0 || idx >= n - 1) return;
@@ -2771,8 +2771,16 @@ function setupIpc() {
     if (t.owner === cur) reorderTab(id, beforeId); else moveTabToWindow(t, cur, beforeId);
   });
   on('tab:dragend', (_e, id, dropEffect, outside) => {
+    const wasZone = cur.overlayMode === 'dropzone', pending = cur.dragTab;
     cur.dragTab = null;
-    if (cur.overlayMode === 'dropzone') { hideOverlay(false); if (dropEffect !== 'none') return; }
+    if (wasZone) hideOverlay(false);
+    if (pending === id && wasZone) {
+      // the drop itself may not reach the overlay on every platform: if the drag ended over the page, place the pane from the cursor position
+      const pt = screen.getCursorScreenPoint(), cb = cur.win.getContentBounds(), r = cur.contentRect;
+      const x = pt.x - cb.x - r.x, y = pt.y - cb.y - r.y;
+      if (x >= 0 && y >= 0 && x <= r.width && y <= r.height) { splitAdd(id, x < r.width / 2 ? 'left' : 'right'); return; }
+    }
+    if (dropEffect !== 'none' && wasZone) return;
     tabDragEnd(id, dropEffect, !!outside);
   });
   on('tab:mute', (_e, id) => toggleMute(id));

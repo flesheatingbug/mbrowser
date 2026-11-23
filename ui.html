@@ -35,11 +35,11 @@
   .tab { position:relative; display:flex; align-items:center; gap:6px; flex:0 1 200px; min-width:42px; max-width:200px;
     height:32px; padding:0 8px; background:var(--tab); border-radius:8px 8px 0 0; cursor:default; transition:min-width .15s, max-width .15s; }
   .tab.active { background:var(--active); }
-  /* stacked tabs overlap like a pile of cards; the cards behind show a sliver of their edge */
-  .tab[data-g] { position:relative; margin-right:-14px; box-shadow:2px 0 0 0 rgba(0,0,0,.28), inset 0 -2px 0 var(--accent); border-radius:8px 12px 0 0; }
+  /* a stack shows its tabs as small icon tabs sitting close together; the tab you are on is open at full size */
+  .tab[data-g]:not(.active) { flex:0 0 44px; min-width:44px; max-width:44px; padding:0; justify-content:center; margin-right:-3px; border-radius:8px 8px 0 0; box-shadow:inset 0 -2px 0 var(--accent); }
+  .tab[data-g]:not(.active) .t, .tab[data-g]:not(.active) .x, .tab[data-g]:not(.active) .snd { display:none; }
+  .tab[data-g].active { box-shadow:inset 0 -2px 0 var(--accent); z-index:2; }
   .tab[data-g].gend { margin-right:0; }
-  .tab[data-g]:not(.active):hover { z-index:3; }
-  .tab.active[data-g] { z-index:4; }
   .tab.insplit { outline:1px solid var(--accent); outline-offset:-2px; }
   .tab.stackdrop { outline:2px solid var(--accent); outline-offset:-2px; background:color-mix(in srgb, var(--accent) 25%, var(--tab)); }
   .tab.pinned { flex:0 0 38px; min-width:38px; padding:0; justify-content:center; }

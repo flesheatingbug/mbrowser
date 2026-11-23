@@ -188,9 +188,9 @@
     document.addEventListener('drop', (e) => {
       if (mode !== 'dropzone') return;
       e.preventDefault();
-      const id = Number(e.dataTransfer.getData(TAB_MIME));
+      const id = Number(e.dataTransfer.getData(TAB_MIME)) || 0;
       mark(null);
-      if (id) api.invoke('split:drop', id, side(e));
+      api.invoke('split:drop', id, side(e));
     });
   })();
 
