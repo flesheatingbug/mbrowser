@@ -431,6 +431,23 @@ function toggleBookmarksBar() {
   pushAll(true);
 }
 
+function layoutSplitPanes(c) {
+  const zeroB = { x: 0, y: 0, width: 0, height: 0 };
+  const ids = cur.split.ids, n = ids.length;
+  if (!cur.split.fr || cur.split.fr.length !== n) cur.split.fr = evenFractions(n);
+  const room = Math.max(0, c.width - SPLIT_GAP * (n - 1));
+  let x = c.x, added = false;
+  ids.forEach((id, k) => {
+    const v = cur.tabs.get(id).view;
+    if (!cur.win.contentView.children.includes(v)) { cur.win.contentView.addChildView(v); added = true; }
+    const w = k === n - 1 ? c.x + c.width - x : Math.round(room * cur.split.fr[k]);
+    v.setBounds({ x, y: c.y, width: Math.max(0, w), height: c.height });
+    if (k < n - 1) { const r = splitResizer(k); r.setBounds({ x: x + w, y: c.y, width: SPLIT_GAP, height: c.height }); if (added || !cur.win.contentView.children.includes(r)) cur.win.contentView.addChildView(r); }
+    x += w + SPLIT_GAP;
+  });
+  (cur.splitResizers || []).forEach((r, k) => { if (k >= n - 1) r.setBounds(zeroB); });
+}
+
 function layoutCore() {
   if (!cur || !cur.win || !cur.toolbarView) return;
   const { width, height } = cur.win.getContentBounds();
@@ -495,19 +512,7 @@ function layoutCore() {
   const activeT = cur.tabs.get(cur.activeId);
   const zeroB = { x: 0, y: 0, width: 0, height: 0 };
   if (splitActive()) {
-    const ids = cur.split.ids, n = ids.length;
-    if (!cur.split.fr || cur.split.fr.length !== n) cur.split.fr = evenFractions(n);
-    const room = Math.max(0, c.width - SPLIT_GAP * (n - 1));
-    let x = c.x, added = false;
-    ids.forEach((id, k) => {
-      const v = cur.tabs.get(id).view;
-      if (!cur.win.contentView.children.includes(v)) { cur.win.contentView.addChildView(v); added = true; }
-      const w = k === n - 1 ? c.x + c.width - x : Math.round(room * cur.split.fr[k]);
-      v.setBounds({ x, y: c.y, width: Math.max(0, w), height: c.height });
-      if (k < n - 1) { const r = splitResizer(k); r.setBounds({ x: x + w, y: c.y, width: SPLIT_GAP, height: c.height }); if (added || !cur.win.contentView.children.includes(r)) cur.win.contentView.addChildView(r); }
-      x += w + SPLIT_GAP;
-    });
-    (cur.splitResizers || []).forEach((r, k) => { if (k >= n - 1) r.setBounds(zeroB); });
+    layoutSplitPanes(c);
   } else {
     if (activeT) activeT.view.setBounds(c);
     // split tabs that are not the active one stay hidden until you come back to the group
@@ -654,7 +659,7 @@ let closeBurstTimer = null;
 function sessionSnapshot() {
   const groups = [...windows].map((w) => w.order.map((id) => w.tabs.get(id))
     .filter((t) => t && !t.private && /^https?:\/\//i.test(t.wc.getURL()))
-    .map((t) => ({ url: t.wc.getURL(), pinned: t.pinned, group: t.group || undefined, title: t.customTitle || undefined }))).filter((g) => g.length);
+    .map((t) => { const si = w.split ? w.split.ids.indexOf(t.id) : -1; return { url: t.wc.getURL(), pinned: t.pinned, group: t.group || undefined, title: t.customTitle || undefined, sp: si >= 0 ? si : undefined, fr: si >= 0 && w.split.fr ? Math.round(w.split.fr[si] * 1000) / 1000 : undefined }; })).filter((g) => g.length);
   return { windows: groups.map((tabs) => ({ tabs })), tabs: groups.flat() };
 }
 function saveSession(snap) { try { save('session.json', snap || sessionSnapshot()); } catch { /* ignore */ } }
@@ -893,6 +898,7 @@ function splitAdd(id, side) {
   }
   if (side === 'left') base.unshift(id); else base.push(id);
   cur.split = { ids: base, fr: evenFractions(base.length) };
+  scheduleSessionSave();
   if (cur.activeId !== id) switchTab(id); else { layout(); pushState(); }
 }
 function splitRemove(id) {
@@ -901,12 +907,13 @@ function splitRemove(id) {
   if (t && cur.split.ids.includes(id) && id !== cur.activeId) { try { cur.win.contentView.removeChildView(t.view); } catch { /* not shown */ } }
   cur.split.ids = cur.split.ids.filter((i) => i !== id);
   if (cur.split.ids.length < 2) cur.split = null; else cur.split.fr = evenFractions(cur.split.ids.length);
+  scheduleSessionSave();
   if (cur.activeId === id && cur.split) { const keep = cur.split.ids[0]; layout(); switchTab(keep); return; }
   layout(); pushState();
 }
 function splitClose() {
   if (!cur.split) return;
-  const ids = cur.split.ids; cur.split = null;
+  const ids = cur.split.ids; cur.split = null; scheduleSessionSave();
   for (const i of ids) { const o = cur.tabs.get(i); if (o && i !== cur.activeId) { try { cur.win.contentView.removeChildView(o.view); } catch { /* not shown */ } } }
   layout(); pushState();
 }
@@ -927,6 +934,15 @@ function splitResizer(i) {
   cur.win.contentView.addChildView(v);
   cur.splitResizers[i] = v;
   return v;
+}
+
+// put a saved split view back: entries carry sp (position in the split) and fr (its share of the width)
+function restoreSplit(entries, ids) {
+  const parts = entries.map((e, i) => ({ e, id: ids[i] })).filter((x) => x.e && x.e.sp != null && x.id != null && cur.tabs.has(x.id)).sort((a, b) => a.e.sp - b.e.sp);
+  if (parts.length < 2) return;
+  const fr = parts.map((x) => Number(x.e.fr) || 1 / parts.length), sum = fr.reduce((a, b) => a + b, 0);
+  cur.split = { ids: parts.map((x) => x.id), fr: fr.map((f) => f / sum) };
+  layout(); pushState();
 }
 
 function runGesture(tab, dirs) {
@@ -2773,8 +2789,11 @@ function setupIpc() {
     let d = dx / room;
     d = Math.max(MIN - fr[idx], Math.min(fr[idx + 1] - MIN, d));
     fr[idx] += d; fr[idx + 1] -= d;
-    cur.split.fr = fr; layout();
-    if (phase === 'end') cur.split.base = null;
+    cur.split.fr = fr;
+    // resizing the pages re-flows them, which is slow on image-heavy sites: while dragging, lay out at most every 50ms, and always once more at the end
+    const now = Date.now();
+    if (phase === 'end') { cur.split.base = null; layout(); scheduleSessionSave(); }
+    else if (now - (cur.split.lastLayout || 0) >= 40) { cur.split.lastLayout = now; layoutSplitPanes(cur.contentRect); }
   });
   on('bmbar:folder', (e, folder, x, y) => {
     const items = bookmarks.filter((b) => liveBm(b) && b.folder === folder).sort((a, c) => (a.added || 0) - (c.added || 0));
@@ -4442,7 +4461,7 @@ function startupTabs() {
   if (g.startup === 'restore') {
     const sess = load('session.json', { tabs: [] });
     const groups = Array.isArray(sess.windows) && sess.windows.length ? sess.windows.map((g) => g.tabs || []).filter((g) => g.length) : (sess.tabs.length ? [sess.tabs] : []);
-    if (groups.length) { groups[0].forEach((t) => newTab(t.url, { pinned: t.pinned, group: t.group, customTitle: t.title })); } else if (!given.length) newTab(START);
+    if (groups.length) { const ids = groups[0].map((t) => newTab(t.url, { pinned: t.pinned, group: t.group, customTitle: t.title })); restoreSplit(groups[0], ids); } else if (!given.length) newTab(START);
     given.forEach((u) => newTab(u));
     if (groups.length > 1) {
       const first = cur;
@@ -4538,7 +4557,7 @@ function createWindow(opts = {}) {
     use(w);
     layout();
     if (opts.first) startupTabs();
-    else if (opts.restore) { opts.restore.forEach((t) => newTab(t.url, { pinned: t.pinned, group: t.group, customTitle: t.title })); }
+    else if (opts.restore) { const ids = opts.restore.map((t) => newTab(t.url, { pinned: t.pinned, group: t.group, customTitle: t.title })); restoreSplit(opts.restore, ids); }
     else if (!opts.empty) newTab(undefined, opts.private ? { private: true } : undefined);
     pushState();
     if (opts.first) syncAll();
