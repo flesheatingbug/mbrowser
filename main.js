@@ -1870,29 +1870,36 @@ function onWillDownload(_e, item) {
   downloads.unshift(rec);
   dlItems.set(rec.id, item);
   // while a download is in progress it is written to "<name>.part" and renamed when it has finished, so a finished file is easy to tell apart
-  let finalPath = '';
+  let finalPath = '', askedHere = false;
   if (!S().downloads.askWhere && !askThis) {
     const dir = downloadDir();
     fs.mkdirSync(dir, { recursive: true });
     finalPath = uniquePath(dir, rec.name);
   } else {
-    const win = (ownerTab && ownerTab.owner && ownerTab.owner.win) || (cur && cur.win) || undefined;
+    // the save dialog is Electron's own (not a blocking dialog of ours, which asked a second time on some desktops); the file is written where you choose
     const dir = downloadDir();
     try { fs.mkdirSync(dir, { recursive: true }); } catch { /* ignore */ }
-    const chosen = dialog.showSaveDialogSync(win, { defaultPath: path.join(dir, rec.name) });
-    if (!chosen) { item.cancel(); downloads.shift(); dlItems.delete(rec.id); pushSoon(); return; }
-    finalPath = chosen;
+    item.setSaveDialogOptions({ defaultPath: path.join(dir, rec.name) });
+    askedHere = true;
   }
-  item.setSavePath(finalPath + '.part');
+  if (finalPath) item.setSavePath(finalPath + '.part');
   item.on('updated', (_ev, state) => {
     rec.received = item.getReceivedBytes();
     rec.total = item.getTotalBytes();
     rec.state = item.isPaused() ? 'paused' : state === 'interrupted' ? 'interrupted' : 'progressing';
+    if (askedHere && !finalPath) { const sp = item.getSavePath(); if (sp) { finalPath = sp; rec.name = path.basename(sp); } }
     pushSoon();
   });
   item.on('done', (_ev, state) => {
     rec.received = item.getReceivedBytes();
     rec.state = state;
+    if (askedHere) {
+      // written straight to the chosen file; closing the dialog without choosing cancels the download
+      const sp = item.getSavePath();
+      if (!sp && state !== 'completed') { const i = downloads.indexOf(rec); if (i >= 0) downloads.splice(i, 1); dlItems.delete(rec.id); pushSoon(); return; }
+      rec.path = sp || ''; rec.name = sp ? path.basename(sp) : rec.name;
+      dlItems.delete(rec.id); pushSoon(); return;
+    }
     const part = finalPath + '.part';
     if (state === 'completed') {
       try { fs.renameSync(part, finalPath); rec.path = finalPath; } catch { rec.path = fs.existsSync(part) ? part : finalPath; }
