@@ -29,6 +29,11 @@
 ## See it in action
 
 <p align="center">
+  <img src="docs/demo/start-page.gif" alt="The start page: speed dial tiles, a folder opening, and the customise panel changing wallpapers" width="85%"><br>
+  <sub><b>Start page:</b> speed dials with folders, and a customise panel with wallpapers, tile size and layout. (Rendered from the real start page code with sample tiles.)</sub>
+</p>
+
+<p align="center">
   <img src="docs/demo/reader-view.gif" alt="Reader view turning a cluttered article page into clean text, then changing text size and theme" width="85%"><br>
   <sub><b>Reader view:</b> ads, sidebars and cookie banners out, just the article. Text size, font and light/sepia/dark theme. (Rendered from the browser's own reader code on a sample page.)</sub>
 </p>
