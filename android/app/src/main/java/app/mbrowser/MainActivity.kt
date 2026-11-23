@@ -1025,10 +1025,19 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
             // window.open from a tap (Google / PayPal sign-in popups): a real tab that keeps its opener, so the page can hear back from it
             override fun onCreateWindow(view: WebView, isDialog: Boolean, isUserGesture: Boolean, resultMsg: android.os.Message): Boolean {
                 if (!isUserGesture && !isDialog) return false
+                // a plain link that opens in a new window needs no opener: open its address in a new tab (same private/normal kind)
+                val hit = view.hitTestResult
+                val link = hit.extra
+                if ((hit.type == WebView.HitTestResult.SRC_ANCHOR_TYPE || hit.type == WebView.HitTestResult.SRC_IMAGE_ANCHOR_TYPE) && link != null && link.startsWith("http")) {
+                    newTab(link, tab.priv)
+                    return false
+                }
+                // a script popup (Google / PayPal sign-in): a real tab that keeps its opener, so the page can hear back from it
                 val t = newTab(null, tab.priv)
                 t.home = false
                 (resultMsg.obj as? WebView.WebViewTransport)?.webView = t.web
                 resultMsg.sendToTarget()
+                render()
                 return true
             }
             override fun onCloseWindow(window: WebView) {
