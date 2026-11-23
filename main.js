@@ -2798,7 +2798,7 @@ function setupIpc() {
     if (!splitActive() || !Number.isInteger(idx)) return;
     const n = cur.split.ids.length; if (idx < 0 || idx >= n - 1) return;
     const room = Math.max(1, cur.contentRect.width - SPLIT_GAP * (n - 1));
-    if (phase === 'start') { cur.split.base = cur.split.fr.slice(); return; }
+    if (phase === 'start') { cur.split.base = cur.split.fr.slice(); const r = cur.splitResizers && cur.splitResizers[idx]; if (r) cur.win.contentView.addChildView(r); return; }   // re-adding puts the divider above the pages
     if (!cur.split.base) return;
     const fr = cur.split.base.slice(), MIN = Math.min(0.15, 0.9 / n);
     let d = dx / room;

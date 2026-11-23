@@ -10,6 +10,7 @@
   body.split #h:hover::after, body.split #h.drag::after { background:var(--accent, #5b8cff); }
   #h::after { content:""; width:2px; height:100%; background:transparent; }
   #h:hover::after, #h.drag::after { background:var(--accent, #5b8cff); }
+  body.split #h.drag::after { width:6px; opacity:.65; box-shadow:0 0 8px var(--accent, #5b8cff); }
 </style>
 </head>
 <body>
