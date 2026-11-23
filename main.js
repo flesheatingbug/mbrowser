@@ -2713,10 +2713,11 @@ function setupIpc() {
   // dragging a tab from the strip: the page area becomes a drop target that shows where the new pane will go
   on('tab:dragstart', (_e, id) => {
     if (!Number.isInteger(id) || !cur.tabs.has(id) || cur.tabs.get(id).pinned) return;
-    cur.dragTab = id;
+    cur.dragTab = id; cur.splitHover = null;
     setTimeout(() => { if (cur.dragTab === id && !cur.overlayMode) showOverlay('dropzone', { many: splitActive() }); }, 120);
   });
-  handle('split:drop', (_e, id, side) => { const tid = cur.dragTab != null ? cur.dragTab : id; cur.dragTab = null; if (Number.isInteger(tid) && cur.tabs.has(tid)) splitAdd(tid, side === 'left' ? 'left' : 'right'); hideOverlay(false); return true; });
+  handle('split:hover', (_e, side) => { cur.splitHover = side === 'left' || side === 'right' ? side : null; return true; });
+  handle('split:drop', (_e, id, side) => { const tid = cur.dragTab != null ? cur.dragTab : id; cur.dragTab = null; cur.splitHover = null; if (Number.isInteger(tid) && cur.tabs.has(tid)) splitAdd(tid, side === 'left' ? 'left' : 'right'); hideOverlay(false); return true; });
   on('split:resize', (_e, idx, phase, dx) => {
     if (!splitActive() || !Number.isInteger(idx)) return;
     const n = cur.split.ids.length; if (idx < 0 || idx >= n - 1) return;
@@ -2774,11 +2775,10 @@ function setupIpc() {
     const wasZone = cur.overlayMode === 'dropzone', pending = cur.dragTab;
     cur.dragTab = null;
     if (wasZone) hideOverlay(false);
-    if (pending === id && wasZone) {
-      // the drop itself may not reach the overlay on every platform: if the drag ended over the page, place the pane from the cursor position
-      const pt = screen.getCursorScreenPoint(), cb = cur.win.getContentBounds(), r = cur.contentRect;
-      const x = pt.x - cb.x - r.x, y = pt.y - cb.y - r.y;
-      if (x >= 0 && y >= 0 && x <= r.width && y <= r.height) { splitAdd(id, x < r.width / 2 ? 'left' : 'right'); return; }
+    if (pending === id) {
+      // the drop itself may not reach the overlay on every platform (Wayland): use the side the overlay last saw the drag over
+      const side = cur.splitHover; cur.splitHover = null;
+      if (side) { splitAdd(id, side); return; }
     }
     if (dropEffect !== 'none' && wasZone) return;
     tabDragEnd(id, dropEffect, !!outside);

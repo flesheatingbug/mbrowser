@@ -182,9 +182,10 @@
     const TAB_MIME = 'application/x-mybrowser-tab';
     const L = $('dz-l'), R = $('dz-r');
     const side = (e) => (e.clientX < innerWidth / 2 ? 'left' : 'right');
-    const mark = (s) => { L.classList.toggle('on', s === 'left'); R.classList.toggle('on', s === 'right'); };
+    let last = null;
+    const mark = (s) => { L.classList.toggle('on', s === 'left'); R.classList.toggle('on', s === 'right'); if (s !== last) { last = s; api.invoke('split:hover', s); } };
     document.addEventListener('dragover', (e) => { if (mode !== 'dropzone' || !e.dataTransfer.types.includes(TAB_MIME)) return; e.preventDefault(); e.dataTransfer.dropEffect = 'move'; mark(side(e)); });
-    document.addEventListener('dragleave', (e) => { if (mode === 'dropzone' && !e.relatedTarget) mark(null); });
+    document.addEventListener('dragleave', (e) => { if (mode === 'dropzone' && !e.relatedTarget && (e.clientX <= 0 || e.clientY <= 0 || e.clientX >= innerWidth - 1 || e.clientY >= innerHeight - 1)) mark(null); });
     document.addEventListener('drop', (e) => {
       if (mode !== 'dropzone') return;
       e.preventDefault();
