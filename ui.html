@@ -568,6 +568,23 @@
     inp.onblur = () => finish(true);
     setTimeout(() => { inp.focus(); inp.select(); }, 30);
   }
+  function editTab(id) {
+    const el = document.querySelector('.tab[data-id="' + id + '"]'); if (!el) return;
+    const span = el.querySelector('.t'); if (!span) return;
+    const cur = span.textContent;
+    const inp = document.createElement('input'); inp.value = cur;
+    inp.style.cssText = 'all:unset;flex:1;min-width:0;color:var(--fg);font:inherit;background:var(--bg);border-radius:4px;padding:1px 4px;outline:1px solid var(--accent)';
+    el.draggable = false; span.replaceWith(inp);
+    let done = false;
+    const was = !!(lastState.tabs.find((t) => t.id === id) || {}).renamed;
+    // leaving the page's own title unchanged keeps the tab following the page; clearing the box resets a custom name
+    const finish = (save) => { if (done) return; done = true; const v = inp.value.trim(); api.tabRename(id, !save ? (was ? cur : '') : (v === cur && !was) ? '' : v); };
+    inp.onkeydown = (e) => { if (e.key === 'Enter') finish(true); else if (e.key === 'Escape') finish(false); e.stopPropagation(); };
+    inp.onblur = () => finish(true);
+    inp.onclick = (e) => e.stopPropagation();
+    setTimeout(() => { inp.focus(); inp.select(); }, 30);
+  }
+  api.onTabRenameStart((id) => setTimeout(() => editTab(id), 60));
   api.onGroupRenameStart((gid) => setTimeout(() => editGroup(gid), 80));
 
   function tabEl(t, activeId) {
@@ -575,7 +592,7 @@
     el.className = 'tab' + (t.id === activeId ? ' active' : '') + (t.pinned ? ' pinned' : '')
       + (t.private ? ' private' : '') + (t.loading ? ' loading' : '') + (t.inSplit ? ' insplit' : '');
     if (t.group && lastState && lastState.groups && lastState.groups[t.group]) { el.dataset.g = t.group; el.style.setProperty('--gc', lastState.groups[t.group].color); }
-    el.title = t.title;
+    el.title = t.title; el.dataset.id = t.id;
     el.onclick = () => { if (t.id === activeId && lastState && lastState.clickTabScrollsTop) api.activeTabClick(); else api.switchTab(t.id); };
     el.onauxclick = (e) => { if (e.button === 1) api.closeTab(t.id); };
     el.oncontextmenu = (e) => { e.preventDefault(); api.tabMenu(t.id); };
@@ -794,7 +811,7 @@
     if (startedDl) triggerDownloadWhoosh();
 
 
-    if (part === 'tabs' && !document.querySelector('.grp input')) {
+    if (part === 'tabs' && !document.querySelector('.grp input, .tab input')) {
       const strip = $('tabs-wrap');
       const prevActive = lastActiveId;
       lastActiveId = s.activeId;

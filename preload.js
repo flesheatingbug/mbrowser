@@ -23,6 +23,8 @@ contextBridge.exposeInMainWorld('api', {
   mainMenu: send('menu:main'),
   readerToggle: send('reader:toggle'),
   groupMenu: send('group:menu'),
+  tabRename: send('tab:rename'),
+  onTabRenameStart: (cb) => ipcRenderer.on('tab:rename-start', (_e, id) => cb(id)),
   groupToggle: send('group:toggle'),
   groupRename: send('group:rename'),
   onGroupRenameStart: (cb) => ipcRenderer.on('group:rename-start', (_e, gid) => cb(gid)),

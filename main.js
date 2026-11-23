@@ -592,7 +592,8 @@ function stateFor() {
       const x = cur.tabs.get(id);
       return {
         id,
-        title: x.deferredUrl ? (hostOf(x.deferredUrl) || x.deferredUrl) : (x.wc.getTitle() || 'New Tab'),
+        title: x.customTitle || (x.deferredUrl ? (hostOf(x.deferredUrl) || x.deferredUrl) : (x.wc.getTitle() || 'New Tab')),
+        renamed: !!x.customTitle,
         favicon: x.favicon,
         pinned: x.pinned,
         group: x.group || null,
@@ -645,7 +646,7 @@ let closeBurstTimer = null;
 function sessionSnapshot() {
   const groups = [...windows].map((w) => w.order.map((id) => w.tabs.get(id))
     .filter((t) => t && !t.private && /^https?:\/\//i.test(t.wc.getURL()))
-    .map((t) => ({ url: t.wc.getURL(), pinned: t.pinned, group: t.group || undefined }))).filter((g) => g.length);
+    .map((t) => ({ url: t.wc.getURL(), pinned: t.pinned, group: t.group || undefined, title: t.customTitle || undefined }))).filter((g) => g.length);
   const wins = [...windows].filter((w) => w.order.some((id) => { const t = w.tabs.get(id); return t && !t.private && /^https?:\/\//i.test(t.wc.getURL()); }));
   return { windows: groups.map((tabs, i) => ({ tabs, groups: Object.fromEntries([...(wins[i] && wins[i].groups || new Map())].map(([gid, g]) => [gid, { name: g.name, color: g.color, collapsed: !!g.collapsed }])) })), tabs: groups.flat() };
 }
@@ -911,7 +912,7 @@ function newTab(target, opts = {}) {
   const id = nextId++;
   const view = createView(!!opts.private);
   const tab = {
-    id, view, wc: view.webContents, pinned: !!opts.pinned, private: !!opts.private, favicon: '', owner: cur, group: opts.group && groupsOf().has(opts.group) ? opts.group : undefined,
+    id, view, wc: view.webContents, pinned: !!opts.pinned, private: !!opts.private, favicon: '', owner: cur, customTitle: opts.customTitle || '', group: opts.group && groupsOf().has(opts.group) ? opts.group : undefined,
   };
   cur.tabs.set(id, tab);
   tabById.set(id, tab);
@@ -1986,6 +1987,8 @@ function tabMenu(id) {
   popup(Menu.buildFromTemplate([
     { label: 'Reload', click: () => t.wc.reload() },
     { label: 'Duplicate Tab', click: () => duplicateTab(id) },
+    { label: 'Rename Tab…', click: () => { try { cur.tabbarView.webContents.send('tab:rename-start', id); } catch { /* ignore */ } } },
+    ...(t.customTitle ? [{ label: 'Reset Tab Name', click: () => { t.customTitle = ''; pushState(); scheduleSessionSave(); } }] : []),
     { label: t.pinned ? 'Unpin Tab' : 'Pin Tab', click: () => togglePin(id) },
     { label: t.wc.audioMuted ? 'Unmute Tab' : 'Mute Tab', click: () => toggleMute(id) },
     { type: 'separator' },
@@ -2684,6 +2687,7 @@ const BOTH = { chrome: true, page: true };
 
 function setupIpc() {
   // the bookmark popup grows or shrinks to fit its content (the folder list, the new-folder box)
+  on('tab:rename', (_e, id, name) => { const t = cur.tabs.get(id); if (!t) return; t.customTitle = String(name || '').trim().slice(0, 80); pushState(); scheduleSessionSave(); });
   on('group:menu', (_e, gid) => groupMenu(gid));
   on('group:toggle', (_e, gid) => { const g = groupsOf().get(gid); if (g) { g.collapsed = !g.collapsed; pushState(); scheduleSessionSave(); } });
   on('group:rename', (_e, gid, name) => { const g = groupsOf().get(gid); if (g) { g.name = String(name || '').slice(0, 40); pushState(); scheduleSessionSave(); } });
@@ -4342,7 +4346,7 @@ function startupTabs() {
     const gdefs = Array.isArray(sess.windows) ? sess.windows.filter((g) => (g.tabs || []).length).map((g) => g.groups || {}) : [];
     const groups = Array.isArray(sess.windows) && sess.windows.length ? sess.windows.map((g) => g.tabs || []).filter((g) => g.length) : (sess.tabs.length ? [sess.tabs] : []);
     groups.forEach((g, i) => { g.defs = gdefs[i] || {}; });
-    if (groups.length) { cur.groups = new Map(Object.entries(groups[0].defs || {})); groups[0].forEach((t) => newTab(t.url, { pinned: t.pinned, group: t.group })); } else if (!given.length) newTab(START);
+    if (groups.length) { cur.groups = new Map(Object.entries(groups[0].defs || {})); groups[0].forEach((t) => newTab(t.url, { pinned: t.pinned, group: t.group, customTitle: t.title })); } else if (!given.length) newTab(START);
     given.forEach((u) => newTab(u));
     if (groups.length > 1) {
       const first = cur;
@@ -4438,7 +4442,7 @@ function createWindow(opts = {}) {
     use(w);
     layout();
     if (opts.first) startupTabs();
-    else if (opts.restore) { w.groups = new Map(Object.entries(opts.restore.defs || {})); opts.restore.forEach((t) => newTab(t.url, { pinned: t.pinned, group: t.group })); }
+    else if (opts.restore) { w.groups = new Map(Object.entries(opts.restore.defs || {})); opts.restore.forEach((t) => newTab(t.url, { pinned: t.pinned, group: t.group, customTitle: t.title })); }
     else if (!opts.empty) newTab(undefined, opts.private ? { private: true } : undefined);
     pushState();
     if (opts.first) syncAll();
