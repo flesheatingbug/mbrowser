@@ -394,6 +394,11 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
     private fun handleIntent(i: Intent?) {
         val data = i?.data
         if (i?.action == Intent.ACTION_VIEW && data != null) newTab(data.toString())
+        // "Search" from another app (the Claude app's web search, the share/selection menus): look the text up with the default engine
+        if (i?.action == Intent.ACTION_WEB_SEARCH || i?.action == Intent.ACTION_SEARCH) {
+            val q = (i.getStringExtra(android.app.SearchManager.QUERY) ?: "").trim()
+            if (q.isNotEmpty()) newTab(q)   // newTab runs it through the address-bar logic: a link opens, text is searched
+        }
         if (i?.action == ACTION_CLOSE_PRIVATE) closePrivateTabs()
         if (i?.action == Updater.ACTION_UPDATE) Updater.checkAndPrompt(this, true)
     }
@@ -896,7 +901,8 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
         if (priv) { s.cacheMode = android.webkit.WebSettings.LOAD_NO_CACHE; s.setGeolocationEnabled(false) }
         s.javaScriptEnabled = true
         s.domStorageEnabled = true
-        s.setSupportMultipleWindows(false)
+        s.setSupportMultipleWindows(true)
+        s.javaScriptCanOpenWindowsAutomatically = false   // only a tap may open a popup
         s.builtInZoomControls = true
         s.displayZoomControls = false
         s.textZoom = prefs.textZoom
@@ -1007,6 +1013,19 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
         }, "mbNative")
         w.setOnTouchListener { _, ev -> if (ev.actionMasked == MotionEvent.ACTION_DOWN) { refreshBlocked = false; refreshOutside = when (prefs.pullArea) { "top" -> ev.y > w.height / 3f; "bottom" -> ev.y < w.height * 2f / 3f; else -> false }; if (swipe.isRefreshing && w.progress >= 100) swipe.isRefreshing = false }; false }
         w.webChromeClient = object : WebChromeClient() {
+            // window.open from a tap (Google / PayPal sign-in popups): a real tab that keeps its opener, so the page can hear back from it
+            override fun onCreateWindow(view: WebView, isDialog: Boolean, isUserGesture: Boolean, resultMsg: android.os.Message): Boolean {
+                if (!isUserGesture && !isDialog) return false
+                val t = newTab(null, tab.priv)
+                t.home = false
+                (resultMsg.obj as? WebView.WebViewTransport)?.webView = t.web
+                resultMsg.sendToTarget()
+                return true
+            }
+            override fun onCloseWindow(window: WebView) {
+                val i = tabs.indexOfFirst { it.web === window }
+                if (i >= 0) closeTab(i)
+            }
             // the fullscreen button of a video player (YouTube and others)
             override fun onShowCustomView(view: View, callback: CustomViewCallback) {
                 if (customView != null) { callback.onCustomViewHidden(); return }
