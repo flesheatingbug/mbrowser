@@ -873,7 +873,7 @@ function wire(tab) {
   wc.on('did-redirect-navigation', h(() => pushSoon()));
   wc.on('did-frame-navigate', h((_e, _u, _c, _t, isMain) => { if (isMain) pushState(); }));
   wc.on('audio-state-changed', h(() => pushState()));
-  wc.on('page-favicon-updated', h((_e, favs) => { tab.favicon = favs[0] || ''; pushState(); }));
+  wc.on('page-favicon-updated', h((_e, favs) => { tab.favicon = favs[0] || ''; rememberFavicon(wc.getURL(), favs); pushState(); }));
   wc.on('did-start-navigation', (details) => {
     if (details && details.isMainFrame && !details.isSameDocument) {
       blockedCounts.set(wc.id, 0); blockedHostsLog.delete(wc.id);
@@ -3745,21 +3745,36 @@ function dialHosts() {
 }
 
 const iconJobs = new Map();
+// icon addresses the pages themselves announced (<link rel=icon>) while you browsed them: the best hint, and they work where a bare fetch is turned away
+const faviconHints = new Map();
+function rememberFavicon(pageUrl, favs) {
+  try {
+    const host = new URL(pageUrl).host; if (!/^https?:/.test(pageUrl) || !Array.isArray(favs) || !favs.length) return;
+    const had = (faviconHints.get(host) || []).join('|');
+    faviconHints.set(host, favs.filter((f) => /^https?:/.test(f)).slice(0, 4));
+    if (had === faviconHints.get(host).join('|')) return;
+    const none = file('dialicons') + '/' + host.replace(/[^a-z0-9.-]/gi, '_') + '.bin.none';
+    if (fs.existsSync(none)) fs.unlinkSync(none);   // a hint arrived: try again
+  } catch { /* ignore */ }
+}
 async function fetchDialIcon(pageUrl) {
   const u = new URL(pageUrl);
   const dir = file('dialicons'); fs.mkdirSync(dir, { recursive: true });
   const cache = path.join(dir, u.host.replace(/[^a-z0-9.-]/gi, '_') + '.bin');
   if (fs.existsSync(cache)) return fs.readFileSync(cache);
-  if (fs.existsSync(cache + '.none') && Date.now() - fs.statSync(cache + '.none').mtimeMs < 7 * 864e5) return null;
+  if (fs.existsSync(cache + '.none') && Date.now() - fs.statSync(cache + '.none').mtimeMs < 864e5) return null;
   const get = async (url, max) => {
     try {
-      const r = await fetch(url, { headers: { 'user-agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36' }, signal: AbortSignal.timeout(7000), redirect: 'follow' });
+      // through the browser's own network stack (it looks like the browser to sites that turn plain scripts away)
+      const f = session.defaultSession && session.defaultSession.fetch ? session.defaultSession.fetch.bind(session.defaultSession) : fetch;
+      const r = await f(url, { signal: AbortSignal.timeout(7000), redirect: 'follow' });
       if (!r.ok) return null;
       return Buffer.from(await r.arrayBuffer()).subarray(0, max);
     } catch { return null; }
   };
   const origin = u.origin;
   const cands = [];
+  for (const h of faviconHints.get(u.host) || []) cands.push([h, 2000]);
   const html = await get(origin + '/', 300000);
   if (html) {
     for (const m of html.toString('utf8').matchAll(/<link\s[^>]*>/gi)) {
