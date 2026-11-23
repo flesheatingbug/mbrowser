@@ -2808,6 +2808,11 @@ function setupIpc() {
     // resizing the pages re-flows them, which is slow on image-heavy sites: while dragging, lay out at most every 50ms, and always once more at the end
     const now = Date.now();
     if (phase === 'end') { cur.split.base = null; layout(); scheduleSessionSave(); }
+    else if (process.platform === 'linux') {
+      // Linux/Wayland: re-flowing the pages on every step is what stalls and crashes, so only the divider follows the mouse; the pages resize on release
+      const c = cur.contentRect, r = cur.splitResizers && cur.splitResizers[idx];
+      if (r) { let x = c.x + idx * SPLIT_GAP; for (let i = 0; i <= idx; i++) x += Math.round(room * cur.split.fr[i]); r.setBounds({ x, y: c.y, width: SPLIT_GAP, height: c.height }); }
+    }
     else if (now - (cur.split.lastLayout || 0) >= 16) { cur.split.lastLayout = now; layoutSplitPair(idx); }
   });
   on('bmbar:folder', (e, folder, x, y) => {
