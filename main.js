@@ -493,7 +493,18 @@ function layoutCore() {
     if (bg && cur.win._gapBg !== bg) { cur.win._gapBg = bg; cur.win.setBackgroundColor(bg); }
   } catch { /* ignore */ }
   const activeT = cur.tabs.get(cur.activeId);
-  if (activeT) activeT.view.setBounds(c);
+  const pair = cur.splitPair && cur.splitPair.includes(cur.activeId) && cur.splitPair.every((i) => cur.tabs.has(i)) ? cur.splitPair : null;
+  if (pair) {
+    const SG = 6, half = Math.max(0, Math.floor((c.width - SG) / 2));
+    const lv = cur.tabs.get(pair[0]).view, rv = cur.tabs.get(pair[1]).view;
+    for (const v of [lv, rv]) if (!cur.win.contentView.children.includes(v)) cur.win.contentView.addChildView(v);
+    lv.setBounds({ x: c.x, y: c.y, width: half, height: c.height });
+    rv.setBounds({ x: c.x + half + SG, y: c.y, width: Math.max(0, c.width - half - SG), height: c.height });
+  } else {
+    if (activeT) activeT.view.setBounds(c);
+    // a split tab that is not the active one stays hidden until you come back to the pair
+    if (cur.splitPair) for (const i of cur.splitPair) { const o = cur.tabs.get(i); if (o && i !== cur.activeId && cur.win.contentView.children.includes(o.view)) cur.win.contentView.removeChildView(o.view); }
+  }
   if (cur.overlayMode) cur.overlay.setBounds(overlayBounds(cur.overlayMode));
 }
 
@@ -576,6 +587,7 @@ function stateFor() {
     private: !!(t && t.private),
     downloadCount: downloads.filter((d) => !d.winUid || d.winUid === cur.uid).length,
     downloads: downloads.filter((d) => !d.winUid || d.winUid === cur.uid).slice(0, 5).map((d) => ({ id: d.id, name: d.name, url: d.url, path: d.path, state: d.state, received: d.received, total: d.total })),
+    groups: Object.fromEntries([...groupsOf()].map(([gid, g]) => [gid, { name: g.name, color: GROUP_COLORS[g.color] || g.color, collapsed: !!g.collapsed }])),
     tabs: cur.order.map((id) => {
       const x = cur.tabs.get(id);
       return {
@@ -583,6 +595,8 @@ function stateFor() {
         title: x.deferredUrl ? (hostOf(x.deferredUrl) || x.deferredUrl) : (x.wc.getTitle() || 'New Tab'),
         favicon: x.favicon,
         pinned: x.pinned,
+        group: x.group || null,
+        inSplit: !!(cur.splitPair && cur.splitPair.includes(id)),
         private: x.private,
         audible: x.wc.isCurrentlyAudible(),
         muted: x.wc.audioMuted,
@@ -631,8 +645,9 @@ let closeBurstTimer = null;
 function sessionSnapshot() {
   const groups = [...windows].map((w) => w.order.map((id) => w.tabs.get(id))
     .filter((t) => t && !t.private && /^https?:\/\//i.test(t.wc.getURL()))
-    .map((t) => ({ url: t.wc.getURL(), pinned: t.pinned }))).filter((g) => g.length);
-  return { windows: groups.map((tabs) => ({ tabs })), tabs: groups.flat() };
+    .map((t) => ({ url: t.wc.getURL(), pinned: t.pinned, group: t.group || undefined }))).filter((g) => g.length);
+  const wins = [...windows].filter((w) => w.order.some((id) => { const t = w.tabs.get(id); return t && !t.private && /^https?:\/\//i.test(t.wc.getURL()); }));
+  return { windows: groups.map((tabs, i) => ({ tabs, groups: Object.fromEntries([...(wins[i] && wins[i].groups || new Map())].map(([gid, g]) => [gid, { name: g.name, color: g.color, collapsed: !!g.collapsed }])) })), tabs: groups.flat() };
 }
 function saveSession(snap) { try { save('session.json', snap || sessionSnapshot()); } catch { /* ignore */ } }
 function scheduleSessionSave() {
@@ -823,6 +838,65 @@ function toggleDarkHere() {
   for (const tb of tabByWc.values()) applyDark(tb);
 }
 
+// ---------- tab groups and split view ----------
+const GROUP_COLORS = { blue: '#5b8cff', red: '#ef5b5b', yellow: '#e8b931', green: '#3fb671', pink: '#e56fb4', purple: '#a06be0', cyan: '#2fb8c4', orange: '#f08a3c' };
+let groupSeq = 0;
+const groupsOf = () => cur.groups || (cur.groups = new Map());
+// groups with no tabs left disappear; a split pair that lost a tab ends
+function pruneGroups() {
+  const used = new Set([...cur.tabs.values()].map((t) => t.group).filter(Boolean));
+  for (const gid of [...groupsOf().keys()]) if (!used.has(gid)) cur.groups.delete(gid);
+  if (cur.splitPair && !cur.splitPair.every((i) => cur.tabs.has(i))) { cur.splitPair = null; layout(); }
+}
+// a tab joins a group: it moves next to the group's other tabs so the group stays one block
+function setTabGroup(id, gid) {
+  const t = cur.tabs.get(id); if (!t || t.pinned) return;
+  t.group = gid || undefined;
+  if (gid) {
+    const mates = cur.order.filter((i) => i !== id && cur.tabs.get(i).group === gid);
+    if (mates.length) {
+      const at = cur.order.indexOf(mates[mates.length - 1]);
+      cur.order = cur.order.filter((i) => i !== id);
+      cur.order.splice(cur.order.indexOf(mates[mates.length - 1]) + 1, 0, id);
+      void at;
+    }
+  }
+  pruneGroups(); pushState(); scheduleSessionSave();
+}
+function newGroupWith(id) {
+  const used = new Set([...groupsOf().values()].map((g) => g.color));
+  const color = Object.keys(GROUP_COLORS).find((c) => !used.has(c)) || Object.keys(GROUP_COLORS)[groupsOf().size % 8];
+  const gid = 'g' + (++groupSeq) + '_' + Date.now().toString(36);
+  groupsOf().set(gid, { name: '', color, collapsed: false });
+  setTabGroup(id, gid);
+  // the new group's name is typed straight away in the tab strip
+  try { cur.tabbarView.webContents.send('group:rename-start', gid); } catch { /* ignore */ }
+}
+function groupMenu(gid) {
+  const g = groupsOf().get(gid); if (!g) return;
+  const members = cur.order.filter((i) => cur.tabs.get(i).group === gid);
+  popup(Menu.buildFromTemplate([
+    { label: g.collapsed ? 'Expand Group' : 'Collapse Group', click: () => { g.collapsed = !g.collapsed; pushState(); } },
+    { label: 'Rename Group…', click: () => { try { cur.tabbarView.webContents.send('group:rename-start', gid); } catch { /* ignore */ } } },
+    { label: 'Color', submenu: Object.keys(GROUP_COLORS).map((c) => ({ label: c[0].toUpperCase() + c.slice(1), type: 'radio', checked: g.color === c, click: () => { g.color = c; pushState(); scheduleSessionSave(); } })) },
+    { type: 'separator' },
+    { label: 'Ungroup', click: () => { for (const i of members) { const t = cur.tabs.get(i); if (t) t.group = undefined; } pruneGroups(); pushState(); scheduleSessionSave(); } },
+    { label: 'Close Group', click: () => { for (const i of members) closeTab(i); } },
+  ]));
+}
+// split view: two tabs side by side; the address bar follows whichever pane you last clicked
+function setSplit(leftId, rightId) {
+  if (!cur.tabs.has(leftId) || !cur.tabs.has(rightId) || leftId === rightId) return;
+  cur.splitPair = [leftId, rightId];
+  if (!cur.splitPair.includes(cur.activeId)) switchTab(leftId); else { layout(); pushState(); }
+}
+function splitWithNewTab() {
+  if (cur.splitPair) { cur.splitPair = null; layout(); pushState(); return; }
+  const left = cur.activeId; if (left == null) return;
+  const id = newTab(undefined, { after: left, background: true });
+  if (id != null) { setSplit(left, id); switchTab(id); focusUrl(); }
+}
+
 function runGesture(tab, dirs) {
   const wc = tab.wc; if (wc.isDestroyed()) return;
   if (dirs === 'L') { if (wc.navigationHistory.canGoBack()) wc.navigationHistory.goBack(); }
@@ -837,7 +911,7 @@ function newTab(target, opts = {}) {
   const id = nextId++;
   const view = createView(!!opts.private);
   const tab = {
-    id, view, wc: view.webContents, pinned: !!opts.pinned, private: !!opts.private, favicon: '', owner: cur,
+    id, view, wc: view.webContents, pinned: !!opts.pinned, private: !!opts.private, favicon: '', owner: cur, group: opts.group && groupsOf().has(opts.group) ? opts.group : undefined,
   };
   cur.tabs.set(id, tab);
   tabById.set(id, tab);
@@ -1008,6 +1082,7 @@ function wire(tab) {
     if (cur.overlayMode === 'find' && tab.id === cur.activeId) cur.overlay.webContents.send('find:result', result);
   }));
   wc.on('before-input-event', (event, input) => { use(tab.owner); handleShortcut(event, input); });
+  wc.on('focus', () => { if (cur && tab.owner === cur && cur.splitPair && cur.splitPair.includes(tab.id) && cur.activeId !== tab.id) { cur.activeId = tab.id; pushState(); } });
   // mouse gestures (opt-in): the right button is held back until we know whether this is a drag (a gesture) or a plain click (then the click is replayed so the menu opens as usual)
   let gest = null, replaying = false;
   wc.on('before-mouse-event', (e, m) => {
@@ -1071,10 +1146,12 @@ function closeTab(id) {
       if (closedTabs.length > 25) closedTabs.shift();
     }
   }
+  if (cur.splitPair && cur.splitPair.includes(id)) { try { cur.win.contentView.removeChildView(t.view); } catch { /* not shown */ } cur.splitPair = null; }
   if (id === cur.activeId) cur.win.contentView.removeChildView(t.view);
   t.wc.close();
   cur.tabs.delete(id);
   cur.order.splice(idx, 1);
+  pruneGroups();
   tabById.delete(id);
   tabByWc.delete(wcId);
   blockedCounts.delete(wcId);
@@ -1331,6 +1408,8 @@ const COMMANDS = [
   { id: 'page-print-system', label: 'Print with system dialog…', keys: [], run: () => activeWc()?.print({ silent: false, printBackground: true }, () => {}) },
   { id: 'page-translate', label: 'Translate Page', keys: [], run: () => translateTab(null) },
   { id: 'force-dark', label: 'Force Dark Mode on This Site (toggle)', keys: [], run: () => toggleDarkHere() },
+  { id: 'split-view', label: 'Split View (toggle)', keys: ['Ctrl+Alt+S'], run: () => splitWithNewTab() },
+  { id: 'tab-group-new', label: 'Add Tab to New Group', keys: [], run: () => { if (cur.activeId != null) newGroupWith(cur.activeId); } },
   { id: 'bookmarks-bar', label: 'Show/Hide Bookmarks Bar', keys: ['Ctrl+Shift+B'], run: () => toggleBookmarksBar() },
   { id: 'reader-view', label: 'Reader View', keys: ['Ctrl+Alt+R'], run: () => toggleReader(activeTab()) },
   { id: 'page-source', label: 'View Page Source', keys: ['Ctrl+U'], run: () => { const u = activeWc()?.getURL(); if (u && isWeb(u)) newTab('view-source:' + u, { after: cur.activeId }); } },
@@ -1909,6 +1988,14 @@ function tabMenu(id) {
     { label: 'Duplicate Tab', click: () => duplicateTab(id) },
     { label: t.pinned ? 'Unpin Tab' : 'Pin Tab', click: () => togglePin(id) },
     { label: t.wc.audioMuted ? 'Unmute Tab' : 'Mute Tab', click: () => toggleMute(id) },
+    { type: 'separator' },
+    ...(t.pinned ? [] : [t.group
+      ? { label: 'Remove from Group', click: () => setTabGroup(id, null) }
+      : { label: 'Add to New Group', click: () => newGroupWith(id) }]),
+    ...(!t.pinned && groupsOf().size ? [{ label: 'Add to Group', submenu: [...groupsOf()].filter(([gid]) => gid !== t.group).map(([gid, g]) => ({ label: g.name || g.color[0].toUpperCase() + g.color.slice(1) + ' group', click: () => setTabGroup(id, gid) })) }] : []),
+    ...(cur.splitPair && cur.splitPair.includes(id)
+      ? [{ label: 'Close Split View', click: () => { cur.splitPair = null; layout(); pushState(); } }]
+      : id !== cur.activeId ? [{ label: 'Show Side by Side with Current Tab', click: () => setSplit(cur.activeId, id) }] : []),
     { type: 'separator' },
     { label: 'Move Tab to New Window', enabled: cur.order.length > 1, click: () => tearOffTab(t) },
     ...(() => {
@@ -2597,6 +2684,9 @@ const BOTH = { chrome: true, page: true };
 
 function setupIpc() {
   // the bookmark popup grows or shrinks to fit its content (the folder list, the new-folder box)
+  on('group:menu', (_e, gid) => groupMenu(gid));
+  on('group:toggle', (_e, gid) => { const g = groupsOf().get(gid); if (g) { g.collapsed = !g.collapsed; pushState(); scheduleSessionSave(); } });
+  on('group:rename', (_e, gid, name) => { const g = groupsOf().get(gid); if (g) { g.name = String(name || '').slice(0, 40); pushState(); scheduleSessionSave(); } });
   on('bmbar:folder', (e, folder, x, y) => {
     const items = bookmarks.filter((b) => liveBm(b) && b.folder === folder).sort((a, c) => (a.added || 0) - (c.added || 0));
     const menu = Menu.buildFromTemplate(items.length ? items.map((b) => ({ label: (b.title || hostOf(b.url)).slice(0, 60), click: () => { const t = activeTab(); if (t) go(t, b.url); } })) : [{ label: '(empty)', enabled: false }]);
@@ -4249,8 +4339,10 @@ function startupTabs() {
   if (given.length && g.startup !== 'restore') { given.forEach((u) => newTab(u)); return; }
   if (g.startup === 'restore') {
     const sess = load('session.json', { tabs: [] });
+    const gdefs = Array.isArray(sess.windows) ? sess.windows.filter((g) => (g.tabs || []).length).map((g) => g.groups || {}) : [];
     const groups = Array.isArray(sess.windows) && sess.windows.length ? sess.windows.map((g) => g.tabs || []).filter((g) => g.length) : (sess.tabs.length ? [sess.tabs] : []);
-    if (groups.length) groups[0].forEach((t) => newTab(t.url, { pinned: t.pinned })); else if (!given.length) newTab(START);
+    groups.forEach((g, i) => { g.defs = gdefs[i] || {}; });
+    if (groups.length) { cur.groups = new Map(Object.entries(groups[0].defs || {})); groups[0].forEach((t) => newTab(t.url, { pinned: t.pinned, group: t.group })); } else if (!given.length) newTab(START);
     given.forEach((u) => newTab(u));
     if (groups.length > 1) {
       const first = cur;
@@ -4346,7 +4438,7 @@ function createWindow(opts = {}) {
     use(w);
     layout();
     if (opts.first) startupTabs();
-    else if (opts.restore) opts.restore.forEach((t) => newTab(t.url, { pinned: t.pinned }));
+    else if (opts.restore) { w.groups = new Map(Object.entries(opts.restore.defs || {})); opts.restore.forEach((t) => newTab(t.url, { pinned: t.pinned, group: t.group })); }
     else if (!opts.empty) newTab(undefined, opts.private ? { private: true } : undefined);
     pushState();
     if (opts.first) syncAll();
@@ -4403,6 +4495,8 @@ function moveTabToWindow(t, dest, beforeId) {
   use(src);
   if (src.overlayMode) hideOverlay(false);
   const wasActive = src.activeId === t.id;
+  if (src.splitPair && src.splitPair.includes(t.id)) { try { src.win.contentView.removeChildView(t.view); } catch { /* ignore */ } src.splitPair = null; }
+  t.group = undefined;
   const idx = src.order.indexOf(t.id);
   if (wasActive) src.win.contentView.removeChildView(t.view);
   src.tabs.delete(t.id);

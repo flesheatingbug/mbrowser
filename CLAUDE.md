@@ -49,6 +49,8 @@ not npm's. Browser version in package.json: 0.9.0. Server: 1.0.0 (stdlib-only Py
 
 - Reader view (both platforms): `assets/reader.js` (desktop) and `android/app/src/main/assets/reader.js` are identical copies; keep them in sync. Injected on demand: `check()` drives the address-bar button (shown on article-like pages), `toggle()` shows a shadow-DOM overlay with text size / font / theme controls. Desktop: `detectReadable`/`toggleReader` in main.js, Ctrl+Alt+R, `appearance.toolbar.reader`. Android: `btnReader`, menu row, Back closes it. Untested at runtime.
 
+- Tab groups and split view (desktop): per-window `cur.groups` (Map gid -> name/color/collapsed) and `tab.group`; chips drawn in `ui.html` `groupChip`, menu in `groupMenu`, saved in `session.json` (`windows[].groups`, `tabs[].group`). Split view is `cur.splitPair = [leftId, rightId]` laid out 50/50 in `layoutCore`; Ctrl+Alt+S or tab menu > Show Side by Side. Bookmarks bar (folder "Bookmarks bar"), force dark (`DARK_CSS` invert filter), opt-in mouse gestures (`before-mouse-event`, Electron 36+). All untested at runtime.
+
 ## Open items
 - All Tabs / recently closed including tabs from other synced sessions.
 - Google sign-in workaround. Translate on desktop (Android has it).

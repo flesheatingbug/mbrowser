@@ -35,6 +35,13 @@
   .tab { position:relative; display:flex; align-items:center; gap:6px; flex:0 1 200px; min-width:42px; max-width:200px;
     height:32px; padding:0 8px; background:var(--tab); border-radius:8px 8px 0 0; cursor:default; transition:min-width .15s, max-width .15s; }
   .tab.active { background:var(--active); }
+  .grp { flex:0 0 auto; display:flex; align-items:center; max-width:140px; height:24px; margin:0 3px 0 4px; padding:0 9px; border-radius:12px; background:var(--gc); color:#fff; font-size:12px; font-weight:600; cursor:pointer; user-select:none; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; align-self:center; text-shadow:0 1px 2px rgba(0,0,0,.35); }
+  .grp.unnamed { width:16px; padding:0; }
+  .grp.collapsed { opacity:.85; }
+  .grp input { all:unset; width:90px; color:#fff; font:inherit; }
+  .tab[data-g] { box-shadow:inset 0 -2px 0 var(--gc); }
+  .tab.insplit { outline:1px solid var(--accent); outline-offset:-2px; }
+  body.vertical .grp { margin:4px 6px 0; align-self:flex-start; }
   .tab.pinned { flex:0 0 38px; min-width:38px; padding:0; justify-content:center; }
   .tab.private::after { content:""; position:absolute; left:8px; right:8px; bottom:0; height:2px; background:#b57bee; border-radius:2px; }
   .tab .ico { width:16px; height:16px; flex:none; border-radius:3px; display:grid; place-items:center;
@@ -538,10 +545,36 @@
   urlInput.addEventListener('focus', () => urlInput.select());
   api.onFocusUrl(() => { window.focus(); urlInput.focus(); if (!editing) urlInput.select(); });
 
+  function groupChip(gid, g) {
+    const c = document.createElement('div');
+    c.className = 'grp' + (g.name ? '' : ' unnamed') + (g.collapsed ? ' collapsed' : '');
+    c.style.setProperty('--gc', g.color); c.textContent = g.name || '';
+    c.title = (g.name || 'Group') + (g.collapsed ? ' (click to expand)' : ' (click to collapse)');
+    c.dataset.gid = gid;
+    c.onclick = () => api.groupToggle(gid);
+    c.oncontextmenu = (e) => { e.preventDefault(); api.groupMenu(gid); };
+    c.ondblclick = () => editGroup(gid);
+    return c;
+  }
+  function editGroup(gid) {
+    const chip = document.querySelector('.grp[data-gid="' + gid + '"]'); if (!chip) return;
+    const cur = (lastState && lastState.groups && lastState.groups[gid] && lastState.groups[gid].name) || '';
+    chip.classList.remove('unnamed'); chip.textContent = '';
+    const inp = document.createElement('input'); inp.value = cur; inp.placeholder = 'Name'; chip.append(inp);
+    chip.onclick = null; chip.ondblclick = null;
+    let done = false;
+    const finish = (save) => { if (done) return; done = true; if (save) api.groupRename(gid, inp.value.trim()); else api.groupRename(gid, cur); };
+    inp.onkeydown = (e) => { if (e.key === 'Enter') finish(true); else if (e.key === 'Escape') finish(false); e.stopPropagation(); };
+    inp.onblur = () => finish(true);
+    setTimeout(() => { inp.focus(); inp.select(); }, 30);
+  }
+  api.onGroupRenameStart((gid) => setTimeout(() => editGroup(gid), 80));
+
   function tabEl(t, activeId) {
     const el = document.createElement('div');
     el.className = 'tab' + (t.id === activeId ? ' active' : '') + (t.pinned ? ' pinned' : '')
-      + (t.private ? ' private' : '') + (t.loading ? ' loading' : '');
+      + (t.private ? ' private' : '') + (t.loading ? ' loading' : '') + (t.inSplit ? ' insplit' : '');
+    if (t.group && lastState && lastState.groups && lastState.groups[t.group]) { el.dataset.g = t.group; el.style.setProperty('--gc', lastState.groups[t.group].color); }
     el.title = t.title;
     el.onclick = () => { if (t.id === activeId && lastState && lastState.clickTabScrollsTop) api.activeTabClick(); else api.switchTab(t.id); };
     el.onauxclick = (e) => { if (e.button === 1) api.closeTab(t.id); };
@@ -761,12 +794,21 @@
     if (startedDl) triggerDownloadWhoosh();
 
 
-    if (part === 'tabs') {
+    if (part === 'tabs' && !document.querySelector('.grp input')) {
       const strip = $('tabs-wrap');
       const prevActive = lastActiveId;
       lastActiveId = s.activeId;
       strip.textContent = '';
-      for (const t of s.tabs) strip.appendChild(tabEl(t, s.activeId));
+      let runGroup = null;
+      for (const t of s.tabs) {
+        const g = t.group && s.groups ? s.groups[t.group] : null;
+        if ((t.group || null) !== runGroup) {
+          runGroup = t.group || null;
+          if (g) strip.appendChild(groupChip(t.group, g));
+        }
+        if (g && g.collapsed && t.id !== s.activeId) continue;
+        strip.appendChild(tabEl(t, s.activeId));
+      }
       const plus = document.createElement('button');
       plus.id = 'newtab';
       plus.textContent = s.tabBar === 'left' ? '+  New tab' : '+';
