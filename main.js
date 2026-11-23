@@ -14,6 +14,7 @@ const { createVault, originOf } = require('./lib/vault');
 const { syncVault, resolveVault } = require('./lib/vaultsync');
 const { createProfiles } = require('./lib/profiles');
 const { syncSettings } = require('./lib/settingssync');
+const { createCloud } = require('./lib/cloudsync');
 const { parseBookmarkFile, detectBrowsers, parsePasswords } = require('./lib/importers');
 const { spawn } = require('child_process');
 
@@ -2258,9 +2259,13 @@ ipcMain.on('downloads:ctxmenu', (_e, id) => {
 });
 
 // ---------- sync ----------
-const syncReady = () => { const c = S().sync; return !!(c.server && c.token); };
+// the sync backend: your own server (default), or Google Drive / OneDrive through lib/cloudsync.js
+const cloud = createCloud({ file: path.join(app.getPath('userData'), 'cloud.json'), safe: safeStorage, openExternal: (u) => shell.openExternal(u) });
+const cloudBackend = () => { const b = S().sync.backend; return b === 'gdrive' || b === 'onedrive' ? b : ''; };
+const syncReady = () => { const c = S().sync; return cloudBackend() ? cloud.ready() && cloud.status().provider === cloudBackend() : !!(c.server && c.token); };
 
 async function call(method, p, body, opts = {}) {
+  if (cloudBackend()) return cloud.call(method, p, body, opts);
   const c = S().sync;
   const res = await fetch(c.server.replace(/\/+$/, '') + p, {
     method,
@@ -3697,6 +3702,29 @@ function setupIpc() {
     try { const r = parseBookmarkFile(Buffer.from(bytes)); return { format: r.format, ...importBookmarks(r.items) }; }
     catch (e) { return { error: 'Could not read that file: ' + e.message }; }
   }, BOTH);
+  // Google Drive / OneDrive sync
+  const cloudInfo = () => ({ ...cloud.status(), backend: cloudBackend() || 'server', gClientId: S().sync.gClientId || '', gClientSecret: S().sync.gClientSecret || '', msClientId: S().sync.msClientId || '' });
+  const resetSyncRevs = () => { syncState = { bRev: 0, hRev: 0, hPushed: 0 }; save('syncstate.json', syncState); };
+  handle('cloud:info', () => cloudInfo(), PAGE_ONLY);
+  handle('cloud:backend', (_e, b) => {
+    const next = b === 'gdrive' || b === 'onedrive' ? b : 'server';
+    if (next !== (cloudBackend() || 'server')) { applySetting('sync.backend', next); resetSyncRevs(); syncStatus = ''; pushAll(); }
+    return cloudInfo();
+  }, PAGE_ONLY);
+  handle('cloud:connect', async (_e, o) => {
+    const provider = o && o.provider === 'onedrive' ? 'onedrive' : 'gdrive';
+    const clientId = String((o && o.clientId) || '').trim(), clientSecret = String((o && o.clientSecret) || '').trim();
+    applySetting(provider === 'gdrive' ? 'sync.gClientId' : 'sync.msClientId', clientId);
+    if (provider === 'gdrive') applySetting('sync.gClientSecret', clientSecret);
+    try { await cloud.connect(provider, { clientId, clientSecret }); } catch (e) { return { error: e.message, ...cloudInfo() }; }
+    applySetting('sync.backend', provider); resetSyncRevs();
+    return cloudInfo();
+  }, PAGE_ONLY);
+  handle('cloud:passphrase', async (_e, pass) => {
+    try { const r = await cloud.setPassphrase(String(pass || '')); resetSyncRevs(); syncSoon(); return { ...cloudInfo(), joined: r.joined }; }
+    catch (e) { return { error: e.message, ...cloudInfo() }; }
+  }, PAGE_ONLY);
+  handle('cloud:disconnect', () => { cloud.disconnect(); applySetting('sync.backend', 'server'); resetSyncRevs(); syncStatus = ''; pushAll(); return cloudInfo(); }, PAGE_ONLY);
   handle('sync:test', () => testSync(), BOTH);
   handle('sync:login', async (_e, o) => {
     const c = S().sync;

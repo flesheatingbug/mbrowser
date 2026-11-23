@@ -499,6 +499,67 @@
     m.append(row, msg);
   }
 
+  // ---- sync backend: your server, Google Drive or OneDrive ----
+  async function backendPicker(m, ci) {
+    const row = el('div', 'row');
+    const lab = el('label', null, 'Sync with'); lab.append(el('span', 'help', 'Your own sync server, or a private folder in your Google Drive or OneDrive. This is per profile on this computer.'));
+    const sel = el('select');
+    for (const [v, t] of [['server', 'My sync server'], ['gdrive', 'Google Drive'], ['onedrive', 'OneDrive']]) { const o = el('option', null, t); o.value = v; if (ci.backend === v) o.selected = true; sel.append(o); }
+    sel.onchange = async () => { await browser.cloudBackend(sel.value); S = await browser.getSettings(); render(); };
+    row.append(lab, sel); m.append(row);
+  }
+  function cloudSection(m, ci) {
+    const gd = ci.backend === 'gdrive', name = gd ? 'Google Drive' : 'OneDrive';
+    const signedIn = ci.connected && ci.provider === ci.backend;
+    const box = el('div', 'editor'); box.style.gridTemplateColumns = '150px 1fr';
+    const status = el('div', 'msg'); status.style.gridColumn = '1 / -1';
+    status.textContent = !signedIn ? 'Not signed in to ' + name + '.' : ci.hasKey ? 'Signed in to ' + name + ' and ready. Everything is encrypted on this computer before it is uploaded.' : 'Signed in to ' + name + '. Now choose the sync passphrase below.';
+    status.style.color = signedIn && ci.hasKey ? '#4cc38a' : '';
+    box.append(status);
+    const row = (label, input) => { box.append(el('label', null, label), input); return input; };
+    const out = el('div', 'msg'); out.style.gridColumn = '1 / -1';
+    const btns = el('div', 'btn-row'); btns.style.gridColumn = '1 / -1';
+    let idIn = null, secIn = null;
+    if (!signedIn) {
+      idIn = row('Client ID', Object.assign(el('input'), { type: 'text', autocomplete: 'off', value: gd ? ci.gClientId : ci.msClientId }));
+      idIn.style.width = '100%';
+      if (gd) { secIn = row('Client secret', Object.assign(el('input'), { type: 'password', autocomplete: 'off', value: ci.gClientSecret })); secIn.style.width = '100%'; }
+      const go = el('button', null, 'Sign in to ' + name);
+      go.onclick = async () => {
+        out.style.color = ''; out.textContent = 'A browser window opens for you to sign in and allow access…'; go.disabled = true;
+        const r = await browser.cloudConnect({ provider: ci.backend, clientId: idIn.value, clientSecret: secIn ? secIn.value : '' });
+        go.disabled = false;
+        if (r.error) { out.style.color = '#ff6b6b'; out.textContent = r.error; } else { S = await browser.getSettings(); render(); }
+      };
+      btns.append(go);
+    } else if (!ci.hasKey) {
+      const pass = row('Sync passphrase', Object.assign(el('input'), { type: 'password', autocomplete: 'new-password' })); pass.style.width = '100%';
+      box.append(el('div', 'help', ''), el('div', 'help', 'Pick one passphrase and use the same on every device. It never leaves this computer, so if you forget it your synced data cannot be recovered (the drive only holds encrypted files).'));
+      const go = el('button', null, 'Save passphrase');
+      go.onclick = async () => {
+        out.style.color = ''; out.textContent = 'Checking…'; go.disabled = true;
+        const r = await browser.cloudPassphrase(pass.value);
+        go.disabled = false;
+        if (r.error) { out.style.color = '#ff6b6b'; out.textContent = r.error; } else { render(); }
+      };
+      btns.append(go);
+    } else {
+      const now = el('button', null, 'Sync now'); now.onclick = async () => { out.style.color = ''; out.textContent = 'Syncing…'; out.textContent = await browser.syncNow(); };
+      btns.append(now);
+    }
+    if (signedIn) { const so = el('button', 'danger', 'Sign out'); so.onclick = async () => { await browser.cloudDisconnect(); S = await browser.getSettings(); render(); }; btns.append(so); }
+    box.append(btns, out);
+    m.append(el('h2', null, 'Account'), box);
+
+    if (!signedIn) {
+      const how = el('div', 'muted'); how.style.cssText = 'margin-top:14px;font-size:13px;line-height:1.6;max-width:640px';
+      how.innerHTML = gd
+        ? '<b>One-time setup (about 5 minutes, free).</b> Google needs an app of your own to sign in:<ol style="padding-left:20px"><li>Open <i>console.cloud.google.com</i>, create a project, and enable the <b>Google Drive API</b>.</li><li>Under APIs &amp; Services &gt; OAuth consent screen choose External, fill in a name and your email, and add yourself as a test user. Add the scope <code>.../auth/drive.appdata</code>.</li><li>Under Credentials create an <b>OAuth client ID</b> of type <b>Desktop app</b>.</li><li>Paste its client ID (and the client secret Google shows) above, then sign in.</li></ol>Only a hidden app folder is used; the browser cannot see the rest of your Drive.'
+        : '<b>One-time setup (about 5 minutes, free).</b> Microsoft needs an app of your own to sign in:<ol style="padding-left:20px"><li>Open <i>entra.microsoft.com</i> &gt; App registrations &gt; New registration. Choose accounts in any directory and personal Microsoft accounts.</li><li>Set the redirect URI type to <b>Public client/native</b> with the value <code>http://localhost</code>.</li><li>Under API permissions add Microsoft Graph delegated <code>Files.ReadWrite.AppFolder</code> and <code>offline_access</code>.</li><li>Copy the <b>Application (client) ID</b> into the box above, then sign in.</li></ol>Only a private app folder is used; the browser cannot see the rest of your OneDrive.';
+      m.append(how);
+    }
+  }
+
   // ---- sync ----
   // server address + sign-in (account or API key)
   function syncAuthSection(m) {
@@ -874,7 +935,7 @@
         m.append(row);
       }
     }
-    if (cur === 'sync') syncAuthSection(m);
+    if (cur === 'sync') { const ci = await browser.cloudInfo(); await backendPicker(m, ci); if (ci.backend === 'server') syncAuthSection(m); else cloudSection(m, ci); }
     (FIELDS[cur] || []).forEach((d) => { if (d.beta && !S.general.beta) return; m.append(field(d)); });
     if (cur === 'privacy') await lockSection(m);
     if (cur === 'startpage') m.append(el('p', 'muted', 'Add, edit, group and reorder speed dials on the start page itself. Drag a tile to reorder it, or drop it on a group tab to move it.'));
@@ -882,7 +943,7 @@
     if (cur === 'adblocker') await blockerSection(m);
     if (cur === 'sync') {
       syncExtras(m);
-      if (S.sync.server) {
+      if (S.sync.server && (S.sync.backend || 'server') === 'server') {
         const adminLink = el('div'); adminLink.style.marginTop = '18px';
         const a = el('a', null, 'Server Admin →'); a.href = '#'; a.style.fontSize = '14px';
         a.onclick = (e) => { e.preventDefault(); cur = 'server'; render(); };
