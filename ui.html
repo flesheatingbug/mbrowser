@@ -35,18 +35,22 @@
   .tab { position:relative; display:flex; align-items:center; gap:6px; flex:0 1 200px; min-width:42px; max-width:200px;
     height:32px; padding:0 8px; background:var(--tab); border-radius:8px 8px 0 0; cursor:default; transition:min-width .15s, max-width .15s; }
   .tab.active { background:var(--active); }
-  .grp { flex:0 0 auto; display:flex; align-items:center; max-width:140px; height:24px; margin:0 3px 0 4px; padding:0 9px; border-radius:12px; background:var(--gc); color:#fff; font-size:12px; font-weight:600; cursor:pointer; user-select:none; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; align-self:center; text-shadow:0 1px 2px rgba(0,0,0,.35); }
-  .grp.unnamed { width:16px; padding:0; }
-  .grp.collapsed { opacity:.85; }
-  .grp input { all:unset; width:90px; color:#fff; font:inherit; }
-  .tab[data-g] { box-shadow:inset 0 -2px 0 var(--gc); }
+  /* stacked tabs overlap like a pile of cards; the cards behind show a sliver of their edge */
+  .tab[data-g] { position:relative; margin-right:-14px; box-shadow:2px 0 0 0 rgba(0,0,0,.28), inset 0 -2px 0 var(--accent); border-radius:8px 12px 0 0; }
+  .tab[data-g].gend { margin-right:0; }
+  .tab[data-g]:not(.active):hover { z-index:3; }
+  .tab.active[data-g] { z-index:4; }
   .tab.insplit { outline:1px solid var(--accent); outline-offset:-2px; }
-  body.vertical .grp { margin:4px 6px 0; align-self:flex-start; }
+  .tab.stackdrop { outline:2px solid var(--accent); outline-offset:-2px; background:color-mix(in srgb, var(--accent) 25%, var(--tab)); }
   .tab.pinned { flex:0 0 38px; min-width:38px; padding:0; justify-content:center; }
   .tab.private::after { content:""; position:absolute; left:8px; right:8px; bottom:0; height:2px; background:#b57bee; border-radius:2px; }
   .tab .ico { width:16px; height:16px; flex:none; border-radius:3px; display:grid; place-items:center;
     font-size:10px; background:var(--line); color:var(--muted); object-fit:cover; }
   .tab.loading .ico { animation:pulse 1s infinite; }
+  /* a tab that loads in the background gets a thin moving bar along its bottom edge (the tab you are looking at has the address bar's own progress) */
+  .tab.loading:not(.active)::after { content:""; position:absolute; left:6px; right:6px; bottom:1px; height:2px; border-radius:2px; overflow:hidden;
+    background:linear-gradient(90deg, transparent 0, var(--accent) 50%, transparent 100%) no-repeat; background-size:40% 100%; animation:tabload 1.1s ease-in-out infinite; opacity:.9; pointer-events:none; }
+  @keyframes tabload { 0% { background-position:-60% 0; } 100% { background-position:160% 0; } }
   @keyframes pulse { 50% { opacity:.3; } }
   .tab .t { flex:1; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
   .tab .x, .tab .snd { background:none; border:0; color:var(--muted); cursor:pointer; padding:0 2px; font-size:13px; }
@@ -545,29 +549,6 @@
   urlInput.addEventListener('focus', () => urlInput.select());
   api.onFocusUrl(() => { window.focus(); urlInput.focus(); if (!editing) urlInput.select(); });
 
-  function groupChip(gid, g) {
-    const c = document.createElement('div');
-    c.className = 'grp' + (g.name ? '' : ' unnamed') + (g.collapsed ? ' collapsed' : '');
-    c.style.setProperty('--gc', g.color); c.textContent = g.name || '';
-    c.title = (g.name || 'Group') + (g.collapsed ? ' (click to expand)' : ' (click to collapse)');
-    c.dataset.gid = gid;
-    c.onclick = () => api.groupToggle(gid);
-    c.oncontextmenu = (e) => { e.preventDefault(); api.groupMenu(gid); };
-    c.ondblclick = () => editGroup(gid);
-    return c;
-  }
-  function editGroup(gid) {
-    const chip = document.querySelector('.grp[data-gid="' + gid + '"]'); if (!chip) return;
-    const cur = (lastState && lastState.groups && lastState.groups[gid] && lastState.groups[gid].name) || '';
-    chip.classList.remove('unnamed'); chip.textContent = '';
-    const inp = document.createElement('input'); inp.value = cur; inp.placeholder = 'Name'; chip.append(inp);
-    chip.onclick = null; chip.ondblclick = null;
-    let done = false;
-    const finish = (save) => { if (done) return; done = true; if (save) api.groupRename(gid, inp.value.trim()); else api.groupRename(gid, cur); };
-    inp.onkeydown = (e) => { if (e.key === 'Enter') finish(true); else if (e.key === 'Escape') finish(false); e.stopPropagation(); };
-    inp.onblur = () => finish(true);
-    setTimeout(() => { inp.focus(); inp.select(); }, 30);
-  }
   function editTab(id) {
     const el = document.querySelector('.tab[data-id="' + id + '"]'); if (!el) return;
     const span = el.querySelector('.t'); if (!span) return;
@@ -585,13 +566,12 @@
     setTimeout(() => { inp.focus(); inp.select(); }, 30);
   }
   api.onTabRenameStart((id) => setTimeout(() => editTab(id), 60));
-  api.onGroupRenameStart((gid) => setTimeout(() => editGroup(gid), 80));
 
   function tabEl(t, activeId) {
     const el = document.createElement('div');
     el.className = 'tab' + (t.id === activeId ? ' active' : '') + (t.pinned ? ' pinned' : '')
       + (t.private ? ' private' : '') + (t.loading ? ' loading' : '') + (t.inSplit ? ' insplit' : '');
-    if (t.group && lastState && lastState.groups && lastState.groups[t.group]) { el.dataset.g = t.group; el.style.setProperty('--gc', lastState.groups[t.group].color); }
+    if (t.group) { el.dataset.g = t.group; if (t.groupEnd) el.classList.add('gend'); }
     el.title = t.title; el.dataset.id = t.id;
     el.onclick = () => { if (t.id === activeId && lastState && lastState.clickTabScrollsTop) api.activeTabClick(); else api.switchTab(t.id); };
     el.onauxclick = (e) => { if (e.button === 1) api.closeTab(t.id); };
@@ -601,19 +581,25 @@
     el.ondragstart = (e) => {
       e.dataTransfer.setData(TAB_MIME, String(t.id));
       e.dataTransfer.effectAllowed = 'move';
+      api.dragStart(t.id);
     };
+    // the middle of a tab stacks the dragged tab onto it; the outer quarters just reorder
+    const zone = (e) => { const r = el.getBoundingClientRect(); const x = (e.clientX - r.left) / r.width; return !t.pinned && x > 0.25 && x < 0.75 ? 'stack' : 'move'; };
     el.ondragover = (e) => {
       if (e.dataTransfer.types.includes(TAB_MIME)) {
         e.preventDefault(); e.dataTransfer.dropEffect = 'move';
-        document.querySelectorAll('.dropbefore').forEach((n) => { if (n !== el) n.classList.remove('dropbefore'); });
-        el.classList.add('dropbefore');
+        document.querySelectorAll('.dropbefore, .stackdrop').forEach((n) => { if (n !== el) n.classList.remove('dropbefore', 'stackdrop'); });
+        const z = zone(e);
+        el.classList.toggle('stackdrop', z === 'stack'); el.classList.toggle('dropbefore', z === 'move');
       }
     };
-    el.ondragleave = () => el.classList.remove('dropbefore');
+    el.ondragleave = () => el.classList.remove('dropbefore', 'stackdrop');
     el.ondrop = (e) => {
       e.preventDefault(); e.stopPropagation();
       const id = Number(e.dataTransfer.getData(TAB_MIME));
-      if (id && id !== t.id) api.moveTab(id, t.id);
+      const z = zone(e);
+      el.classList.remove('dropbefore', 'stackdrop');
+      if (id && id !== t.id) { if (z === 'stack') api.stackTab(id, t.id); else api.moveTab(id, t.id); }
     };
     el.ondragend = (e) => {
       // detect outside: use client coords; on Wayland screenX/Y may be 0 so also check if cursor left window
@@ -811,19 +797,15 @@
     if (startedDl) triggerDownloadWhoosh();
 
 
-    if (part === 'tabs' && !document.querySelector('.grp input, .tab input')) {
+    if (part === 'tabs' && !document.querySelector('.tab input')) {
       const strip = $('tabs-wrap');
       const prevActive = lastActiveId;
       lastActiveId = s.activeId;
       strip.textContent = '';
-      let runGroup = null;
+      const lastOf = new Map(), idxOf = new Map();
+      s.tabs.forEach((t) => { if (t.group) lastOf.set(t.group, t.id); });
       for (const t of s.tabs) {
-        const g = t.group && s.groups ? s.groups[t.group] : null;
-        if ((t.group || null) !== runGroup) {
-          runGroup = t.group || null;
-          if (g) strip.appendChild(groupChip(t.group, g));
-        }
-        if (g && g.collapsed && t.id !== s.activeId) continue;
+        if (t.group) { t.groupEnd = lastOf.get(t.group) === t.id; t.groupIdx = idxOf.get(t.group) || 0; idxOf.set(t.group, t.groupIdx + 1); }
         strip.appendChild(tabEl(t, s.activeId));
       }
       const plus = document.createElement('button');

@@ -6,6 +6,7 @@
 <style>
   html, body { margin:0; height:100%; background:transparent; overflow:hidden; }
   #h { position:absolute; inset:0; cursor:col-resize; display:flex; justify-content:center; }
+  body.split #h::after { width:4px; border-radius:2px; background:rgba(127,127,127,.35); }
   #h::after { content:""; width:2px; height:100%; background:transparent; }
   #h:hover::after, #h.drag::after { background:var(--accent, #5b8cff); }
 </style>
@@ -14,22 +15,25 @@
 <div id="h"></div>
 <script>
   const h = document.getElementById('h');
+  if (new URLSearchParams(location.search).get('split') !== null) document.body.classList.add('split');
   let startX = 0;
+  const split = new URLSearchParams(location.search).get('split');
+  const send = (phase, dx) => split === null ? api.panelResize(phase, dx) : api.splitResize(Number(split), phase, dx);
   api.onState((s) => { document.documentElement.style.setProperty('--accent', s.theme.accent); });
   h.addEventListener('pointerdown', (e) => {
     startX = e.screenX;
     h.setPointerCapture(e.pointerId);
     h.classList.add('drag');
-    api.panelResize('start', 0);
+    send('start', 0);
   });
   h.addEventListener('pointermove', (e) => {
-    if (h.hasPointerCapture(e.pointerId)) api.panelResize('move', e.screenX - startX);
+    if (h.hasPointerCapture(e.pointerId)) send('move', e.screenX - startX);
   });
   const end = (e) => {
     if (!h.hasPointerCapture(e.pointerId)) return;
     h.releasePointerCapture(e.pointerId);
     h.classList.remove('drag');
-    api.panelResize('end', e.screenX - startX);
+    send('end', e.screenX - startX);
   };
   h.addEventListener('pointerup', end);
   h.addEventListener('pointercancel', end);

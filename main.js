@@ -493,17 +493,26 @@ function layoutCore() {
     if (bg && cur.win._gapBg !== bg) { cur.win._gapBg = bg; cur.win.setBackgroundColor(bg); }
   } catch { /* ignore */ }
   const activeT = cur.tabs.get(cur.activeId);
-  const pair = cur.splitPair && cur.splitPair.includes(cur.activeId) && cur.splitPair.every((i) => cur.tabs.has(i)) ? cur.splitPair : null;
-  if (pair) {
-    const SG = 6, half = Math.max(0, Math.floor((c.width - SG) / 2));
-    const lv = cur.tabs.get(pair[0]).view, rv = cur.tabs.get(pair[1]).view;
-    for (const v of [lv, rv]) if (!cur.win.contentView.children.includes(v)) cur.win.contentView.addChildView(v);
-    lv.setBounds({ x: c.x, y: c.y, width: half, height: c.height });
-    rv.setBounds({ x: c.x + half + SG, y: c.y, width: Math.max(0, c.width - half - SG), height: c.height });
+  const zeroB = { x: 0, y: 0, width: 0, height: 0 };
+  if (splitActive()) {
+    const ids = cur.split.ids, n = ids.length;
+    if (!cur.split.fr || cur.split.fr.length !== n) cur.split.fr = evenFractions(n);
+    const room = Math.max(0, c.width - SPLIT_GAP * (n - 1));
+    let x = c.x, added = false;
+    ids.forEach((id, k) => {
+      const v = cur.tabs.get(id).view;
+      if (!cur.win.contentView.children.includes(v)) { cur.win.contentView.addChildView(v); added = true; }
+      const w = k === n - 1 ? c.x + c.width - x : Math.round(room * cur.split.fr[k]);
+      v.setBounds({ x, y: c.y, width: Math.max(0, w), height: c.height });
+      if (k < n - 1) { const r = splitResizer(k); r.setBounds({ x: x + w, y: c.y, width: SPLIT_GAP, height: c.height }); if (added || !cur.win.contentView.children.includes(r)) cur.win.contentView.addChildView(r); }
+      x += w + SPLIT_GAP;
+    });
+    (cur.splitResizers || []).forEach((r, k) => { if (k >= n - 1) r.setBounds(zeroB); });
   } else {
     if (activeT) activeT.view.setBounds(c);
-    // a split tab that is not the active one stays hidden until you come back to the pair
-    if (cur.splitPair) for (const i of cur.splitPair) { const o = cur.tabs.get(i); if (o && i !== cur.activeId && cur.win.contentView.children.includes(o.view)) cur.win.contentView.removeChildView(o.view); }
+    // split tabs that are not the active one stay hidden until you come back to the group
+    if (cur.split) for (const i of cur.split.ids) { const o = cur.tabs.get(i); if (o && i !== cur.activeId && cur.win.contentView.children.includes(o.view)) cur.win.contentView.removeChildView(o.view); }
+    (cur.splitResizers || []).forEach((r) => r.setBounds(zeroB));
   }
   if (cur.overlayMode) cur.overlay.setBounds(overlayBounds(cur.overlayMode));
 }
@@ -587,7 +596,6 @@ function stateFor() {
     private: !!(t && t.private),
     downloadCount: downloads.filter((d) => !d.winUid || d.winUid === cur.uid).length,
     downloads: downloads.filter((d) => !d.winUid || d.winUid === cur.uid).slice(0, 5).map((d) => ({ id: d.id, name: d.name, url: d.url, path: d.path, state: d.state, received: d.received, total: d.total })),
-    groups: Object.fromEntries([...groupsOf()].map(([gid, g]) => [gid, { name: g.name, color: GROUP_COLORS[g.color] || g.color, collapsed: !!g.collapsed }])),
     tabs: cur.order.map((id) => {
       const x = cur.tabs.get(id);
       return {
@@ -597,7 +605,7 @@ function stateFor() {
         favicon: x.favicon,
         pinned: x.pinned,
         group: x.group || null,
-        inSplit: !!(cur.splitPair && cur.splitPair.includes(id)),
+        inSplit: !!(cur.split && cur.split.ids.includes(id)),
         private: x.private,
         audible: x.wc.isCurrentlyAudible(),
         muted: x.wc.audioMuted,
@@ -647,8 +655,7 @@ function sessionSnapshot() {
   const groups = [...windows].map((w) => w.order.map((id) => w.tabs.get(id))
     .filter((t) => t && !t.private && /^https?:\/\//i.test(t.wc.getURL()))
     .map((t) => ({ url: t.wc.getURL(), pinned: t.pinned, group: t.group || undefined, title: t.customTitle || undefined }))).filter((g) => g.length);
-  const wins = [...windows].filter((w) => w.order.some((id) => { const t = w.tabs.get(id); return t && !t.private && /^https?:\/\//i.test(t.wc.getURL()); }));
-  return { windows: groups.map((tabs, i) => ({ tabs, groups: Object.fromEntries([...(wins[i] && wins[i].groups || new Map())].map(([gid, g]) => [gid, { name: g.name, color: g.color, collapsed: !!g.collapsed }])) })), tabs: groups.flat() };
+  return { windows: groups.map((tabs) => ({ tabs })), tabs: groups.flat() };
 }
 function saveSession(snap) { try { save('session.json', snap || sessionSnapshot()); } catch { /* ignore */ } }
 function scheduleSessionSave() {
@@ -839,63 +846,77 @@ function toggleDarkHere() {
   for (const tb of tabByWc.values()) applyDark(tb);
 }
 
-// ---------- tab groups and split view ----------
-const GROUP_COLORS = { blue: '#5b8cff', red: '#ef5b5b', yellow: '#e8b931', green: '#3fb671', pink: '#e56fb4', purple: '#a06be0', cyan: '#2fb8c4', orange: '#f08a3c' };
-let groupSeq = 0;
-const groupsOf = () => cur.groups || (cur.groups = new Map());
-// groups with no tabs left disappear; a split pair that lost a tab ends
-function pruneGroups() {
-  const used = new Set([...cur.tabs.values()].map((t) => t.group).filter(Boolean));
-  for (const gid of [...groupsOf().keys()]) if (!used.has(gid)) cur.groups.delete(gid);
-  if (cur.splitPair && !cur.splitPair.every((i) => cur.tabs.has(i))) { cur.splitPair = null; layout(); }
+// ---------- tab stacks and split view ----------
+// A stack is tabs that share a group id: they are drawn overlapping in the strip. Dropping a tab on another makes one; "Unstack" undoes it.
+let stackSeq = 0;
+function pruneStacks() {
+  const count = new Map();
+  for (const t of cur.tabs.values()) if (t.group) count.set(t.group, (count.get(t.group) || 0) + 1);
+  for (const t of cur.tabs.values()) if (t.group && count.get(t.group) < 2) t.group = undefined;
+  if (cur.split) { cur.split.ids = cur.split.ids.filter((i) => cur.tabs.has(i)); if (cur.split.ids.length < 2) cur.split = null; layout(); }
 }
-// a tab joins a group: it moves next to the group's other tabs so the group stays one block
-function setTabGroup(id, gid) {
-  const t = cur.tabs.get(id); if (!t || t.pinned) return;
-  t.group = gid || undefined;
-  if (gid) {
-    const mates = cur.order.filter((i) => i !== id && cur.tabs.get(i).group === gid);
-    if (mates.length) {
-      const at = cur.order.indexOf(mates[mates.length - 1]);
-      cur.order = cur.order.filter((i) => i !== id);
-      cur.order.splice(cur.order.indexOf(mates[mates.length - 1]) + 1, 0, id);
-      void at;
-    }
-  }
-  pruneGroups(); pushState(); scheduleSessionSave();
+function stackTabs(dragId, targetId) {
+  const a = cur.tabs.get(dragId), b = cur.tabs.get(targetId);
+  if (!a || !b || a === b || a.pinned || b.pinned) return;
+  const gid = b.group || ('s' + (++stackSeq) + '_' + Date.now().toString(36));
+  b.group = gid; a.group = gid;
+  // the dropped tab sits right after the last tab of the stack
+  const mates = cur.order.filter((i) => i !== dragId && cur.tabs.get(i).group === gid);
+  cur.order = cur.order.filter((i) => i !== dragId);
+  cur.order.splice(cur.order.indexOf(mates[mates.length - 1]) + 1, 0, dragId);
+  pruneStacks(); pushState(); scheduleSessionSave();
 }
-function newGroupWith(id) {
-  const used = new Set([...groupsOf().values()].map((g) => g.color));
-  const color = Object.keys(GROUP_COLORS).find((c) => !used.has(c)) || Object.keys(GROUP_COLORS)[groupsOf().size % 8];
-  const gid = 'g' + (++groupSeq) + '_' + Date.now().toString(36);
-  groupsOf().set(gid, { name: '', color, collapsed: false });
-  setTabGroup(id, gid);
-  // the new group's name is typed straight away in the tab strip
-  try { cur.tabbarView.webContents.send('group:rename-start', gid); } catch { /* ignore */ }
+function unstack(id, whole) {
+  const t = cur.tabs.get(id); if (!t || !t.group) return;
+  const gid = t.group;
+  for (const x of cur.tabs.values()) if (x.group === gid && (whole || x === t)) x.group = undefined;
+  pruneStacks(); pushState(); scheduleSessionSave();
 }
-function groupMenu(gid) {
-  const g = groupsOf().get(gid); if (!g) return;
-  const members = cur.order.filter((i) => cur.tabs.get(i).group === gid);
-  popup(Menu.buildFromTemplate([
-    { label: g.collapsed ? 'Expand Group' : 'Collapse Group', click: () => { g.collapsed = !g.collapsed; pushState(); } },
-    { label: 'Rename Group…', click: () => { try { cur.tabbarView.webContents.send('group:rename-start', gid); } catch { /* ignore */ } } },
-    { label: 'Color', submenu: Object.keys(GROUP_COLORS).map((c) => ({ label: c[0].toUpperCase() + c.slice(1), type: 'radio', checked: g.color === c, click: () => { g.color = c; pushState(); scheduleSessionSave(); } })) },
-    { type: 'separator' },
-    { label: 'Ungroup', click: () => { for (const i of members) { const t = cur.tabs.get(i); if (t) t.group = undefined; } pruneGroups(); pushState(); scheduleSessionSave(); } },
-    { label: 'Close Group', click: () => { for (const i of members) closeTab(i); } },
-  ]));
+
+// split view: any number of tabs side by side (columns), dividers you can drag, tabs dragged onto the page add a pane
+const SPLIT_GAP = 8;
+const splitActive = () => !!(cur.split && cur.split.ids.length > 1 && cur.split.ids.includes(cur.activeId) && cur.split.ids.every((i) => cur.tabs.has(i)));
+function evenFractions(n) { return Array.from({ length: n }, () => 1 / n); }
+function splitAdd(id, side) {
+  const t = cur.tabs.get(id); if (!t || id == null) return;
+  const base = splitActive() ? cur.split.ids.slice() : (cur.activeId != null && cur.activeId !== id ? [cur.activeId] : []);
+  if (!base.length || base.includes(id)) return;
+  if (side === 'left') base.unshift(id); else base.push(id);
+  cur.split = { ids: base, fr: evenFractions(base.length) };
+  if (cur.activeId !== id) switchTab(id); else { layout(); pushState(); }
 }
-// split view: two tabs side by side; the address bar follows whichever pane you last clicked
-function setSplit(leftId, rightId) {
-  if (!cur.tabs.has(leftId) || !cur.tabs.has(rightId) || leftId === rightId) return;
-  cur.splitPair = [leftId, rightId];
-  if (!cur.splitPair.includes(cur.activeId)) switchTab(leftId); else { layout(); pushState(); }
+function splitRemove(id) {
+  if (!cur.split) return;
+  const t = cur.tabs.get(id);
+  if (t && cur.split.ids.includes(id) && id !== cur.activeId) { try { cur.win.contentView.removeChildView(t.view); } catch { /* not shown */ } }
+  cur.split.ids = cur.split.ids.filter((i) => i !== id);
+  if (cur.split.ids.length < 2) cur.split = null; else cur.split.fr = evenFractions(cur.split.ids.length);
+  if (cur.activeId === id && cur.split) { const keep = cur.split.ids[0]; layout(); switchTab(keep); return; }
+  layout(); pushState();
+}
+function splitClose() {
+  if (!cur.split) return;
+  const ids = cur.split.ids; cur.split = null;
+  for (const i of ids) { const o = cur.tabs.get(i); if (o && i !== cur.activeId) { try { cur.win.contentView.removeChildView(o.view); } catch { /* not shown */ } } }
+  layout(); pushState();
 }
 function splitWithNewTab() {
-  if (cur.splitPair) { cur.splitPair = null; layout(); pushState(); return; }
+  if (cur.split) { splitClose(); return; }
   const left = cur.activeId; if (left == null) return;
   const id = newTab(undefined, { after: left, background: true });
-  if (id != null) { setSplit(left, id); switchTab(id); focusUrl(); }
+  if (id != null) { splitAdd(id, 'right'); focusUrl(); }
+}
+// dividers: one thin view per gap between panes, created on demand
+function splitResizer(i) {
+  cur.splitResizers = cur.splitResizers || [];
+  if (cur.splitResizers[i]) return cur.splitResizers[i];
+  const v = new WebContentsView({ webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, sandbox: true } });
+  v.setBackgroundColor('#00000000');
+  chromeIds.add(v.webContents.id); chromeOwner.set(v.webContents.id, cur);
+  v.webContents.loadFile(path.join(__dirname, 'resizer.html'), { query: { split: String(i) } });
+  cur.win.contentView.addChildView(v);
+  cur.splitResizers[i] = v;
+  return v;
 }
 
 function runGesture(tab, dirs) {
@@ -912,7 +933,7 @@ function newTab(target, opts = {}) {
   const id = nextId++;
   const view = createView(!!opts.private);
   const tab = {
-    id, view, wc: view.webContents, pinned: !!opts.pinned, private: !!opts.private, favicon: '', owner: cur, customTitle: opts.customTitle || '', group: opts.group && groupsOf().has(opts.group) ? opts.group : undefined,
+    id, view, wc: view.webContents, pinned: !!opts.pinned, private: !!opts.private, favicon: '', owner: cur, customTitle: opts.customTitle || '', group: opts.group || undefined,
   };
   cur.tabs.set(id, tab);
   tabById.set(id, tab);
@@ -1083,7 +1104,7 @@ function wire(tab) {
     if (cur.overlayMode === 'find' && tab.id === cur.activeId) cur.overlay.webContents.send('find:result', result);
   }));
   wc.on('before-input-event', (event, input) => { use(tab.owner); handleShortcut(event, input); });
-  wc.on('focus', () => { if (cur && tab.owner === cur && cur.splitPair && cur.splitPair.includes(tab.id) && cur.activeId !== tab.id) { cur.activeId = tab.id; pushState(); } });
+  wc.on('focus', () => { if (cur && tab.owner === cur && cur.split && cur.split.ids.includes(tab.id) && cur.activeId !== tab.id) { cur.activeId = tab.id; pushState(); } });
   // mouse gestures (opt-in): the right button is held back until we know whether this is a drag (a gesture) or a plain click (then the click is replayed so the menu opens as usual)
   let gest = null, replaying = false;
   wc.on('before-mouse-event', (e, m) => {
@@ -1147,12 +1168,12 @@ function closeTab(id) {
       if (closedTabs.length > 25) closedTabs.shift();
     }
   }
-  if (cur.splitPair && cur.splitPair.includes(id)) { try { cur.win.contentView.removeChildView(t.view); } catch { /* not shown */ } cur.splitPair = null; }
+  if (cur.split && cur.split.ids.includes(id)) { try { cur.win.contentView.removeChildView(t.view); } catch { /* not shown */ } cur.split.ids = cur.split.ids.filter((i) => i !== id); cur.split.fr = null; if (cur.split.ids.length < 2) cur.split = null; }
   if (id === cur.activeId) cur.win.contentView.removeChildView(t.view);
   t.wc.close();
   cur.tabs.delete(id);
   cur.order.splice(idx, 1);
-  pruneGroups();
+  pruneStacks();
   tabById.delete(id);
   tabByWc.delete(wcId);
   blockedCounts.delete(wcId);
@@ -1410,7 +1431,6 @@ const COMMANDS = [
   { id: 'page-translate', label: 'Translate Page', keys: [], run: () => translateTab(null) },
   { id: 'force-dark', label: 'Force Dark Mode on This Site (toggle)', keys: [], run: () => toggleDarkHere() },
   { id: 'split-view', label: 'Split View (toggle)', keys: ['Ctrl+Alt+S'], run: () => splitWithNewTab() },
-  { id: 'tab-group-new', label: 'Add Tab to New Group', keys: [], run: () => { if (cur.activeId != null) newGroupWith(cur.activeId); } },
   { id: 'bookmarks-bar', label: 'Show/Hide Bookmarks Bar', keys: ['Ctrl+Shift+B'], run: () => toggleBookmarksBar() },
   { id: 'reader-view', label: 'Reader View', keys: ['Ctrl+Alt+R'], run: () => toggleReader(activeTab()) },
   { id: 'page-source', label: 'View Page Source', keys: ['Ctrl+U'], run: () => { const u = activeWc()?.getURL(); if (u && isWeb(u)) newTab('view-source:' + u, { after: cur.activeId }); } },
@@ -1513,6 +1533,7 @@ function overlayBounds(mode) {
   if (mode === 'security') {
     return { x: 70, y: cur.contentRect.y, width: Math.min(400, width - 90), height: Math.min(560, Math.max(380, height - 90)) };
   }
+  if (mode === 'dropzone') return { ...cur.contentRect };
   if (mode === 'bookmark') {
     return { x: Math.max(0, width - 332), y: cur.contentRect.y, width: 320, height: 300 };
   }
@@ -1528,7 +1549,7 @@ function showOverlay(mode, data = {}) {
   cur.overlay.setBounds(overlayBounds(mode));
   cur.overlay.webContents.send('overlay:open', mode, data);
   // suggestions and the password fill list must not steal focus from the field being typed in
-  if (mode !== 'suggest' && !(mode === 'pw' && data && data.view === 'fill')) cur.overlay.webContents.focus();
+  if (mode !== 'suggest' && mode !== 'dropzone' && !(mode === 'pw' && data && data.view === 'fill')) cur.overlay.webContents.focus();
 }
 
 function hideOverlay(refocus = true) {
@@ -1992,13 +2013,13 @@ function tabMenu(id) {
     { label: t.pinned ? 'Unpin Tab' : 'Pin Tab', click: () => togglePin(id) },
     { label: t.wc.audioMuted ? 'Unmute Tab' : 'Mute Tab', click: () => toggleMute(id) },
     { type: 'separator' },
-    ...(t.pinned ? [] : [t.group
-      ? { label: 'Remove from Group', click: () => setTabGroup(id, null) }
-      : { label: 'Add to New Group', click: () => newGroupWith(id) }]),
-    ...(!t.pinned && groupsOf().size ? [{ label: 'Add to Group', submenu: [...groupsOf()].filter(([gid]) => gid !== t.group).map(([gid, g]) => ({ label: g.name || g.color[0].toUpperCase() + g.color.slice(1) + ' group', click: () => setTabGroup(id, gid) })) }] : []),
-    ...(cur.splitPair && cur.splitPair.includes(id)
-      ? [{ label: 'Close Split View', click: () => { cur.splitPair = null; layout(); pushState(); } }]
-      : id !== cur.activeId ? [{ label: 'Show Side by Side with Current Tab', click: () => setSplit(cur.activeId, id) }] : []),
+    ...(t.group ? [
+      { label: 'Unstack Tabs', click: () => unstack(id, true) },
+      { label: 'Remove from Stack', click: () => unstack(id, false) },
+    ] : []),
+    ...(cur.split && cur.split.ids.includes(id)
+      ? [{ label: 'Remove from Split View', click: () => splitRemove(id) }, { label: 'Close Split View', click: () => splitClose() }]
+      : id !== cur.activeId ? [{ label: 'Show Side by Side with Current Tab', click: () => splitAdd(id, 'right') }] : []),
     { type: 'separator' },
     { label: 'Move Tab to New Window', enabled: cur.order.length > 1, click: () => tearOffTab(t) },
     ...(() => {
@@ -2688,9 +2709,27 @@ const BOTH = { chrome: true, page: true };
 function setupIpc() {
   // the bookmark popup grows or shrinks to fit its content (the folder list, the new-folder box)
   on('tab:rename', (_e, id, name) => { const t = cur.tabs.get(id); if (!t) return; t.customTitle = String(name || '').trim().slice(0, 80); pushState(); scheduleSessionSave(); });
-  on('group:menu', (_e, gid) => groupMenu(gid));
-  on('group:toggle', (_e, gid) => { const g = groupsOf().get(gid); if (g) { g.collapsed = !g.collapsed; pushState(); scheduleSessionSave(); } });
-  on('group:rename', (_e, gid, name) => { const g = groupsOf().get(gid); if (g) { g.name = String(name || '').slice(0, 40); pushState(); scheduleSessionSave(); } });
+  on('tab:stack', (_e, dragId, targetId) => { if (Number.isInteger(dragId) && Number.isInteger(targetId)) stackTabs(dragId, targetId); });
+  // dragging a tab from the strip: the page area becomes a drop target that shows where the new pane will go
+  on('tab:dragstart', (_e, id) => {
+    if (!Number.isInteger(id) || !cur.tabs.has(id) || cur.tabs.get(id).pinned) return;
+    cur.dragTab = id;
+    setTimeout(() => { if (cur.dragTab === id && !cur.overlayMode) showOverlay('dropzone', { many: splitActive() }); }, 120);
+  });
+  handle('split:drop', (_e, id, side) => { if (Number.isInteger(id) && cur.tabs.has(id)) splitAdd(id, side === 'left' ? 'left' : 'right'); cur.dragTab = null; hideOverlay(false); return true; });
+  on('split:resize', (_e, idx, phase, dx) => {
+    if (!splitActive() || !Number.isInteger(idx)) return;
+    const n = cur.split.ids.length; if (idx < 0 || idx >= n - 1) return;
+    const room = Math.max(1, cur.contentRect.width - SPLIT_GAP * (n - 1));
+    if (phase === 'start') { cur.split.base = cur.split.fr.slice(); return; }
+    if (!cur.split.base) return;
+    const fr = cur.split.base.slice(), MIN = Math.min(0.15, 0.9 / n);
+    let d = dx / room;
+    d = Math.max(MIN - fr[idx], Math.min(fr[idx + 1] - MIN, d));
+    fr[idx] += d; fr[idx + 1] -= d;
+    cur.split.fr = fr; layout();
+    if (phase === 'end') cur.split.base = null;
+  });
   on('bmbar:folder', (e, folder, x, y) => {
     const items = bookmarks.filter((b) => liveBm(b) && b.folder === folder).sort((a, c) => (a.added || 0) - (c.added || 0));
     const menu = Menu.buildFromTemplate(items.length ? items.map((b) => ({ label: (b.title || hostOf(b.url)).slice(0, 60), click: () => { const t = activeTab(); if (t) go(t, b.url); } })) : [{ label: '(empty)', enabled: false }]);
@@ -2731,7 +2770,11 @@ function setupIpc() {
     if (!t || !Number.isInteger(id)) return;
     if (t.owner === cur) reorderTab(id, beforeId); else moveTabToWindow(t, cur, beforeId);
   });
-  on('tab:dragend', (_e, id, dropEffect, outside) => tabDragEnd(id, dropEffect, !!outside));
+  on('tab:dragend', (_e, id, dropEffect, outside) => {
+    cur.dragTab = null;
+    if (cur.overlayMode === 'dropzone') { hideOverlay(false); if (dropEffect !== 'none') return; }
+    tabDragEnd(id, dropEffect, !!outside);
+  });
   on('tab:mute', (_e, id) => toggleMute(id));
   // the wheel on the tab strip carries on from the first tab after the last one (and back)
   on('tab:next', () => { const n = cur.order.length; if (n > 1) switchTab(cur.order[(cur.order.indexOf(cur.activeId) + 1) % n]); });
@@ -4343,10 +4386,8 @@ function startupTabs() {
   if (given.length && g.startup !== 'restore') { given.forEach((u) => newTab(u)); return; }
   if (g.startup === 'restore') {
     const sess = load('session.json', { tabs: [] });
-    const gdefs = Array.isArray(sess.windows) ? sess.windows.filter((g) => (g.tabs || []).length).map((g) => g.groups || {}) : [];
     const groups = Array.isArray(sess.windows) && sess.windows.length ? sess.windows.map((g) => g.tabs || []).filter((g) => g.length) : (sess.tabs.length ? [sess.tabs] : []);
-    groups.forEach((g, i) => { g.defs = gdefs[i] || {}; });
-    if (groups.length) { cur.groups = new Map(Object.entries(groups[0].defs || {})); groups[0].forEach((t) => newTab(t.url, { pinned: t.pinned, group: t.group, customTitle: t.title })); } else if (!given.length) newTab(START);
+    if (groups.length) { groups[0].forEach((t) => newTab(t.url, { pinned: t.pinned, group: t.group, customTitle: t.title })); } else if (!given.length) newTab(START);
     given.forEach((u) => newTab(u));
     if (groups.length > 1) {
       const first = cur;
@@ -4442,7 +4483,7 @@ function createWindow(opts = {}) {
     use(w);
     layout();
     if (opts.first) startupTabs();
-    else if (opts.restore) { w.groups = new Map(Object.entries(opts.restore.defs || {})); opts.restore.forEach((t) => newTab(t.url, { pinned: t.pinned, group: t.group, customTitle: t.title })); }
+    else if (opts.restore) { opts.restore.forEach((t) => newTab(t.url, { pinned: t.pinned, group: t.group, customTitle: t.title })); }
     else if (!opts.empty) newTab(undefined, opts.private ? { private: true } : undefined);
     pushState();
     if (opts.first) syncAll();
@@ -4499,7 +4540,7 @@ function moveTabToWindow(t, dest, beforeId) {
   use(src);
   if (src.overlayMode) hideOverlay(false);
   const wasActive = src.activeId === t.id;
-  if (src.splitPair && src.splitPair.includes(t.id)) { try { src.win.contentView.removeChildView(t.view); } catch { /* ignore */ } src.splitPair = null; }
+  if (src.split && src.split.ids.includes(t.id)) { try { src.win.contentView.removeChildView(t.view); } catch { /* ignore */ } src.split.ids = src.split.ids.filter((i) => i !== t.id); src.split.fr = null; if (src.split.ids.length < 2) src.split = null; }
   t.group = undefined;
   const idx = src.order.indexOf(t.id);
   if (wasActive) src.win.contentView.removeChildView(t.view);

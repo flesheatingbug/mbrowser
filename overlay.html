@@ -13,6 +13,11 @@
   
   :root { --bg:#1e1f22; --tab:#2b2d31; --active:#3a3d44; --fg:#e6e6e6; --muted:#9aa0a6; --line:#34363b; --accent:#7aa2f7; }
   * { box-sizing: border-box; }
+  .dz-half { position:absolute; top:0; bottom:0; width:50%; box-sizing:border-box; display:flex; align-items:center; justify-content:center; color:var(--fg); font-weight:600; transition:background .1s, border-color .1s; border:2px solid transparent; border-radius:8px; margin:6px; width:calc(50% - 12px); }
+  #dz-l { left:0; } #dz-r { right:0; }
+  .dz-half span { opacity:0; padding:8px 14px; border-radius:8px; background:var(--bg); }
+  .dz-half.on { background:color-mix(in srgb, var(--accent) 28%, transparent); border-color:var(--accent); }
+  .dz-half.on span { opacity:1; }
   html, body { margin:0; height:100%; background:transparent; color:var(--fg); font:14px system-ui, sans-serif; overflow:hidden; }
   .card { height:100%; background:var(--active); border:1px solid var(--line); border-radius:12px;
     box-shadow:0 8px 30px rgba(0,0,0,.45); display:flex; flex-direction:column; overflow:hidden; }
@@ -135,6 +140,10 @@
   <div id="card-fill"></div>
   <div id="addr-fill"></div>
   <div id="bm-popup" style="display:none;padding:14px 16px"></div>
+  <div id="dz" style="display:none;position:absolute;inset:0">
+    <div id="dz-l" class="dz-half"><span>Drop to place on the left</span></div>
+    <div id="dz-r" class="dz-half"><span>Drop to place on the right</span></div>
+  </div>
 </div>
 <script>
   const $ = (id) => document.getElementById(id);
@@ -153,6 +162,8 @@
     $('suggest').style.display = m === 'suggest' ? 'block' : 'none';
     $('tablist').style.display = m === 'tablist' ? 'flex' : 'none';
     $('pw').style.display = m === 'pw' ? 'block' : 'none';
+    $('dz').style.display = m === 'dropzone' ? 'block' : 'none';
+    if (m === 'dropzone') return;
     $('card-fill').style.display = m === 'card' ? 'block' : 'none';
     $('addr-fill').style.display = m === 'addr' ? 'block' : 'none';
     $('bm-popup').style.display = m === 'bookmark' ? 'block' : 'none';
@@ -165,6 +176,23 @@
     else if (m === 'palette') { $('q').value = ''; refresh(); setTimeout(() => $('q').focus(), 0); }
     else { $('count').textContent = ''; lastText = ''; setTimeout(() => { $('f').focus(); $('f').select(); if ($('f').value) doFind(true, false); }, 0); }
   });
+
+  // ---- split drop zone: dragging a tab over the page highlights the half where the pane will go ----
+  (function () {
+    const TAB_MIME = 'application/x-mybrowser-tab';
+    const L = $('dz-l'), R = $('dz-r');
+    const side = (e) => (e.clientX < innerWidth / 2 ? 'left' : 'right');
+    const mark = (s) => { L.classList.toggle('on', s === 'left'); R.classList.toggle('on', s === 'right'); };
+    document.addEventListener('dragover', (e) => { if (mode !== 'dropzone' || !e.dataTransfer.types.includes(TAB_MIME)) return; e.preventDefault(); e.dataTransfer.dropEffect = 'move'; mark(side(e)); });
+    document.addEventListener('dragleave', (e) => { if (mode === 'dropzone' && !e.relatedTarget) mark(null); });
+    document.addEventListener('drop', (e) => {
+      if (mode !== 'dropzone') return;
+      e.preventDefault();
+      const id = Number(e.dataTransfer.getData(TAB_MIME));
+      mark(null);
+      if (id) api.invoke('split:drop', id, side(e));
+    });
+  })();
 
   // ---- palette ----
   async function refresh() {
