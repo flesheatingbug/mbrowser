@@ -1,6 +1,6 @@
 //! mbrowser-rs: a small experimental browser in Rust (GTK 3 + WebKitGTK).
 //! Tabs, address bar, back/forward/reload, load progress, a few shortcuts.
-//! It uses the system WebKitGTK (install `webkit2gtk` on Arch/CachyOS).
+//! It uses the system WebKitGTK (install `webkit2gtk-4.1` on Arch/CachyOS).
 
 use gtk::prelude::*;
 use std::rc::Rc;
