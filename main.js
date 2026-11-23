@@ -2747,12 +2747,12 @@ function setupIpc() {
   // dragging a tab from the strip: the page area becomes a drop target that shows where the new pane will go
   on('tab:dragstart', (_e, id) => {
     if (!Number.isInteger(id) || !cur.tabs.has(id) || cur.tabs.get(id).pinned) return;
-    cur.dragTab = id; cur.splitHover = null;
+    cur.dragTab = id; cur.splitHover = null; cur.splitDropped = null;
     setTimeout(() => { if (cur.dragTab === id && !cur.overlayMode) showOverlay('dropzone', { many: splitActive() }); }, 120);
   });
   on('auth:submit', (_e, username, password) => { authDone(cur, { username: String(username || ''), password: String(password || '') }); if (cur.overlayMode === 'auth') hideOverlay(true); });
   handle('split:hover', (_e, side) => { cur.splitHover = side === 'left' || side === 'right' ? side : null; return true; });
-  handle('split:drop', (_e, id, side) => { const tid = cur.dragTab != null ? cur.dragTab : id; cur.dragTab = null; cur.splitHover = null; if (Number.isInteger(tid) && cur.tabs.has(tid)) splitAdd(tid, side === 'left' ? 'left' : 'right'); hideOverlay(false); return true; });
+  handle('split:drop', (_e, id, side) => { const tid = cur.dragTab != null ? cur.dragTab : id; cur.dragTab = null; cur.splitHover = null; cur.splitDropped = tid; if (Number.isInteger(tid) && cur.tabs.has(tid)) splitAdd(tid, side === 'left' ? 'left' : 'right'); hideOverlay(false); return true; });
   on('split:resize', (_e, idx, phase, dx) => {
     if (!splitActive() || !Number.isInteger(idx)) return;
     const n = cur.split.ids.length; if (idx < 0 || idx >= n - 1) return;
@@ -2807,6 +2807,8 @@ function setupIpc() {
     if (t.owner === cur) reorderTab(id, beforeId); else moveTabToWindow(t, cur, beforeId);
   });
   on('tab:dragend', (_e, id, dropEffect, outside) => {
+    // the drop on the overlay already placed the pane: the strip's own dragend must not tear the tab off
+    if (cur.splitDropped === id) { cur.splitDropped = null; return; }
     const wasZone = cur.overlayMode === 'dropzone', pending = cur.dragTab;
     cur.dragTab = null;
     if (wasZone) hideOverlay(false);
