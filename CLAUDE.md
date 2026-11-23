@@ -29,7 +29,7 @@ not npm's. Browser version in package.json: 0.9.0. Server: 1.0.0 (stdlib-only Py
 - One long-lived branch: **master**. The old `next` pre-release branch is retired (delete it on GitHub if it still shows up); the repo's old default `main` is stale.
   Commit to master, push, check CI. Commits end with the `Co-Authored-By` and `Claude-Session` lines the session gives.
 - **Beta switch** (Android: Settings > Beta features; desktop: General > Beta features, per computer, never synced) hides features still being tested.
-  Currently gated: Android casting (menu row, overlay icon, fullscreen button) and desktop Extensions and Split View (home network mode graduated out of beta). Promote a feature by removing its gate.
+  Currently gated: Android casting (menu row, overlay icon, fullscreen button) and desktop Extensions (home network mode graduated out of beta). Promote a feature by removing its gate.
 - Desktop extensions (beta): unpacked Chrome extensions or install from a Chrome Web Store link (`lib/crx.js` unpacks the CRX). Only part of the Chrome extension API exists in Electron.
 - Android cast: Google Cast default receiver; `Caster.kt` plus `CastRelay.kt` (a small server on the phone that fetches the stream with the page's cookies/referer/UA, adds CORS and rewrites HLS playlists). Live streams stop the page's player and hide the video while casting (one-viewer-per-token sites). Untested on real hardware beyond the user's reports.
 - Desktop lock profile: status-bar lock button / Ctrl+Shift+L covers every window of the profile with `lock.html` (a top-most WebContentsView re-asserted by `enforceLock`), pauses and mutes media, blocks shortcuts. Optional password in Settings > Privacy (`lib/lock.js`, scrypt, `lock.json`, per profile, never synced).
