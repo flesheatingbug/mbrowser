@@ -131,7 +131,7 @@ fn new_tab(app: &Rc<App>, url: Option<&str>) -> WebView {
     {
         // links that ask for a new window (target=_blank, window.open) become tabs
         let app = app.clone();
-        view.connect_create(move |_, _| new_tab(&app, None).upcast::<gtk::Widget>());
+        WebViewExt::connect_create(&view, move |_, _| new_tab(&app, None).upcast::<gtk::Widget>());
     }
 
     let idx = app.notebook.append_page(&view, Some(&tab));
@@ -230,18 +230,18 @@ fn main() {
         let app = app.clone();
         window.connect_key_press_event(move |_, e| {
             if !e.state().contains(gtk::gdk::ModifierType::CONTROL_MASK) {
-                return gtk::Inhibit(false);
+                return gtk::glib::Propagation::Proceed;
             }
             match e.keyval().to_unicode() {
-                Some('t') => { new_tab(&app, Some(HOME)); gtk::Inhibit(true) }
-                Some('w') => { if let Some(v) = app.current() { close_view(&app, &v); } gtk::Inhibit(true) }
-                Some('l') => { app.entry.grab_focus(); app.entry.select_region(0, -1); gtk::Inhibit(true) }
-                Some('r') => { if let Some(v) = app.current() { v.reload(); } gtk::Inhibit(true) }
-                _ => gtk::Inhibit(false),
+                Some('t') => { new_tab(&app, Some(HOME)); gtk::glib::Propagation::Stop }
+                Some('w') => { if let Some(v) = app.current() { close_view(&app, &v); } gtk::glib::Propagation::Stop }
+                Some('l') => { app.entry.grab_focus(); app.entry.select_region(0, -1); gtk::glib::Propagation::Stop }
+                Some('r') => { if let Some(v) = app.current() { v.reload(); } gtk::glib::Propagation::Stop }
+                _ => gtk::glib::Propagation::Proceed,
             }
         });
     }
-    window.connect_delete_event(|_, _| { gtk::main_quit(); gtk::Inhibit(false) });
+    window.connect_delete_event(|_, _| { gtk::main_quit(); gtk::glib::Propagation::Proceed });
 
     let start: Vec<String> = std::env::args().skip(1).filter(|a| !a.starts_with('-')).collect();
     if start.is_empty() {
