@@ -22,6 +22,7 @@ contextBridge.exposeInMainWorld('api', {
   newPrivateTab: send('tab:new-private'),
   mainMenu: send('menu:main'),
   readerToggle: send('reader:toggle'),
+  bmBarFolder: send('bmbar:folder'),
   overlayResize: send('overlay:resize'),
   profileMenu: send('profile:menu'),
   showSecurity: send('security:show'),

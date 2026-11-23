@@ -147,7 +147,7 @@ protocol.registerSchemesAsPrivileged([
 const START = 'my://start';
 const GAP = 6; // border left and right of the page
 const SCROLL_CSS = '::-webkit-scrollbar{width:12px;height:12px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:rgba(128,128,128,.4);border-radius:10px;border:3px solid transparent;background-clip:content-box;min-height:36px}::-webkit-scrollbar-thumb:hover{background:rgba(128,128,128,.7);background-clip:content-box}::-webkit-scrollbar-corner{background:transparent}';
-const TAB_H = 38, TOOL_H = 50, TRANSLATE_H = 34, DEFAULT_H = 34, SIDE_W = 220, STATUS_H = 32, PANEL_HEAD = 46;
+const BMBAR_H = 32, TAB_H = 38, TOOL_H = 50, TRANSLATE_H = 34, DEFAULT_H = 34, SIDE_W = 220, STATUS_H = 32, PANEL_HEAD = 46;
 const MOBILE_UA = 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36';
 
 let store, blocker, vault;
@@ -413,6 +413,24 @@ function layout() {
   enforceLock();
 }
 
+const BAR_FOLDER = 'Bookmarks bar';
+// the bookmarks bar shows what is in the "Bookmarks bar" folder, with its sub-folders as menus
+function bookmarksBarItems() {
+  const items = [];
+  const mine = bookmarks.filter(liveBm);
+  for (const b of mine.filter((x) => x.folder === BAR_FOLDER).sort((a, c) => (a.added || 0) - (c.added || 0))) items.push({ title: b.title || hostOf(b.url), url: b.url });
+  const subs = new Set();
+  for (const f of [...bookmarkFolders, ...mine.map((x) => x.folder).filter(Boolean)]) if (f.startsWith(BAR_FOLDER + ' / ')) subs.add(f.slice(BAR_FOLDER.length + 3).split(' / ')[0]);
+  for (const f of [...subs].sort()) items.push({ title: f, folder: BAR_FOLDER + ' / ' + f });
+  return items;
+}
+function toggleBookmarksBar() {
+  const v = !S().appearance.bookmarksBar;
+  store.set('appearance.bookmarksBar', v);
+  if (v && !bookmarkFolders.includes(BAR_FOLDER)) { bookmarkFolders.push(BAR_FOLDER); saveFolders(); }
+  pushAll(true);
+}
+
 function layoutCore() {
   if (!cur || !cur.win || !cur.toolbarView) return;
   const { width, height } = cur.win.getContentBounds();
@@ -422,7 +440,8 @@ function layoutCore() {
   const t = activeTab();
   const tlH = !full && t && t.detectedLang && t.detectedLang !== app.getLocale().split('-')[0].toLowerCase() && !cur.translateDismissed ? TRANSLATE_H : 0;
   const dfH = !full && defaultBarWanted() ? DEFAULT_H : 0;
-  const toolH = TOOL_H + tlH + dfH;
+  const bbH = !full && S().appearance.bookmarksBar ? BMBAR_H : 0;
+  const toolH = TOOL_H + tlH + dfH + bbH;
   let c;
   if (full) {
     cur.toolbarView.setBounds(zero); cur.tabbarView.setBounds(zero);
@@ -545,6 +564,7 @@ function stateFor() {
     detectedLang: (t && t.detectedLang) || '',
     systemLang: app.getLocale().split('-')[0].toLowerCase(),
     defaultBarVisible: !cur.win.isFullScreen() && defaultBarWanted(),
+    bmBar: !cur.win.isFullScreen() && S().appearance.bookmarksBar ? bookmarksBarItems() : null,
     translateBarVisible: !!(t && t.detectedLang && t.detectedLang !== app.getLocale().split('-')[0].toLowerCase() && !cur.translateDismissed),
     theme: themeVars(),
     blocked: wc ? blockedCounts.get(wc.id) || 0 : 0,
@@ -779,6 +799,40 @@ async function toggleReader(tab) {
   pushState();
 }
 
+// force dark mode: a page's own colours are inverted, then photos, video and canvases are inverted back
+const DARK_CSS = 'html{filter:invert(1) hue-rotate(180deg)!important;background:#fff!important}img,picture,video,canvas,svg image,[style*="background-image"]{filter:invert(1) hue-rotate(180deg)!important}';
+function darkWanted(tab) {
+  if (!S().appearance.forceDark || !tab || tab.wc.isDestroyed()) return false;
+  try { const u = new URL(tab.wc.getURL()); return /^https?:$/.test(u.protocol) && !(S().appearance.darkOffSites || []).includes(u.host); } catch { return false; }
+}
+async function applyDark(tab) {
+  if (!tab || tab.wc.isDestroyed()) return;
+  const want = darkWanted(tab);
+  try {
+    if (want && !tab.darkKey) tab.darkKey = await tab.wc.insertCSS(DARK_CSS);
+    else if (!want && tab.darkKey) { await tab.wc.removeInsertedCSS(tab.darkKey); tab.darkKey = null; }
+  } catch { tab.darkKey = null; }
+}
+function toggleDarkHere() {
+  const t = activeTab(); if (!t) return;
+  let host = ''; try { host = new URL(t.wc.getURL()).host; } catch { return; }
+  const off = new Set(S().appearance.darkOffSites || []);
+  if (off.has(host)) off.delete(host); else off.add(host);
+  store.set('appearance.darkOffSites', [...off]);
+  if (!S().appearance.forceDark) store.set('appearance.forceDark', true);
+  for (const tb of tabByWc.values()) applyDark(tb);
+}
+
+function runGesture(tab, dirs) {
+  const wc = tab.wc; if (wc.isDestroyed()) return;
+  if (dirs === 'L') { if (wc.navigationHistory.canGoBack()) wc.navigationHistory.goBack(); }
+  else if (dirs === 'R') { if (wc.navigationHistory.canGoForward()) wc.navigationHistory.goForward(); }
+  else if (dirs === 'D') newTab(undefined, { private: tab.private });
+  else if (dirs === 'DR') closeTab(tab.id);
+  else if (dirs === 'UD') wc.reload();
+  else if (dirs === 'U') wc.executeJavaScript('window.scrollTo({top:0,behavior:"smooth"})').catch(() => {});
+}
+
 function newTab(target, opts = {}) {
   const id = nextId++;
   const view = createView(!!opts.private);
@@ -903,7 +957,9 @@ function wire(tab) {
     }
     wc.loadURL('my://error?' + new URLSearchParams({ url, code: String(code), desc: desc || '' }));
   }));
+  wc.on('did-start-navigation', (_e, _u, inPage, isMain) => { if (isMain && !inPage) tab.darkKey = null; });
   wc.on('dom-ready', () => {
+    applyDark(tab);
     use(tab.owner);
     tab.status = 'Loading resources…';
     pushState();
@@ -952,6 +1008,30 @@ function wire(tab) {
     if (cur.overlayMode === 'find' && tab.id === cur.activeId) cur.overlay.webContents.send('find:result', result);
   }));
   wc.on('before-input-event', (event, input) => { use(tab.owner); handleShortcut(event, input); });
+  // mouse gestures (opt-in): the right button is held back until we know whether this is a drag (a gesture) or a plain click (then the click is replayed so the menu opens as usual)
+  let gest = null, replaying = false;
+  wc.on('before-mouse-event', (e, m) => {
+    if (replaying || !S().pages.mouseGestures) return;
+    if (m.type === 'mouseDown' && m.button === 'right') { gest = { x: m.x, y: m.y, lx: m.x, ly: m.y, dirs: '' }; e.preventDefault(); return; }
+    if (!gest) return;
+    if (m.type === 'mouseMove') {
+      const dx = m.x - gest.lx, dy = m.y - gest.ly;
+      if (Math.hypot(dx, dy) >= 24) {
+        const d = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'R' : 'L') : (dy > 0 ? 'D' : 'U');
+        if (!gest.dirs.endsWith(d)) gest.dirs += d;
+        gest.lx = m.x; gest.ly = m.y;
+        tab.status = 'Gesture: ' + gest.dirs.replace(/L/g, '\u2190').replace(/R/g, '\u2192').replace(/U/g, '\u2191').replace(/D/g, '\u2193'); pushState();
+      }
+      return;
+    }
+    if (m.type === 'mouseUp' && m.button === 'right') {
+      const g = gest; gest = null; e.preventDefault(); tab.status = ''; pushState();
+      if (g.dirs) { use(tab.owner); runGesture(tab, g.dirs); return; }
+      replaying = true;
+      try { wc.sendInputEvent({ type: 'mouseDown', x: g.x, y: g.y, button: 'right', clickCount: 1 }); wc.sendInputEvent({ type: 'mouseUp', x: g.x, y: g.y, button: 'right', clickCount: 1 }); } catch { /* closed */ }
+      setTimeout(() => { replaying = false; }, 80);
+    }
+  });
 }
 
 // optional: videos in tabs you are not looking at are paused, and carry on when you come back
@@ -1250,6 +1330,8 @@ const COMMANDS = [
   { id: 'page-print', label: 'Print preview…', keys: ['Ctrl+P'], run: () => printPreview() },
   { id: 'page-print-system', label: 'Print with system dialog…', keys: [], run: () => activeWc()?.print({ silent: false, printBackground: true }, () => {}) },
   { id: 'page-translate', label: 'Translate Page', keys: [], run: () => translateTab(null) },
+  { id: 'force-dark', label: 'Force Dark Mode on This Site (toggle)', keys: [], run: () => toggleDarkHere() },
+  { id: 'bookmarks-bar', label: 'Show/Hide Bookmarks Bar', keys: ['Ctrl+Shift+B'], run: () => toggleBookmarksBar() },
   { id: 'reader-view', label: 'Reader View', keys: ['Ctrl+Alt+R'], run: () => toggleReader(activeTab()) },
   { id: 'page-source', label: 'View Page Source', keys: ['Ctrl+U'], run: () => { const u = activeWc()?.getURL(); if (u && isWeb(u)) newTab('view-source:' + u, { after: cur.activeId }); } },
   { id: 'page-devtools', label: 'Developer Tools', keys: ['F12'], run: () => activeWc()?.toggleDevTools() },
@@ -2482,6 +2564,7 @@ function afterSettingsChange(p) {
   if (!p || p === 'general.homeNetwork') applyHomeNetwork({ startup: !p }).catch(() => {});
   if (!p || p === 'general.beta') loadExtensions(session.defaultSession).catch(() => {});
   if (!p || p === 'general.browserId') for (const ses of uaSessions) { try { ses.setUserAgent(uaForMode(S().general.browserId)); } catch { /* ignore */ } }
+  if (!p || p === 'appearance.forceDark') for (const tb of tabByWc.values()) applyDark(tb);
   applyThemeSource();
   rebuildShortcuts();
   blocker.rebuild();
@@ -2514,6 +2597,11 @@ const BOTH = { chrome: true, page: true };
 
 function setupIpc() {
   // the bookmark popup grows or shrinks to fit its content (the folder list, the new-folder box)
+  on('bmbar:folder', (e, folder, x, y) => {
+    const items = bookmarks.filter((b) => liveBm(b) && b.folder === folder).sort((a, c) => (a.added || 0) - (c.added || 0));
+    const menu = Menu.buildFromTemplate(items.length ? items.map((b) => ({ label: (b.title || hostOf(b.url)).slice(0, 60), click: () => { const t = activeTab(); if (t) go(t, b.url); } })) : [{ label: '(empty)', enabled: false }]);
+    menu.popup({ window: cur.win, x: Math.round(x), y: Math.round(y) });
+  });
   on('overlay:resize', (_e, h) => {
     if (!cur || cur.overlayMode !== 'bookmark' || !(h > 0)) return;
     const b = overlayBounds('bookmark'); b.height = Math.max(150, Math.min(520, Math.round(h)));

@@ -74,10 +74,13 @@
       { path: 'general.askDefaultBrowser', label: 'Ask to make mbrowser the default browser (Windows)', type: 'toggle', help: 'Shows a notice under the toolbar while another browser is the default.' },
       { path: 'general.beta', label: 'Beta features', type: 'toggle', help: 'Shows features that are still being tested, such as Extensions. Off by default and only for this computer. Turning it off hides them again.' },
       { path: 'general.newTab', label: 'New tab page', type: 'select', options: [['start', 'Start page'], ['home', 'Homepage'], ['blank', 'Blank page']] },
+      { path: 'pages.mouseGestures', label: 'Mouse gestures', type: 'toggle', help: 'Hold the right mouse button and drag: left = back, right = forward, down = new tab, down then right = close tab, up = scroll to top, up then down = reload. A plain right-click still opens the menu. (Pages that use the right button themselves, such as maps and games, see it only on release.)' },
       { path: 'pages.defaultZoom', label: 'Default page zoom (%)', type: 'number', min: 30, max: 300, help: 'Applies to newly opened tabs.' },
     ],
     appearance: [
       { path: 'appearance.nativeTitleBar', label: 'Use the system title bar', type: 'toggle', help: 'Takes effect for new windows after a restart. Off = no title bar, the tab strip carries the window buttons.' },
+      { path: 'appearance.bookmarksBar', label: 'Show the bookmarks bar', type: 'toggle', help: 'A row of bookmarks under the address bar: the ones you put in the folder called "Bookmarks bar". Ctrl+Shift+B toggles it.' },
+      { path: 'appearance.forceDark', label: 'Force dark mode on websites', type: 'toggle', help: 'Darkens pages that only come in a light design. Photos and video keep their colours. Some pages look odd; turn it off per page from the menu (Page > Force dark mode).' },
       { path: 'appearance.statusBar', label: 'Show the status bar', type: 'toggle', help: 'Loading progress, link addresses, zoom level and blocked trackers along the bottom.' },
       { path: 'appearance.tabBar', label: 'Tab bar position', type: 'select', options: [['top', 'Top'], ['left', 'Left (vertical tabs)']] },
     ],

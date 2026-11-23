@@ -110,6 +110,11 @@
   .tb-hidden { display:none !important; }
 
   /* ---- default browser bar ---- */
+  #bm-bar { display:none; align-items:center; gap:2px; padding:0 8px; height:32px; overflow:hidden; border-top:1px solid var(--line); }
+  #bm-bar.show { display:flex; }
+  #bm-bar button { flex:0 0 auto; max-width:180px; border:0; background:transparent; color:var(--fg); font:inherit; font-size:12px; padding:4px 9px; border-radius:6px; cursor:pointer; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  #bm-bar button:hover { background:var(--tab); }
+  #bm-bar .empty { color:var(--muted); font-size:12px; padding:0 6px; }
   #default-bar { display:none; align-items:center; gap:8px; padding:0 10px; height:34px;
     background:color-mix(in srgb, var(--accent) 12%, var(--active)); border-top:1px solid color-mix(in srgb, var(--accent) 25%, transparent);
     font-size:13px; color:var(--fg); }
@@ -281,6 +286,7 @@
     <button id="df-never">Don’t ask again</button>
     <button id="df-close" title="Dismiss">✕</button>
   </div>
+  <div id="bm-bar"></div>
   <div id="translate-bar">
     <span class="tl-msg" id="tl-msg">This page is in a different language</span>
     <button id="tl-btn">Translate</button>
@@ -694,6 +700,20 @@
     $('st-tabs').textContent = s.tabCount + (s.tabCount === 1 ? ' tab' : ' tabs');
 
     $('default-bar').classList.toggle('show', !!s.defaultBarVisible && part === 'toolbar');
+    // bookmarks bar
+    const bb = $('bm-bar'), bbOn = !!s.bmBar && part === 'toolbar';
+    bb.classList.toggle('show', bbOn);
+    const bbKey = JSON.stringify(s.bmBar);
+    if (bbOn && bb.dataset.k !== bbKey) {
+      bb.dataset.k = bbKey; bb.innerHTML = '';
+      if (!s.bmBar.length) { const e = document.createElement('span'); e.className = 'empty'; e.textContent = 'Bookmarks you put in the "Bookmarks bar" folder show up here.'; bb.append(e); }
+      for (const it of s.bmBar) {
+        const b = document.createElement('button'); b.textContent = (it.folder ? '\u{1F4C1} ' : '') + it.title; b.title = it.url || it.title;
+        if (it.folder) b.onclick = () => { const r = b.getBoundingClientRect(); api.bmBarFolder(it.folder, r.left, r.bottom); };
+        else { b.onclick = () => api.go(it.url); b.onauxclick = (e) => { if (e.button === 1) api.newTab(it.url); }; }
+        bb.append(b);
+      }
+    }
     // translate bar
     const tlBar = $('translate-bar');
     if (s.translateBarVisible && part === 'toolbar') {
