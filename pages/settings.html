@@ -521,13 +521,13 @@
     const btns = el('div', 'btn-row'); btns.style.gridColumn = '1 / -1';
     let idIn = null, secIn = null;
     if (!signedIn) {
-      idIn = row('Client ID', Object.assign(el('input'), { type: 'text', autocomplete: 'off', value: gd ? ci.gClientId : ci.msClientId }));
-      idIn.style.width = '100%';
-      if (gd) { secIn = row('Client secret', Object.assign(el('input'), { type: 'password', autocomplete: 'off', value: ci.gClientSecret })); secIn.style.width = '100%'; }
+      const bi = (ci.builtin || {})[ci.backend] || {};
+      if (!bi.id) { idIn = row('Client ID', Object.assign(el('input'), { type: 'text', autocomplete: 'off', value: gd ? ci.gClientId : ci.msClientId })); idIn.style.width = '100%'; }
+      if (gd && !bi.secret) { secIn = row('Client secret', Object.assign(el('input'), { type: 'password', autocomplete: 'off', value: ci.gClientSecret })); secIn.style.width = '100%'; if (bi.id) box.append(el('div', 'help', ''), el('div', 'help', 'Paste the client secret once. It is kept on this computer only.')); }
       const go = el('button', null, 'Sign in to ' + name);
       go.onclick = async () => {
         out.style.color = ''; out.textContent = 'A browser window opens for you to sign in and allow access…'; go.disabled = true;
-        const r = await browser.cloudConnect({ provider: ci.backend, clientId: idIn.value, clientSecret: secIn ? secIn.value : '' });
+        const r = await browser.cloudConnect({ provider: ci.backend, clientId: idIn ? idIn.value : '', clientSecret: secIn ? secIn.value : '' });
         go.disabled = false;
         if (r.error) { out.style.color = '#ff6b6b'; out.textContent = r.error; } else { S = await browser.getSettings(); render(); }
       };
@@ -551,7 +551,7 @@
     box.append(btns, out);
     m.append(el('h2', null, 'Account'), box);
 
-    if (!signedIn) {
+    if (!signedIn && !(((ci.builtin || {})[ci.backend] || {}).id)) {
       const how = el('div', 'muted'); how.style.cssText = 'margin-top:14px;font-size:13px;line-height:1.6;max-width:640px';
       how.innerHTML = gd
         ? '<b>One-time setup (about 5 minutes, free).</b> Google needs an app of your own to sign in:<ol style="padding-left:20px"><li>Open <i>console.cloud.google.com</i>, create a project, and enable the <b>Google Drive API</b>.</li><li>Under APIs &amp; Services &gt; OAuth consent screen choose External, fill in a name and your email, and add yourself as a test user. Add the scope <code>.../auth/drive.appdata</code>.</li><li>Under Credentials create an <b>OAuth client ID</b> of type <b>Desktop app</b>.</li><li>Paste its client ID (and the client secret Google shows) above, then sign in.</li></ol>Only a hidden app folder is used; the browser cannot see the rest of your Drive.'

@@ -14,7 +14,7 @@ const { createVault, originOf } = require('./lib/vault');
 const { syncVault, resolveVault } = require('./lib/vaultsync');
 const { createProfiles } = require('./lib/profiles');
 const { syncSettings } = require('./lib/settingssync');
-const { createCloud } = require('./lib/cloudsync');
+const { createCloud, BUILTIN: CLOUD_BUILTIN } = require('./lib/cloudsync');
 const { parseBookmarkFile, detectBrowsers, parsePasswords } = require('./lib/importers');
 const { spawn } = require('child_process');
 
@@ -3703,7 +3703,8 @@ function setupIpc() {
     catch (e) { return { error: 'Could not read that file: ' + e.message }; }
   }, BOTH);
   // Google Drive / OneDrive sync
-  const cloudInfo = () => ({ ...cloud.status(), backend: cloudBackend() || 'server', gClientId: S().sync.gClientId || '', gClientSecret: S().sync.gClientSecret || '', msClientId: S().sync.msClientId || '' });
+  const cloudInfo = () => ({ ...cloud.status(), backend: cloudBackend() || 'server', gClientId: S().sync.gClientId || '', gClientSecret: S().sync.gClientSecret || '', msClientId: S().sync.msClientId || '',
+    builtin: { gdrive: { id: !!CLOUD_BUILTIN.gdrive.clientId, secret: !!CLOUD_BUILTIN.gdrive.clientSecret }, onedrive: { id: !!CLOUD_BUILTIN.onedrive.clientId, secret: true } } });
   const resetSyncRevs = () => { syncState = { bRev: 0, hRev: 0, hPushed: 0 }; save('syncstate.json', syncState); };
   handle('cloud:info', () => cloudInfo(), PAGE_ONLY);
   handle('cloud:backend', (_e, b) => {
@@ -3713,9 +3714,10 @@ function setupIpc() {
   }, PAGE_ONLY);
   handle('cloud:connect', async (_e, o) => {
     const provider = o && o.provider === 'onedrive' ? 'onedrive' : 'gdrive';
-    const clientId = String((o && o.clientId) || '').trim(), clientSecret = String((o && o.clientSecret) || '').trim();
-    applySetting(provider === 'gdrive' ? 'sync.gClientId' : 'sync.msClientId', clientId);
-    if (provider === 'gdrive') applySetting('sync.gClientSecret', clientSecret);
+    const bi = CLOUD_BUILTIN[provider] || {};
+    const clientId = String((o && o.clientId) || bi.clientId || '').trim(), clientSecret = String((o && o.clientSecret) || bi.clientSecret || '').trim();
+    if (o && o.clientId) applySetting(provider === 'gdrive' ? 'sync.gClientId' : 'sync.msClientId', clientId);
+    if (provider === 'gdrive' && o && o.clientSecret) applySetting('sync.gClientSecret', clientSecret);
     try { await cloud.connect(provider, { clientId, clientSecret }); } catch (e) { return { error: e.message, ...cloudInfo() }; }
     applySetting('sync.backend', provider); resetSyncRevs();
     return cloudInfo();

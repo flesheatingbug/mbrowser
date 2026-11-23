@@ -4,3 +4,4 @@ dist/
 .env
 server/data/
 server/config/
+lib/cloudkeys.local.js
