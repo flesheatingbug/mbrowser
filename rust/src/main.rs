@@ -311,7 +311,9 @@ var process={{argv:[],platform:'linux',versions:{{chrome:'130.0.0.0'}},getSystem
 window.__emit=function(ch,args){{(L[ch]||[]).forEach(function(f){{try{{f.apply(null,[{{}}].concat(args))}}catch(e){{console.error(e)}}}})}};
 window.__res=function(i,v){{var r=P[i];delete P[i];if(r)r(v)}};
 function require(){{return {{contextBridge:{{exposeInMainWorld:function(k,o){{window[k]=o}}}},ipcRenderer:ipcRenderer,webFrame:webFrame}}}}
+(function(){{
 {preload}
+}})();
 }})();"#
     )
 }
