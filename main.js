@@ -2883,12 +2883,21 @@ function setupIpc() {
     if (!t || !Number.isInteger(id)) return;
     if (t.owner === cur) reorderTab(id, beforeId); else moveTabToWindow(t, cur, beforeId);
   });
-  on('tab:dragend', (_e, id, dropEffect, outside) => {
+  on('tab:dragend', (_e, id, dropEffect, outside, gone) => {
     // the drop on the overlay already placed the pane: the strip's own dragend must not tear the tab off
     if (cur.splitDropped === id) { cur.splitDropped = null; return; }
     const wasZone = cur.overlayMode === 'dropzone', pending = cur.dragTab;
     cur.dragTab = null;
     if (wasZone) hideOverlay(false);
+    // released outside this window: always a tear-off (or a move into another window), never a split pane, whatever side the drag last crossed
+    let left = false;
+    try {
+      const pt = screen.getCursorScreenPoint(), b = cur.win.getBounds();
+      const m = 40;   // a margin: some systems report a rough position
+      left = !(pt.x === 0 && pt.y === 0) && !(pt.x >= b.x - m && pt.x <= b.x + b.width + m && pt.y >= b.y - m && pt.y <= b.y + b.height + m);
+    } catch { /* unknown */ }
+    if (gone) left = true;
+    if (left) { cur.splitHover = null; tabDragEnd(id, dropEffect, true); return; }
     if (pending === id) {
       // the drop itself may not reach the overlay on every platform (Wayland): use the side the overlay last saw the drag over
       const side = cur.splitHover; cur.splitHover = null;

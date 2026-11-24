@@ -605,7 +605,9 @@
       // detect outside: use client coords; on Wayland screenX/Y may be 0 so also check if cursor left window
       const outside = e.clientX < -8 || e.clientY < -8 || e.clientX > innerWidth + 8 || e.clientY > innerHeight + 8
         || (e.screenX === 0 && e.screenY === 0 && e.clientX === 0 && e.clientY === 0);
-      api.dragEnd(t.id, e.dataTransfer.dropEffect, outside);
+      // "gone": left through the sides or the top, certainly outside the window; below the strip is the page
+      const gone = e.clientX < -8 || e.clientX > innerWidth + 8 || e.clientY < -8;
+      api.dragEnd(t.id, e.dataTransfer.dropEffect, outside, gone);
     };
 
     let ico;
