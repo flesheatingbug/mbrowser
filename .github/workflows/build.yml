@@ -48,6 +48,18 @@ jobs:
           sed -i "s/const BUILD_NUMBER = 0;/const BUILD_NUMBER = ${{ github.run_number }};/" main.js
           npm version "0.9.${{ github.run_number }}" --no-git-tag-version
 
+      - name: Add the Google Drive client secret (from the repository secret, never committed)
+        shell: bash
+        env:
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+        run: |
+          if [ -n "$GOOGLE_CLIENT_SECRET" ]; then
+            node -e "require('fs').writeFileSync('lib/cloudkeys.local.js', 'module.exports = ' + JSON.stringify({ gdrive: { clientSecret: process.env.GOOGLE_CLIENT_SECRET } }) + ';\n')"
+            echo "Google client secret added to this build"
+          else
+            echo "No GOOGLE_CLIENT_SECRET secret set: Google Drive sync will ask for it in Settings"
+          fi
+
       - name: Build (Linux)
         if: matrix.platform == 'linux'
         run: npm run dist:linux -- ${{ github.ref_name == 'next' && '"-c.appId=local.mbrowser.pre" "-c.productName=mbrowser Pre" "-c.extraMetadata.mbChannel=pre" "-c.publish.url=https://github.com/flesheatingbug/mbrowser/releases/download/pre-desktop/"' || '' }}
