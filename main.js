@@ -462,6 +462,7 @@ function layoutSplitPair(k) {
 }
 
 function layoutCore() {
+  reapDead();
   if (!cur || !cur.win || !cur.toolbarView) return;
   const { width, height } = cur.win.getContentBounds();
   const zero = { x: 0, y: 0, width: 0, height: 0 };
@@ -1233,13 +1234,14 @@ function closeTab(id) {
   }
   if (cur.split && cur.split.ids.includes(id)) { try { cur.win.contentView.removeChildView(t.view); } catch { /* not shown */ } cur.split.ids = cur.split.ids.filter((i) => i !== id); cur.split.fr = null; if (cur.split.ids.length < 2) cur.split = null; }
   if (id === cur.activeId) cur.win.contentView.removeChildView(t.view);
-  t.wc.close();
+  // forget the tab before its page is closed: closing fires events that rebuild the tab bar, and they must not see a half-closed tab
   cur.tabs.delete(id);
   cur.order.splice(idx, 1);
   pruneStacks();
   tabById.delete(id);
   tabByWc.delete(wcId);
   blockedCounts.delete(wcId);
+  try { t.wc.close(); } catch { /* already gone */ }
   if (t.private) {
     const anyPrivate = [...windows].some((w) => [...w.tabs.values()].some((x) => x.private));
     if (!anyPrivate) {
