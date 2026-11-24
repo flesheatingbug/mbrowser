@@ -409,9 +409,9 @@ object Cloud {
             finally { try { server.close() } catch (_: Exception) { } }
         }.start()
 
-        // OneDrive (Microsoft allows it): a tab inside mbrowser. Google refuses embedded browsers, so it gets a Custom Tab, an in-app sheet
-        // from your browser that closes back to mbrowser (never mbrowser itself).
-        if (provider == "onedrive" && opener != null) { opener(url); return }
+        // a tab inside mbrowser: its tabs already present themselves as a normal Chrome (no "; wv"), which is what lets Google sign-in work in pages.
+        // Without an opener (or if that is not wanted) a Custom Tab sheet from your browser is used, never mbrowser itself.
+        if (opener != null) { opener(url); return }
         try {
             val pkg = androidx.browser.customtabs.CustomTabsClient.getPackageName(app, null)
             if (pkg != null && pkg != app.packageName) {
