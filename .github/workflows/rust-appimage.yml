@@ -2,7 +2,7 @@ name: Rust AppImage
 on:
   workflow_dispatch:
   push:
-    paths: ['rust/**', '.github/workflows/rust-appimage.yml']
+    paths: ['rust/**', '.github/workflows/rust-appimage.yml', 'ui.html', 'overlay.html', 'preload.js', 'page-preload.js', 'pages/**']
 jobs:
   appimage:
     runs-on: ubuntu-22.04
@@ -19,6 +19,12 @@ jobs:
         run: |
           mkdir -p AppDir/usr/bin
           cp rust/target/release/mbrowser-rs AppDir/usr/bin/
+          mkdir -p AppDir/usr/share/mbrowser
+          cp ui.html overlay.html resizer.html preload.js page-preload.js AppDir/usr/share/mbrowser/
+          cp -r pages AppDir/usr/share/mbrowser/pages
+          mkdir -p AppDir/usr/share/mbrowser/assets
+          cp assets/icon.png AppDir/usr/share/mbrowser/assets/
+          cp -r assets/icons assets/wallpapers AppDir/usr/share/mbrowser/assets/
           cp assets/icons/color-128.png AppDir/mbrowser-rs.png
           cat > AppDir/mbrowser-rs.desktop <<'EOF'
           [Desktop Entry]
