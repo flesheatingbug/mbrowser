@@ -12,8 +12,9 @@ use std::cell::RefCell;
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::time::Duration;
+use webkit2gtk::javascriptcore::ValueExt;
 use webkit2gtk::{
-    DownloadExt, FindControllerExt, HitTestResultExt, JavascriptResultExt, LoadEvent, SecurityManagerExt,
+    DownloadExt, FindControllerExt, HitTestResultExt, LoadEvent, SecurityManagerExt,
     URISchemeRequestExt, UserContentInjectedFrames, UserContentManager, UserContentManagerExt, UserScript,
     UserScriptInjectionTime, WebContext, WebContextExt, WebView, WebViewExt,
 };
@@ -1544,13 +1545,6 @@ fn main() {
         });
     }
     {
-        let b = b.clone();
-        window.connect_size_allocate(move |_, _| {
-            if b.borrow().mode.is_some() {
-                // keep overlays that hug the right edge in place after a resize
-                let _ = &b;
-            }
-        });
         let b2 = b.clone();
         window.connect_window_state_event(move |_, _| { push(&b2); glib::Propagation::Proceed });
     }
