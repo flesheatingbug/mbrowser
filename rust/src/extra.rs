@@ -1,7 +1,7 @@
 //! Reader view, tab stacks and names, the content blocker, profiles and a few small pages' needs.
 
 use super::*;
-use webkit2gtk::{UserContentFilter, UserContentFilterStore, UserContentManagerExt};
+use webkit2gtk::{UserContentInjectedFrames, UserContentManagerExt, UserScript, UserScriptInjectionTime};
 
 pub fn base_dir() -> PathBuf {
     let base = std::env::var("XDG_CONFIG_HOME")
@@ -104,7 +104,7 @@ pub fn unstack(b: &B, id: u32, whole: bool) {
 
 const BUILTIN: &str = "doubleclick.net googlesyndication.com googleadservices.com google-analytics.com googletagmanager.com googletagservices.com adservice.google.com adnxs.com adsrvr.org advertising.com amazon-adsystem.com criteo.com criteo.net taboola.com outbrain.com scorecardresearch.com quantserve.com moatads.com rubiconproject.com pubmatic.com openx.net casalemedia.com smartadserver.com 2mdn.net serving-sys.com adform.net bidswitch.net sharethrough.com teads.tv zedo.com yieldmo.com facebook.net hotjar.com mixpanel.com segment.io fullstory.com crazyegg.com mouseflow.com demdex.net omtrdc.net everesttech.net bluekai.com krxd.net exelator.com rlcdn.com ads-twitter.com ads.linkedin.com snap.licdn.com analytics.tiktok.com amplitude.com parsely.com chartbeat.net mc.yandex.ru adsymptotic.com media.net adition.com revcontent.com mgid.com zemanta.com 33across.com lijit.com sovrn.com indexww.com";
 
-fn rules_json(custom: &str) -> String {
+fn hosts_list(custom: &str) -> Vec<String> {
     let mut hosts: Vec<String> = BUILTIN.split_whitespace().map(|s| s.to_string()).collect();
     for line in custom.lines() {
         let l = line.trim().trim_start_matches("||").trim_end_matches('^').to_lowercase();
@@ -112,29 +112,27 @@ fn rules_json(custom: &str) -> String {
             hosts.push(l);
         }
     }
-    let mut rules: Vec<Value> = vec![];
-    for h in hosts {
-        let esc = h.replace('.', "\\.");
-        rules.push(json!({"trigger": {"url-filter": format!("^[a-z]+://{esc}[:/]"), "load-type": ["third-party"]}, "action": {"type": "block"}}));
-        rules.push(json!({"trigger": {"url-filter": format!("^[a-z]+://[^/]*\\.{esc}[:/]"), "load-type": ["third-party"]}, "action": {"type": "block"}}));
-    }
-    Value::Array(rules).to_string()
+    hosts
+}
+
+/// WebKitGTK's content-filter API is not in the Rust bindings, so third-party tracker hosts are blocked by a script that
+/// runs before the page: it refuses fetch, XHR, beacons and script/img/iframe sources that point at a listed host.
+fn blocker_script(hosts: &[String]) -> String {
+    format!(
+        "(function(){{var H={};function bad(u){{try{{var x=new URL(u,location.href);if(x.hostname===location.hostname)return false;var h=x.hostname;for(var i=0;i<H.length;i++){{if(h===H[i]||h.endsWith('.'+H[i]))return true}}}}catch(e){{}}return false}}\
+var f=window.fetch;if(f)window.fetch=function(a){{var u=a&&a.url||a;if(bad(String(u)))return Promise.reject(new TypeError('blocked'));return f.apply(this,arguments)}};\
+var o=XMLHttpRequest.prototype.open;XMLHttpRequest.prototype.open=function(m,u){{if(bad(String(u)))u='about:blank';return o.apply(this,arguments)}};\
+if(navigator.sendBeacon){{var sb=navigator.sendBeacon.bind(navigator);navigator.sendBeacon=function(u,d){{return bad(String(u))?false:sb(u,d)}}}}\
+var sa=Element.prototype.setAttribute;Element.prototype.setAttribute=function(n,v){{if((n==='src'||n==='href')&&/^(SCRIPT|IMG|IFRAME|LINK)$/.test(this.tagName)&&bad(String(v)))return;return sa.apply(this,arguments)}};\
+['src'].forEach(function(p){{[HTMLScriptElement,HTMLImageElement,HTMLIFrameElement].forEach(function(C){{var d=Object.getOwnPropertyDescriptor(C.prototype,p);if(d&&d.set)Object.defineProperty(C.prototype,p,{{get:d.get,set:function(v){{if(bad(String(v)))return;d.set.call(this,v)}},configurable:true}})}})}});}})();",
+        json!(hosts)
+    )
 }
 
 pub fn init_blocker(b: &B) {
-    let dir = b.borrow().data.join("filters");
-    let _ = std::fs::create_dir_all(&dir);
-    let store = UserContentFilterStore::new(&dir.to_string_lossy());
     let custom = s_str(&b.borrow().settings, "privacy.customBlocklist");
-    let json = rules_json(&custom);
-    let bytes = glib::Bytes::from_owned(json.into_bytes());
-    let b2 = b.clone();
-    store.save("mbrowser-block", &bytes, None::<&gtk::gio::Cancellable>, move |res| {
-        if let Ok(f) = res {
-            b2.borrow_mut().x.filter = Some(f);
-            apply_blocker(&b2);
-        }
-    });
+    b.borrow_mut().x.filter = Some(blocker_script(&hosts_list(&custom)));
+    apply_blocker(b);
 }
 
 fn wanted(br: &Br) -> bool {
@@ -147,24 +145,12 @@ pub fn attach_filter(b: &B, ucm: &UserContentManager) {
         (br.x.filter.clone(), wanted(&br))
     };
     if let (Some(f), true) = (f, on) {
-        ucm.add_filter(&f);
+        ucm.add_script(&UserScript::new(&f, UserContentInjectedFrames::AllFrames, UserScriptInjectionTime::Start, &[], &[]));
     }
 }
 
-pub fn apply_blocker(b: &B) {
-    let (f, on, views) = {
-        let br = b.borrow();
-        (br.x.filter.clone(), wanted(&br), br.tabs.iter().map(|t| t.view.clone()).collect::<Vec<_>>())
-    };
-    for v in views {
-        if let Some(u) = v.user_content_manager() {
-            u.remove_all_filters();
-            if let (Some(f), true) = (&f, on) {
-                u.add_filter(f);
-            }
-        }
-    }
-}
+/// Already-open tabs keep the scripts they have; the setting applies to the next page load of new tabs.
+pub fn apply_blocker(_b: &B) {}
 
 pub fn settings_changed(b: &B, path: &str) {
     if path.starts_with("privacy.blockTrackers") {

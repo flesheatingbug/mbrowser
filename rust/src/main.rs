@@ -58,7 +58,7 @@ struct Ext {
     sync_timer: bool,
     syncing: bool,
     remote_tabs: Value,
-    filter: Option<webkit2gtk::UserContentFilter>,
+    filter: Option<String>,
 }
 
 struct Br {
@@ -1362,7 +1362,6 @@ fn invoke(b: &B, ch: &str, a: &[Value]) -> Value {
         }
         "profiles:list" => json!({"profiles": [{"id": "default", "name": "Default", "color": "#5b8cff", "avatar": ""}], "current": "default", "askAtStart": false}),
         "profiles:getPrefs" => json!({"defaultProfile": "default", "openLast": false}),
-        "sync:status" => json!({"state": "idle", "message": "Sync is not part of the Rust build yet"}),
         "app:versions" => json!({"app": "rust", "version": env!("CARGO_PKG_VERSION")}),
         "app:build-number" => json!(0),
         "vault:open" | "vault:list" | "vault:folders" | "vault:listCards" | "vault:listAddresses" => json!([]),
