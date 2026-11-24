@@ -62,7 +62,7 @@ object Cloud {
     private fun b64(b: ByteArray) = Base64.encodeToString(b, Base64.NO_WRAP)
     private fun unb64(s: String) = Base64.decode(s, Base64.DEFAULT)
     private fun hex(b: ByteArray) = b.joinToString("") { "%02x".format(it) }
-    private fun unhex(s: String) = ByteArray(s.length / 2) { s.substring(it * 2, it * 2 + 2).toInt(16) }
+    private fun unhex(s: String) = ByteArray(s.length / 2) { s.substring(it * 2, it * 2 + 2).toInt(16).toByte() }
     private fun scrypt(pass: String, salt: ByteArray) = SCrypt.generate(pass.toByteArray(Charsets.UTF_8), salt, 1 shl 15, 8, 1, 32)
 
     private fun seal(key: ByteArray, obj: JSONObject): String {
