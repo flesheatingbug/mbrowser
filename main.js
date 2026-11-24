@@ -1099,6 +1099,9 @@ function wire(tab) {
     if (tab.owner.pwPending && !tab.owner.pwPending.shown && Date.now() - tab.owner.pwPending.at < 20000) maybeShowPwSave(tab.owner);
     tab.status = 'Loading ' + (hostOf(url) || 'page') + '…';
     tab.favicon = isWeb(url) ? tab.favicon : '';
+    // another site starts at the default zoom again; the same site keeps this tab's zoom
+    { const hh = hostOf(url); if (tab.zHost !== undefined && tab.zHost !== hh) tab.zf = undefined; tab.zHost = hh; }
+    applyTabZoom(tab);
     if (!tab.private && isWeb(url)) {
       history.push({ url, title: wc.getTitle(), time: Date.now() });
       if (history.length > 5000) history = history.slice(-5000);
@@ -1123,10 +1126,7 @@ function wire(tab) {
     tab.status = 'Loading resources…';
     pushState();
     if (tab.focusUrlOnLoad && cur.activeId === tab.id && !cur.overlayMode) focusUrl();
-    if (!tab.zoomed && S().pages.defaultZoom !== 100) {
-      tab.zoomed = true;
-      wc.setZoomFactor(S().pages.defaultZoom / 100);
-    }
+    applyTabZoom(tab);
   });
   // Track whether the most-recently allowed popup is an auth domain.
   // setWindowOpenHandler and did-create-window fire synchronously in sequence
@@ -1213,6 +1213,7 @@ function switchTab(id) {
   next.wc.executeJavaScript(RESUME_VIDEO_JS).catch(() => {});
   const changed = cur.activeId !== id;
   cur.activeId = id;
+  applyTabZoom(next);
   if (changed || !cur.win.contentView.children.includes(next.view)) cur.win.contentView.addChildView(next.view);
   layout();
   next.wc.focus();
@@ -1344,12 +1345,21 @@ function translateTab(tab) {
 }
 
 // ---------- page actions ----------
+// Zoom belongs to one tab. Chromium keeps one zoom per site for the whole session, so every tab of a site would follow; each tab
+// remembers its own factor (tab.zf, empty = the default) and puts it back whenever it is shown or loads.
+const defaultZoomFactor = () => (S().pages.defaultZoom || 100) / 100;
+function setTabZoom(tab, f) { if (!tab || tab.wc.isDestroyed()) return; tab.zf = f; try { tab.wc.setZoomFactor(f); } catch { /* gone */ } }
+function applyTabZoom(tab) {
+  if (!tab || tab.wc.isDestroyed()) return;
+  const f = tab.zf != null ? tab.zf : defaultZoomFactor();
+  try { if (Math.abs(tab.wc.getZoomFactor() - f) > 0.001) tab.wc.setZoomFactor(f); } catch { /* gone */ }
+}
 function zoom(delta) {
-  const wc = activeWc();
-  if (!wc) return;
-  const f = delta === 0 ? S().pages.defaultZoom / 100
-    : Math.min(5, Math.max(0.25, wc.getZoomFactor() + delta));
-  wc.setZoomFactor(f);
+  const t = activeTab();
+  if (!t) return;
+  const cur0 = t.zf != null ? t.zf : t.wc.getZoomFactor();
+  const f = delta === 0 ? defaultZoomFactor() : Math.min(5, Math.max(0.25, cur0 + delta));
+  if (delta === 0) { t.zf = undefined; applyTabZoom(t); } else setTabZoom(t, f);
   pushState();
 }
 
@@ -2915,7 +2925,7 @@ function setupIpc() {
   on('menu:main', () => mainMenu());
   on('security:show', () => { if (cur.overlayMode === 'security') hideOverlay(); else showOverlay('security', securityInfo()); });
   on('zoom:reset', () => zoom(0));
-  on('zoom:set', (_e, pct) => { const wc = activeWc(); if (!wc) return; wc.setZoomFactor(Math.min(3, Math.max(0.3, Number(pct) / 100))); pushState(); });
+  on('zoom:set', (_e, pct) => { const t = activeTab(); if (!t) return; setTabZoom(t, Math.min(3, Math.max(0.3, Number(pct) / 100))); pushState(); });
   on('translate:page', () => translateTab(null));
   on('defaultbar:set', () => { setDefaultBrowser(); }, BOTH);
   on('defaultbar:close', () => { cur.defaultBarClosed = true; layout(); pushState(); }, BOTH);
@@ -2929,8 +2939,8 @@ function setupIpc() {
   });
   ipcMain.on('zoom:ctrl-wheel', (e, dir) => {
     const t = tabByWc.get(e.sender.id); if (!t) return;
-    use(t.owner); const wc = t.wc; const f = wc.getZoomFactor();
-    wc.setZoomFactor(Math.min(3, Math.max(0.25, f + dir * 0.1))); pushState();
+    use(t.owner); const f = t.zf != null ? t.zf : t.wc.getZoomFactor();
+    setTabZoom(t, Math.min(3, Math.max(0.25, f + dir * 0.1))); pushState();
   });
   on('lock:now', () => lockNow());
   on('ext:click', (e, p, rect) => {
