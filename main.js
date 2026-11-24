@@ -3744,7 +3744,9 @@ function setupIpc() {
     const clientId = String((o && o.clientId) || bi.clientId || '').trim(), clientSecret = String((o && o.clientSecret) || bi.clientSecret || '').trim();
     if (o && o.clientId) applySetting(provider === 'gdrive' ? 'sync.gClientId' : 'sync.msClientId', clientId);
     if (provider === 'gdrive' && o && o.clientSecret) applySetting('sync.gClientSecret', clientSecret);
-    try { await cloud.connect(provider, { clientId, clientSecret }); } catch (e) { return { error: e.message, ...cloudInfo() }; }
+    const w = cur;
+    try { await cloud.connect(provider, { clientId, clientSecret }); } catch (e) { try { w.win.show(); w.win.focus(); } catch { /* closed */ } return { error: e.message, ...cloudInfo() }; }
+    try { w.win.show(); w.win.focus(); } catch { /* closed */ }   // bring the browser back after the sign-in tab in your default browser
     applySetting('sync.backend', provider); resetSyncRevs();
     return cloudInfo();
   }, PAGE_ONLY);
