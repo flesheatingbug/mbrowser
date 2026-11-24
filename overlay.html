@@ -211,6 +211,12 @@
     const side = (e) => (e.clientX < innerWidth / 2 ? 'left' : 'right');
     let last = null;
     const mark = (s) => { L.classList.toggle('on', s === 'left'); R.classList.toggle('on', s === 'right'); if (s !== last) { last = s; api.invoke('split:hover', s); } };
+    // a drag whose end never reached the tab strip would leave this zone over the page: while a drag runs the browser sends no
+    // mouse events, so a mouse move, click or key here means the drag is over
+    let armed = 0;
+    const stuck = () => { if (mode === 'dropzone' && Date.now() - armed > 400) { api.invoke('split:cancel'); } };
+    document.addEventListener('mousemove', stuck); document.addEventListener('mousedown', stuck); document.addEventListener('keydown', stuck);
+    new MutationObserver(() => { armed = Date.now(); }).observe($('dz'), { attributes: true, attributeFilter: ['style'] });
     document.addEventListener('dragover', (e) => { if (mode !== 'dropzone' || !e.dataTransfer.types.includes(TAB_MIME)) return; e.preventDefault(); e.dataTransfer.dropEffect = 'move'; mark(side(e)); });
     document.addEventListener('dragleave', (e) => { if (mode === 'dropzone' && !e.relatedTarget && (e.clientX <= 0 || e.clientY <= 0 || e.clientX >= innerWidth - 1 || e.clientY >= innerHeight - 1)) mark(null); });
     document.addEventListener('drop', (e) => {

@@ -2828,8 +2828,10 @@ function setupIpc() {
     if (!Number.isInteger(id) || !cur.tabs.has(id) || cur.tabs.get(id).pinned) return;
     cur.dragTab = id; cur.splitHover = null; cur.splitDropped = null;
     setTimeout(() => { if (cur.dragTab === id && !cur.overlayMode) showOverlay('dropzone', { many: splitActive() }); }, 120);
+    setTimeout(() => { if (cur.dragTab === id && cur.overlayMode === 'dropzone') { cur.dragTab = null; cur.splitHover = null; hideOverlay(false); } }, 120000);
   });
   on('auth:submit', (_e, username, password) => { authDone(cur, { username: String(username || ''), password: String(password || '') }); if (cur.overlayMode === 'auth') hideOverlay(true); });
+  handle('split:cancel', () => { cur.dragTab = null; cur.splitHover = null; if (cur.overlayMode === 'dropzone') hideOverlay(false); return true; });
   handle('split:hover', (_e, side) => { cur.splitHover = side === 'left' || side === 'right' ? side : null; return true; });
   handle('split:drop', (_e, id, side) => { const tid = cur.dragTab != null ? cur.dragTab : id; cur.dragTab = null; cur.splitHover = null; cur.splitDropped = tid; if (Number.isInteger(tid) && cur.tabs.has(tid)) splitAdd(tid, side === 'left' ? 'left' : 'right'); hideOverlay(false); return true; });
   on('split:resize', (_e, idx, phase, dx) => {
