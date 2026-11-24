@@ -567,7 +567,30 @@ async function printPreview() {
 app.on('will-quit', () => { flushSaves(); for (const f of printFiles) { try { fs.unlinkSync(f); } catch { /* gone */ } } });
 
 // ---------- state sent to the chrome views ----------
+// A page can destroy its own webContents (window.close(), a crash, a popup that closes itself). Drop such tabs before anything reads them,
+// otherwise "Object has been destroyed" is thrown from the state push and the whole browser shows an error dialog.
+function reapDead() {
+  const dead = [...cur.tabs].filter(([, x]) => !x.wc || x.wc.isDestroyed());
+  if (!dead.length) return;
+  const w = cur;
+  for (const [id, x] of dead) {
+    try { w.win.contentView.removeChildView(x.view); } catch { /* not shown */ }
+    const idx = w.order.indexOf(id);
+    w.tabs.delete(id); if (idx >= 0) w.order.splice(idx, 1);
+    tabById.delete(id);
+    for (const [wcId, tb] of tabByWc) if (tb === x) tabByWc.delete(wcId);
+    if (w.split) { w.split.ids = w.split.ids.filter((i) => i !== id); w.split.fr = null; if (w.split.ids.length < 2) w.split = null; }
+    if (w.activeId === id) {
+      w.activeId = w.order.length ? w.order[Math.min(Math.max(idx, 0), w.order.length - 1)] : null;
+      const next = w.activeId;
+      setImmediate(() => { try { use(w); if (next != null && w.tabs.has(next)) switchTab(next); else if (!w.order.length) newTab(); } catch { /* window gone */ } });
+    }
+  }
+  pruneStacks();
+}
+
 function stateFor() {
+  reapDead();
   const t = cur.tabs.get(cur.activeId);
   const wc = t && t.wc;
   const url = wc ? wc.getURL() : '';
@@ -1198,6 +1221,7 @@ function switchTab(id) {
 function closeTab(id) {
   const t = cur.tabs.get(id);
   if (!t) return;
+  if (!t.wc || t.wc.isDestroyed()) { reapDead(); pushState(); return; }
   const wcId = t.wc.id;
   const idx = cur.order.indexOf(id);
   if (!t.private) {
