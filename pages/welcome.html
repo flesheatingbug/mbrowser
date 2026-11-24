@@ -176,6 +176,7 @@ let chosenEngine = null;
 let profileName = '';
 let localProfileName = 'Default (local)';
 let standaloneMode = false;
+let cloudMode = null;   // 'gdrive' | 'onedrive' while a cloud drive is the chosen sync
 let profileRenamed = false;
 let addingProfile = false;
 let allThemes = [];
@@ -196,6 +197,7 @@ async function init() {
   vRemember = status.remember !== false;
   serverConnected = status.serverConfigured;
   standaloneMode = !serverConnected;
+  cloudMode = (status.cloud && status.cloud.ready && status.cloud.backend !== 'server') ? status.cloud.backend : null;
   blockTrackers = status.blockTrackers !== false;
 
   const tData = await browser.getThemes();
@@ -283,8 +285,8 @@ function engineIcon(id) {
 function renderStep2() {
   const c = $('content');
   c.innerHTML = '';
-  const h = el('h2', null, 'Sync server');
-  const sub = el('p', 'subtitle', 'Connect to your self-hosted server to sync bookmarks, passwords and more. Or start standalone — you can connect later in Settings → Sync.');
+  const h = el('h2', null, 'Sync');
+  const sub = el('p', 'subtitle', 'Connect to your self-hosted server, or sync through your own Google Drive or OneDrive. Or start standalone — you can connect later in Settings → Sync.');
   c.append(h, sub);
 
   const cards = el('div', 'cards');
@@ -315,7 +317,7 @@ function renderStep2() {
     if (e.target.closest('input, button, select')) return;
     if (!serverConnected) {
       cardServer.classList.add('selected'); cardStandalone.classList.remove('selected');
-      standaloneMode = false;
+      standaloneMode = false; cloudMode = null; document.querySelectorAll('.cloudcard').forEach((x) => x.classList.remove('selected'));
     }
   };
 
@@ -325,18 +327,78 @@ function renderStep2() {
   cardStandalone.append(saTitle, saDesc);
   cardStandalone.onclick = () => {
     cardStandalone.classList.add('selected'); cardServer.classList.remove('selected'); serverProfiles = null;
-    standaloneMode = true;
+    standaloneMode = true; cloudMode = null; document.querySelectorAll('.cloudcard').forEach((x) => x.classList.remove('selected'));
   };
 
   cards.append(cardServer, cardStandalone);
+  for (const prov of ['gdrive', 'onedrive']) cards.append(cloudCard(prov, cardServer, cardStandalone));
   c.append(cards);
 
   const f = $('footer');
   f.innerHTML = '';
   const stepCount = el('span', 'step-count', `Step ${step} of ${TOTAL_STEPS}`);
   const back = el('button', 'btn-ghost', '← Back'); back.onclick = () => { step = 1; render(); };
-  const next = el('button', 'btn-primary', 'Next →'); next.onclick = () => { step = 3; render(); };
+  const next = el('button', 'btn-primary', 'Next →'); next.onclick = () => {
+    if (pendingCloud && !(status.cloud && status.cloud.ready)) { pendingMsg && (pendingMsg.textContent = 'Finish signing in and set the passphrase first, or choose “Start standalone”.'); return; }
+    step = 3; render();
+  };
   f.append(stepCount, back, next);
+}
+
+let pendingCloud = null, pendingMsg = null;
+const CLOUD_NAMES = { gdrive: 'Google Drive', onedrive: 'OneDrive' };
+
+// Google Drive / OneDrive: sign in, then choose the passphrase that encrypts everything
+function cloudCard(prov, cardServer, cardStandalone) {
+  const name = CLOUD_NAMES[prov];
+  const ready = !!(status.cloud && status.cloud.ready && status.cloud.backend === prov);
+  const card = el('div', 'card cloudcard' + (ready || pendingCloud === prov ? ' selected' : ''));
+  card.append(el('div', 'card-title', name), el('div', 'card-desc', 'Sync everything, encrypted, through your own ' + name + '. No server needed.'));
+  const expand = el('div', 'expand'); card.append(expand);
+  const msg = el('div', 'server-status'); pendingMsg = msg;
+  const select = () => {
+    document.querySelectorAll('.cloudcard').forEach((x) => x.classList.remove('selected'));
+    cardServer.classList.remove('selected'); cardStandalone.classList.remove('selected');
+    card.classList.add('selected'); standaloneMode = false; pendingCloud = prov;
+  };
+  card.onclick = (e) => { if (e.target.closest('input, button')) return; select(); };
+  if (ready) {
+    expand.append(el('div', 'server-status ok', '✓ Signed in to ' + name + ' and ready. Everything is encrypted before it is uploaded.'));
+    const disc = el('button', 'btn-ghost', 'Disconnect'); disc.style.marginTop = '8px';
+    disc.onclick = async () => { await browser.cloudDisconnect(); cloudMode = null; serverConnected = false; pendingCloud = null; status = await browser.wizardStatus() || status; standaloneMode = true; render(); };
+    expand.append(disc);
+    return card;
+  }
+  const signedIn = !!(status.cloud && status.cloud.connected && status.cloud.provider === prov);
+  if (!signedIn) {
+    const btn = el('button', 'btn-secondary', 'Sign in with ' + (prov === 'gdrive' ? 'Google' : 'Microsoft'));
+    btn.style.marginTop = '4px';
+    btn.onclick = async () => {
+      select(); btn.disabled = true; btn.textContent = 'Waiting for sign-in…'; msg.className = 'server-status'; msg.textContent = 'Allow access in the page that opened, then come back here.';
+      const r = await browser.cloudConnect({ provider: prov });
+      status = await browser.wizardStatus() || status;
+      if (r && r.error) { msg.className = 'server-status err'; msg.textContent = r.error; btn.disabled = false; btn.textContent = 'Sign in with ' + (prov === 'gdrive' ? 'Google' : 'Microsoft'); return; }
+      pendingCloud = prov; render();
+    };
+    expand.append(btn, msg);
+  } else {
+    const h = el('div', null, 'Choose your sync passphrase'); h.style.cssText = 'font-weight:700;margin:8px 0 4px';
+    const info = el('div', 'note', 'First computer: make up a new passphrase. Already syncing another device: type the same one you used there. Write it down: it is never uploaded, so if you forget it your synced data cannot be recovered.');
+    info.style.cssText = 'font-size:13px;line-height:1.5;margin-bottom:8px';
+    const field = el('div', 'field'); const inp = el('input'); inp.type = 'password'; inp.placeholder = 'Sync passphrase (8+ characters)'; field.append(inp);
+    const btn = el('button', 'btn-primary', 'Continue'); btn.style.marginTop = '4px';
+    const go = async () => {
+      btn.disabled = true; btn.textContent = 'Checking…';
+      const r = await browser.cloudPassphrase(inp.value);
+      btn.disabled = false; btn.textContent = 'Continue';
+      if (r && r.error) { msg.className = 'server-status err'; msg.textContent = r.error; inp.select(); return; }
+      status = await browser.wizardStatus() || status; serverConnected = true; cloudMode = prov; pendingCloud = prov; step = 4; render();
+    };
+    btn.onclick = go; inp.onkeydown = (e) => { if (e.key === 'Enter') go(); };
+    expand.append(h, info, field, btn, msg);
+    setTimeout(() => inp.focus(), 50);
+  }
+  return card;
 }
 
 function renderServerForm(card) {
@@ -690,7 +752,7 @@ function renderStep5() {
   if (themeObj) items.push('Theme: ' + themeObj.name);
   const engObj = allEngines.find((e) => e.id === chosenEngine);
   if (engObj) items.push('Search: ' + engObj.name);
-  if (serverConnected) items.push('Connected to sync server');
+  if (serverConnected) items.push(cloudMode ? 'Syncing with ' + CLOUD_NAMES[cloudMode] : 'Connected to sync server');
   const shownName = (standaloneMode || addingProfile) ? localProfileName : profileName;
   if (standaloneMode || addingProfile) items.push(`New profile: ${shownName || 'New profile'}`);
   else if (profileRenamed || (shownName && shownName !== status.profileName)) items.push(`Profile: ${shownName}`);

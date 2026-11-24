@@ -21,6 +21,7 @@ class WelcomeActivity : BaseActivity() {
     private lateinit var box: LinearLayout
     private val ui = Handler(Looper.getMainLooper())
     private var step = "start"
+    private var cloudProv = "gdrive"
     private val scan = registerForActivityResult(com.journeyapps.barcodescanner.ScanContract()) { r ->
         val code = r.contents ?: return@registerForActivityResult
         val p = Pairing.parse(code)
@@ -147,6 +148,8 @@ class WelcomeActivity : BaseActivity() {
                 body("How do you want to use it? You can change this any time in Settings.", 10)
                 choiceCard("Just browse", "Use mbrowser on this phone only. Nothing is sent anywhere.") { show("local") }
                 choiceCard("Connect to my server", "Sync bookmarks, history, tabs, speed dials and settings with your own mbrowser server.") { show("server") }
+                choiceCard("Google Drive", "Sync everything, encrypted, through your own Google Drive. No server needed.") { cloudProv = "gdrive"; show("cloud") }
+                choiceCard("OneDrive", "Sync everything, encrypted, through your own Microsoft OneDrive. No server needed.") { cloudProv = "onedrive"; show("cloud") }
             }
             "server" -> {
                 title("Connect to your server")
@@ -162,6 +165,47 @@ class WelcomeActivity : BaseActivity() {
                 }
                 link("I don't have a server, just browse") { prefs.server = ""; prefs.token = ""; show("local") }
                 link("Back") { show("start") }
+            }
+            "cloud" -> {
+                val label = Cloud.label(cloudProv)
+                title("Sync with $label")
+                body("Everything is encrypted on this phone, with a passphrase only you know, before it goes to your own $label. No server is needed.", 10)
+                when {
+                    !(prefs.cloudSignedIn && prefs.syncBackend == cloudProv) -> {
+                        primary("Sign in with ${if (cloudProv == "gdrive") "Google" else "Microsoft"}") {
+                            Cloud.selectBackend(prefs, cloudProv)
+                            android.widget.Toast.makeText(this, "Sign in on the page that opens, then you come back here", android.widget.Toast.LENGTH_LONG).show()
+                            Cloud.beginAuth(this, cloudProv, { u -> startActivity(android.content.Intent(this, MainActivity::class.java).setAction(android.content.Intent.ACTION_VIEW).setData(android.net.Uri.parse(u))) }) { err ->
+                                ui.post {
+                                    if (err != null) android.widget.Toast.makeText(this, err, android.widget.Toast.LENGTH_LONG).show()
+                                    startActivity(android.content.Intent(this, WelcomeActivity::class.java).addFlags(android.content.Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP))
+                                    show("cloud")
+                                }
+                            }
+                        }
+                    }
+                    !prefs.cloudReady -> {
+                        body("Step 2: choose your sync passphrase", 18).also { it.setTextColor(tc(R.attr.mbText)); it.textSize = 18f; it.typeface = Typeface.DEFAULT_BOLD }
+                        body("First device: make up a new passphrase.\nAlready syncing another device: type the same one you used there.\n\nWrite it down. It is never uploaded, so if you forget it your synced data cannot be recovered.", 6)
+                        val pass = field("Sync passphrase (8+ characters)", true)
+                        primary("Continue") {
+                            val pw = pass.text.toString()
+                            android.widget.Toast.makeText(this, "Checking…", android.widget.Toast.LENGTH_SHORT).show()
+                            Thread {
+                                val err = Cloud.setPassphrase(applicationContext, pw)
+                                ui.post {
+                                    if (err != null) android.widget.Toast.makeText(this, err, android.widget.Toast.LENGTH_LONG).show()
+                                    show("cloud")
+                                }
+                            }.start()
+                        }
+                    }
+                    else -> {
+                        body("✓ Signed in to $label and ready. Your bookmarks, history and settings will sync.", 14).also { it.setTextColor(tc(R.attr.mbText)) }
+                        primary("Continue") { show("local") }
+                    }
+                }
+                link("Back") { if (prefs.cloudSignedIn) Cloud.disconnect(prefs); show("start") }
             }
             "local" -> {
                 title("Make it yours")
