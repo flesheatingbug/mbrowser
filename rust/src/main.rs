@@ -12,7 +12,7 @@ use std::cell::RefCell;
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::time::Duration;
-use webkit2gtk::javascriptcore::ValueExt;
+use javascriptcore::ValueExt;
 use webkit2gtk::{
     DownloadExt, FindControllerExt, HitTestResultExt, LoadEvent, SecurityManagerExt,
     URISchemeRequestExt, UserContentInjectedFrames, UserContentManager, UserContentManagerExt, UserScript,

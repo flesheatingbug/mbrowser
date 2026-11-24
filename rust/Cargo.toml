@@ -8,6 +8,7 @@ description = "Experimental Rust + GTK + WebKitGTK take on mbrowser"
 gtk = "0.18"
 webkit2gtk = { version = "2.0", features = ["v2_30"] }
 serde_json = "1"
+javascriptcore-rs = "1"
 
 [profile.release]
 opt-level = 3
