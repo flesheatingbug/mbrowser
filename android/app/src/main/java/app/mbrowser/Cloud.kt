@@ -347,7 +347,7 @@ object Cloud {
      * Opens the sign-in page in another browser app (never in mbrowser: Google refuses embedded browsers) and waits for the
      * redirect on 127.0.0.1. [done] gets null on success or an error message, on a background thread.
      */
-    fun beginAuth(ctx: Context, provider: String, done: (String?) -> Unit) {
+    fun beginAuth(ctx: Context, provider: String, opener: ((String) -> Unit)?, done: (String?) -> Unit) {
         val app = ctx.applicationContext
         val prefs = Prefs(app)
         if (provider == "gdrive" && googleSecret(prefs).isEmpty()) { done("Paste the Google client secret first."); return }
@@ -409,7 +409,20 @@ object Cloud {
             finally { try { server.close() } catch (_: Exception) { } }
         }.start()
 
-        // another browser app than ourselves: if mbrowser is the default browser, pick the first other one
+        // OneDrive (Microsoft allows it): a tab inside mbrowser. Google refuses embedded browsers, so it gets a Custom Tab, an in-app sheet
+        // from your browser that closes back to mbrowser (never mbrowser itself).
+        if (provider == "onedrive" && opener != null) { opener(url); return }
+        try {
+            val pkg = androidx.browser.customtabs.CustomTabsClient.getPackageName(app, null)
+            if (pkg != null && pkg != app.packageName) {
+                val ct = androidx.browser.customtabs.CustomTabsIntent.Builder().setShowTitle(true).build()
+                ct.intent.setPackage(pkg)
+                if (ctx !is android.app.Activity) ct.intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                ct.launchUrl(ctx, Uri.parse(url))
+                return
+            }
+        } catch (_: Exception) { }
+        // no Custom Tabs browser: another browser app than ourselves (if mbrowser is the default browser, pick the first other one)
         val view = Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         val pm = app.packageManager
         val def = pm.resolveActivity(view, PackageManager.MATCH_DEFAULT_ONLY)?.activityInfo?.packageName

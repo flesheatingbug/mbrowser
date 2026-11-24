@@ -665,8 +665,8 @@ class SettingsActivity : BaseActivity() {
                 if (prefs.cloudBackend == "gdrive" && Cloud.googleSecret(prefs).isEmpty())
                     textRow("Google client secret", "Paste it once. It stays on this phone.", { prefs.cloudGSecret }, { prefs.cloudGSecret = it }, "GOCSPX-…")
                 actionRow("Sign in to $name", "Opens another browser app so you can allow access") {
-                    Cloud.beginAuth(this, prefs.cloudBackend) { err -> ui.post { toast(err ?: "Signed in"); build() } }
-                    toast("Sign in in the browser that opened, then come back")
+                    Cloud.beginAuth(this, prefs.cloudBackend, { u -> startActivity(Intent(this, MainActivity::class.java).setAction(Intent.ACTION_VIEW).setData(android.net.Uri.parse(u))) }) { err -> ui.post { toast(err ?: "Signed in"); build() } }
+                    toast("Sign in on the page that opened, then come back")
                 }
             }
             !prefs.cloudReady -> actionRow("Set the sync passphrase", "Use the same one on all your devices") { promptPassphrase() }
