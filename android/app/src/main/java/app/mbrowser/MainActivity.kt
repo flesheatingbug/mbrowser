@@ -2194,7 +2194,7 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
         card.setPadding(dp(8), dp(10), dp(8), dp(10))
 
         // who is signed in: the profile picture from the desktop browser, tap to change profile
-        if (prefs.syncConfigured) {
+        if (prefs.cloudBackend.isEmpty() && prefs.syncConfigured) {
             val who = LinearLayout(this)
             who.orientation = LinearLayout.HORIZONTAL; who.gravity = Gravity.CENTER_VERTICAL
             who.setPadding(dp(10), dp(4), dp(10), dp(8))
@@ -2208,6 +2208,23 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
             col.addView(n1); col.addView(n2)
             who.addView(col, LinearLayout.LayoutParams(0, -2, 1f))
             who.setOnClickListener { pop.dismiss(); showProfiles() }
+            card.addView(who, LinearLayout.LayoutParams(-1, -2))
+        }
+        else if (prefs.cloudBackend.isNotEmpty()) {
+            // syncing through Google Drive / OneDrive: there are no server profiles to switch between, so the row opens the sync settings instead
+            val who = LinearLayout(this)
+            who.orientation = LinearLayout.HORIZONTAL; who.gravity = Gravity.CENTER_VERTICAL
+            who.setPadding(dp(10), dp(4), dp(10), dp(8))
+            who.foreground = TypedValueHolder.selectable(this)
+            val name = Cloud.label(prefs.cloudBackend)
+            val av = ImageView(this); av.setImageDrawable(Avatars.make(this, name, prefs.profileColor, prefs.profileAvatar, dp(40)))
+            who.addView(av, LinearLayout.LayoutParams(dp(40), dp(40)))
+            val col = LinearLayout(this); col.orientation = LinearLayout.VERTICAL; col.setPadding(dp(12), 0, 0, 0)
+            val n1 = TextView(this); n1.text = name; n1.textSize = 16f; n1.setTextColor(tc(R.attr.mbText)); n1.setTypeface(null, android.graphics.Typeface.BOLD)
+            val n2 = TextView(this); n2.text = if (prefs.cloudReady) "Syncing. Tap for sync settings" else "Finish setting up sync"; n2.textSize = 13f; n2.setTextColor(tc(R.attr.mbMuted))
+            col.addView(n1); col.addView(n2)
+            who.addView(col, LinearLayout.LayoutParams(0, -2, 1f))
+            who.setOnClickListener { pop.dismiss(); startActivity(Intent(this, SettingsActivity::class.java)) }
             card.addView(who, LinearLayout.LayoutParams(-1, -2))
         }
 
