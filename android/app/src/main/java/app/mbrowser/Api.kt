@@ -8,9 +8,9 @@ import java.net.URLEncoder
 
 class ApiException(val code: Int, message: String) : IOException(message)
 
-class Api(private val base: String, private val token: String, private val device: String) {
+open class Api(private val base: String, private val token: String, private val device: String) {
 
-    fun request(method: String, path: String, body: JSONObject? = null): JSONObject {
+    open fun request(method: String, path: String, body: JSONObject? = null): JSONObject {
         val c = URL(base + path).openConnection() as HttpURLConnection
         try {
             c.requestMethod = method

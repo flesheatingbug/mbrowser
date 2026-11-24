@@ -29,8 +29,8 @@ object Sync {
     fun run(ctx: Context, openTabs: List<Pair<String, String>>): String {
         val prefs = Prefs(ctx)
         if (!prefs.syncConfigured) return "Sync is not set up"
-        val api = Api(prefs.server, prefs.token, prefs.device)
-        ensureSameProfile(ctx, prefs, api)
+        val api = Cloud.api(ctx, prefs)
+        if (prefs.cloudBackend.isEmpty()) ensureSameProfile(ctx, prefs, api)
 
         if (prefs.syncBookmarks) {
         val sentB = Store.dirtyBookmarks()
@@ -162,8 +162,8 @@ object Sync {
         val prefs = Prefs(ctx)
         if (!prefs.syncConfigured) return "Enter the server URL and API key"
         return try {
-            Api(prefs.server, prefs.token, prefs.device).tabsGet()
-            "Connected. The key works."
+            Cloud.api(ctx, prefs).tabsGet()
+            if (prefs.cloudBackend.isNotEmpty()) "Connected to ${Cloud.label(prefs.cloudBackend)}." else "Connected. The key works."
         } catch (e: ApiException) {
             if (e.code == 401) "The server rejected the API key. ${e.message}" else "Server error: ${e.message}"
         } catch (e: Exception) {

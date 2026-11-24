@@ -40,6 +40,7 @@ jobs:
         working-directory: android
         env:
           MB_PRE: ${{ github.ref_name == 'next' && '1' || '0' }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
         run: gradle assembleDebug --no-daemon
       - uses: actions/upload-artifact@v4
         with:

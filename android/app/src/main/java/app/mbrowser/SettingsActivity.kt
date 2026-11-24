@@ -658,7 +658,48 @@ class SettingsActivity : BaseActivity() {
         }
     }
 
+    private fun cloudRows() {
+        val name = Cloud.label(prefs.cloudBackend)
+        when {
+            !prefs.cloudSignedIn -> {
+                if (prefs.cloudBackend == "gdrive" && Cloud.googleSecret(prefs).isEmpty())
+                    textRow("Google client secret", "Paste it once. It stays on this phone.", { prefs.cloudGSecret }, { prefs.cloudGSecret = it }, "GOCSPX-…")
+                actionRow("Sign in to $name", "Opens another browser app so you can allow access") {
+                    Cloud.beginAuth(this, prefs.cloudBackend) { err -> ui.post { toast(err ?: "Signed in"); build() } }
+                    toast("Sign in in the browser that opened, then come back")
+                }
+            }
+            !prefs.cloudReady -> actionRow("Set the sync passphrase", "Use the same one on all your devices") { promptPassphrase() }
+            else -> actionRow("$name sync is on", "Everything is encrypted on this phone before it is uploaded") { }
+        }
+        if (prefs.cloudSignedIn) actionRow("Sign out of $name", "Stops syncing. Bookmarks and history stay on this phone.") {
+            confirm("Sign out of $name?") { Cloud.disconnect(prefs); build() }
+        }
+    }
+
+    private fun promptPassphrase() {
+        val et = EditText(this)
+        et.hint = "At least 8 characters"
+        et.inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+        AlertDialog.Builder(this).setTitle("Sync passphrase")
+            .setMessage("Choose one passphrase and use the same on every device. It never leaves your devices, so if you forget it your synced data cannot be recovered.")
+            .setView(et)
+            .setPositiveButton("Save") { _, _ ->
+                val pass = et.text.toString()
+                toast("Checking…")
+                Executors.newSingleThreadExecutor().execute {
+                    val err = Cloud.setPassphrase(applicationContext, pass)
+                    ui.post { toast(err ?: "Ready. Press Sync now."); build() }
+                }
+            }
+            .setNegativeButton("Cancel", null).show()
+    }
+
     private fun accountRows() {
+        choiceRow("Sync with", listOf("My sync server", "Google Drive", "OneDrive"),
+            { when (prefs.syncBackend) { "gdrive" -> 1; "onedrive" -> 2; else -> 0 } },
+            { Cloud.selectBackend(prefs, listOf("server", "gdrive", "onedrive")[it]); build() })
+        if (prefs.cloudBackend.isNotEmpty()) { cloudRows(); return }
         val who = when {
             !prefs.syncConfigured -> "Not connected"
             prefs.accountUser.isNotEmpty() -> "${prefs.accountUser} · profile “${prefs.profileName}” · ${prefs.server}"

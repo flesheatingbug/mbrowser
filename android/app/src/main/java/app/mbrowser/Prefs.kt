@@ -232,5 +232,31 @@ class Prefs(ctx: Context) {
         get() = bool("firstRun", false)
         set(v) = putB("firstRun", v)
 
-    val syncConfigured: Boolean get() = server.isNotEmpty() && token.isNotEmpty()
+    // cloud sync (Google Drive / OneDrive), see Cloud.kt
+    var syncBackend: String
+        get() = str("syncBackend", "server")
+        set(v) = put("syncBackend", v)
+    var cloudProvider: String
+        get() = str("cloudProvider", "")
+        set(v) = put("cloudProvider", v)
+    var cloudAccess: String
+        get() = str("cloudAccess", "")
+        set(v) = put("cloudAccess", v)
+    var cloudRefresh: String
+        get() = str("cloudRefresh", "")
+        set(v) = put("cloudRefresh", v)
+    var cloudExpires: Long
+        get() = p.getLong("cloudExpires", 0L)
+        set(v) { p.edit().putLong("cloudExpires", v).apply() }
+    var cloudKey: String
+        get() = str("cloudKey", "")
+        set(v) = put("cloudKey", v)
+    var cloudGSecret: String
+        get() = str("cloudGSecret", "")
+        set(v) = put("cloudGSecret", v.trim())
+    /** "gdrive", "onedrive", or "" when syncing with the server. */
+    val cloudBackend: String get() = if (syncBackend == "gdrive" || syncBackend == "onedrive") syncBackend else ""
+    val cloudSignedIn: Boolean get() = cloudBackend.isNotEmpty() && cloudProvider == cloudBackend && cloudRefresh.isNotEmpty()
+    val cloudReady: Boolean get() = cloudSignedIn && cloudKey.isNotEmpty()
+    val syncConfigured: Boolean get() = if (cloudBackend.isNotEmpty()) cloudReady else server.isNotEmpty() && token.isNotEmpty()
 }

@@ -369,7 +369,7 @@ object VaultSync {
         Thread {
             val prefs = Prefs(app)
             val msg = if (!prefs.syncConfigured) "Connect to a server in Settings to sync passwords."
-            else try { synchronized(Sync) { run(app, Api(prefs.server, prefs.token, prefs.device)) } } catch (e: Exception) { "Sync failed: ${e.message}" }
+            else try { synchronized(Sync) { run(app, Cloud.api(app, prefs)) } } catch (e: Exception) { "Sync failed: ${e.message}" }
             onDone(msg)
         }.start()
     }

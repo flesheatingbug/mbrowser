@@ -174,6 +174,13 @@ object Store {
     @Synchronized fun clearHistory() { history.clear(); saveHistory() }
     fun visitKey(v: Visit) = v.url + "|" + v.time
 
+    /** Everything is sent again (the sync backend changed, so the new place starts empty). */
+    @Synchronized fun markAllDirty() {
+        for (b in bookmarks.values) b.dirty = true
+        for (v in history) v.dirty = true
+        saveBookmarks(); saveHistory()
+    }
+
     /** Forgets all local bookmarks and history (used when the phone is pointed at a different server profile). */
     @Synchronized fun resetAll() {
         bookmarks.clear(); history.clear(); historyBin.clear()

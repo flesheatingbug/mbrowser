@@ -17,6 +17,8 @@ android {
         val pre = System.getenv("MB_PRE") == "1"
         if (pre) applicationIdSuffix = ".pre"
         manifestPlaceholders["appLabel"] = if (pre) "mbrowser Pre" else "mbrowser"
+        // Release builds carry the Google client secret from the GOOGLE_CLIENT_SECRET repository secret (never committed); without it settings asks once
+        buildConfigField("String", "GOOGLE_CLIENT_SECRET", "\"" + (System.getenv("GOOGLE_CLIENT_SECRET") ?: "") + "\"")
         resValue("string", "update_tag", if (pre) "pre-apk" else "latest-apk")
     }
     // Builds are signed with a personal key so a new APK installs over the old one. The key is stored
@@ -40,6 +42,7 @@ android {
             signingConfigs.findByName("mb")?.let { signingConfig = it }
         }
     }
+    buildFeatures { buildConfig = true }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
