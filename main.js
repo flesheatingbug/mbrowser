@@ -917,9 +917,10 @@ function unstack(id, whole) {
 
 // split view: any number of tabs side by side (columns), dividers you can drag, tabs dragged onto the page add a pane
 const SPLIT_GAP = 10;
-const splitActive = () => !!(cur.split && cur.split.ids.length > 1 && cur.split.ids.includes(cur.activeId) && cur.split.ids.every((i) => cur.tabs.has(i)));
+const splitActive = () => !!(splitOn() && cur.split && cur.split.ids.length > 1 && cur.split.ids.includes(cur.activeId) && cur.split.ids.every((i) => cur.tabs.has(i)));
 function evenFractions(n) { return Array.from({ length: n }, () => 1 / n); }
 function splitAdd(id, side) {
+  if (!splitOn()) return;
   const t = cur.tabs.get(id); if (!t || id == null) return;
   let base = splitActive() ? cur.split.ids.slice() : [];
   if (base.includes(id)) return;
@@ -955,6 +956,7 @@ function splitClose() {
   layout(); pushState();
 }
 function splitWithNewTab() {
+  if (!splitOn()) { if (cur.split) splitClose(); return; }
   if (cur.split) { splitClose(); return; }
   const left = cur.activeId; if (left == null) return;
   const id = newTab(undefined, { after: left, background: true });
@@ -975,6 +977,7 @@ function splitResizer(i) {
 
 // put a saved split view back: entries carry sp (position in the split) and fr (its share of the width)
 function restoreSplit(entries, ids) {
+  if (!splitOn()) return;
   const parts = entries.map((e, i) => ({ e, id: ids[i] })).filter((x) => x.e && x.e.sp != null && x.id != null && cur.tabs.has(x.id)).sort((a, b) => a.e.sp - b.e.sp);
   if (parts.length < 2) return;
   const fr = parts.map((x) => Number(x.e.fr) || 1 / parts.length), sum = fr.reduce((a, b) => a + b, 0);
@@ -2126,7 +2129,7 @@ function tabMenu(id) {
       { label: 'Unstack Tabs', click: () => unstack(id, true) },
       { label: 'Remove from Stack', click: () => unstack(id, false) },
     ] : []),
-    ...(cur.split && cur.split.ids.includes(id)
+    ...(!splitOn() ? [] : cur.split && cur.split.ids.includes(id)
       ? [{ label: 'Remove from Split View', click: () => splitRemove(id) }, { label: 'Close Split View', click: () => splitClose() }]
       : id !== cur.activeId ? [{ label: 'Show Side by Side with Current Tab', click: () => splitAdd(id, 'right') }] : []),
     { type: 'separator' },
@@ -2625,6 +2628,8 @@ function importBookmarks(items) {
 let extList = [];
 const loadedExt = new Map();   // path -> extension id
 const betaOn = () => !!S().general.beta;
+// split view (tiling) is a beta feature with its own switch
+const splitOn = () => betaOn() && S().general.splitView !== false;
 const { extractCrx, storeId, crxUrl } = require('./lib/crx');
 const hometunnel = require('./lib/hometunnel');
 const homenet = require('./lib/homenet');
@@ -2786,6 +2791,7 @@ async function applyHomeNetwork({ startup = false } = {}) {
 
 function afterSettingsChange(p) {
   if (!p || p === 'general.homeNetwork') applyHomeNetwork({ startup: !p }).catch(() => {});
+  if (!p || p === 'general.beta' || p === 'general.splitView') for (const w of [...windows]) { const keep = cur; use(w); if (!splitOn() && cur.split) splitClose(); use(keep); }
   if (!p || p === 'general.beta') loadExtensions(session.defaultSession).catch(() => {});
   if (!p || p === 'general.browserId') for (const ses of uaSessions) { try { ses.setUserAgent(uaForMode(S().general.browserId)); } catch { /* ignore */ } }
   if (!p || p === 'appearance.forceDark') for (const tb of tabByWc.values()) applyDark(tb);
@@ -2827,6 +2833,7 @@ function setupIpc() {
   on('tab:dragstart', (_e, id) => {
     if (!Number.isInteger(id) || !cur.tabs.has(id) || cur.tabs.get(id).pinned) return;
     cur.dragTab = id; cur.splitHover = null; cur.splitDropped = null;
+    if (!splitOn()) return;
     setTimeout(() => { if (cur.dragTab === id && !cur.overlayMode) showOverlay('dropzone', { many: splitActive() }); }, 120);
     setTimeout(() => { if (cur.dragTab === id && cur.overlayMode === 'dropzone') { cur.dragTab = null; cur.splitHover = null; hideOverlay(false); } }, 120000);
   });
