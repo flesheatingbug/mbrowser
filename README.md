@@ -6,7 +6,7 @@
 
 <p align="center">
   <b>A fast, private browser for Linux, Windows and Android that syncs to a server you own.</b><br>
-  Bookmarks, speed dials, history, open tabs, passwords and settings follow you everywhere, with no third-party cloud.
+  Bookmarks, speed dials, history, open tabs, passwords and settings follow you everywhere, on your own server, or optionally your own Google Drive or OneDrive.
 </p>
 
 <p align="center">
@@ -102,6 +102,13 @@
 - It works through your own sync server: the browser opens an authenticated tunnel to the server, which connects to the device. Nothing goes through anyone else's service.
 - It has its own **Home network** page in settings: you sign in with your server account (password, and the one-time code if you use one), and the sign-in is remembered per profile with a Sign out button. Each profile has its own switch and servers, and you can save several servers and pick which one to use.
 - Switch it on in the status bar (desktop), the menu or Settings (Android). It needs `ALLOW_TUNNEL=true` on the server; see the security notes in [Sync server setup](#environment-variables).
+
+### Sync with Google Drive or OneDrive
+- No server needed: pick **Google Drive** or **OneDrive** under Settings > Sync (desktop and Android). It is a per-profile choice and your own server stays available.
+- Everything is **encrypted on your device** (AES-256-GCM, key from a sync passphrase you choose) before it is uploaded to the app's private folder in your drive. The passphrase never leaves your devices; if you forget it, the synced data cannot be recovered.
+- First device: sign in, then make up a passphrase. Other devices: sign in and enter the same passphrase.
+- On Android, drive **profiles** are listed in the menu (tap the profile row) and you can add new ones. Data that belongs to another account or profile is never uploaded into the drive.
+- Sign-in opens inside the browser itself. Sign-in uses only access to the app's own hidden folder, not the rest of your drive.
 
 ### Extensions (beta)
 - Install unpacked Chrome extensions (MV2 or MV3) or paste a **Chrome Web Store link** to download and install directly
