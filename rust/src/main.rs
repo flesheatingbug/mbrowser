@@ -5,6 +5,10 @@
 //! through `window.api` / `window.browser`; here a small shim turns those calls into messages to Rust and Rust
 //! answers them. Web pages are plain WebKit views, one per tab.
 
+mod data;
+mod extra;
+mod sync;
+
 use gtk::glib;
 use gtk::prelude::*;
 use serde_json::{json, Map, Value};
@@ -36,6 +40,25 @@ struct Tab {
     muted: bool,
     hover: String,
     custom: Option<String>,
+    group: Option<String>,
+    readable: bool,
+    reader_on: bool,
+}
+
+#[derive(Default)]
+struct Ext {
+    folders: Vec<String>,
+    notes: Vec<Value>,
+    hbin: Vec<Value>,
+    defaults: Value,
+    b_rev: i64,
+    h_rev: i64,
+    h_pushed: f64,
+    sync_status: String,
+    sync_timer: bool,
+    syncing: bool,
+    remote_tabs: Value,
+    filter: Option<webkit2gtk::UserContentFilter>,
 }
 
 struct Br {
@@ -67,6 +90,7 @@ struct Br {
     save_pending: bool,
     dl_next: u64,
     hook: Hook,
+    x: Ext,
 }
 
 type B = Rc<RefCell<Br>>;
@@ -608,6 +632,7 @@ fn new_tab(b: &B, url: Option<&str>, private: bool, background: bool) -> WebView
         (id, if private { br.pctx.clone() } else { br.ctx.clone() }, br.hook.clone(), br.root.clone(), br.stack.clone(), target)
     };
     let ucm = make_ucm(&hook, &format!("tab:{id}"), &root, false);
+    extra::attach_filter(b, &ucm);
     let view = WebView::builder().web_context(&ctx).user_content_manager(&ucm).build();
     if let Some(s) = WebViewExt::settings(&view) {
         use webkit2gtk::SettingsExt;
@@ -654,7 +679,7 @@ fn new_tab(b: &B, url: Option<&str>, private: bool, background: bool) -> WebView
                         schedule_save(&b);
                     }
                 }
-                LoadEvent::Finished => with_tab(&b, id, |t| t.loading = false),
+                LoadEvent::Finished => { with_tab(&b, id, |t| { t.loading = false; t.readable = false; t.reader_on = false; }); extra::detect_reader(&b, id); }
                 _ => {}
             }
             push(&b);
@@ -683,7 +708,7 @@ fn new_tab(b: &B, url: Option<&str>, private: bool, background: bool) -> WebView
 
     stack.add_named(&view, &id.to_string());
     view.show();
-    b.borrow_mut().tabs.push(Tab { id, view: view.clone(), title: String::new(), url: target.clone(), loading: false, pinned: false, private, muted: false, hover: String::new(), custom: None });
+    b.borrow_mut().tabs.push(Tab { id, view: view.clone(), title: String::new(), url: target.clone(), loading: false, pinned: false, private, muted: false, hover: String::new(), custom: None, group: None, readable: false, reader_on: false });
     if !background {
         switch_tab(b, id);
     }
@@ -1046,12 +1071,13 @@ fn ipc(b: &B, text: &str) {
     let args: Vec<Value> = m["a"].as_array().cloned().unwrap_or_default();
     let src = m["src"].as_str().unwrap_or("").to_string();
     if m["k"] == "i" {
-        let r = invoke(b, &ch, &args);
         let id = m["id"].as_u64().unwrap_or(0);
+        if sync::async_invoke(b, &ch, &args, &src, id) { return; }
+        let r = invoke(b, &ch, &args);
         if let Some(v) = view_for(b, &src) {
             v.run_javascript(&format!("window.__res({id},{});", r), None::<&gtk::gio::Cancellable>, |_| {});
         }
-    } else {
+    } else if !extra::send(b, &ch, &args, &src) {
         send(b, &ch, &args);
     }
 }
@@ -1225,7 +1251,10 @@ fn bookmark_remove(b: &B, url: &str) {
 }
 
 fn invoke(b: &B, ch: &str, a: &[Value]) -> Value {
+    if let Some(v) = data::invoke(b, ch, a) { return v; }
+    if let Some(v) = extra::invoke(b, ch, a) { return v; }
     match ch {
+        "sync:status" => json!(sync::status(b)),
         "settings:get" => b.borrow().settings.clone(),
         "settings:set" => {
             let p = arg_str(a, 0);
@@ -1475,10 +1504,17 @@ fn main() {
         win: window.clone(), tabs_v: tabs_v.clone(), tool_v: tool_v.clone(), status_v: status_v.clone(), overlay_v: overlay_v.clone(),
         stack, ctx: ctx.clone(), pctx: pctx.clone(), ucm_chrome: UserContentManager::new(), tabs: vec![], active: 0, next: 1,
         settings, bookmarks, history, downloads: vec![], closed: vec![], themes, root: root.clone(), data: data.clone(),
-        mode: None, suggest: vec![], sel: -1, typed: String::new(), push_pending: false, save_pending: false, dl_next: 0, hook: hook.clone(),
+        mode: None, suggest: vec![], sel: -1, typed: String::new(), push_pending: false, save_pending: false, dl_next: 0, hook: hook.clone(), x: Ext::default(),
     };
     let b: B = Rc::new(RefCell::new(br));
     *hook.borrow_mut() = Some(b.clone());
+    {
+        let mut br = b.borrow_mut();
+        br.x.defaults = serde_json::from_str(include_str!("../data/defaults.json")).unwrap_or(json!({}));
+        data::load_files(&mut br);
+    }
+    sync::init(&b);
+    extra::init_blocker(&b);
     hook_downloads(&ctx, &b);
     hook_downloads(&pctx, &b);
 
