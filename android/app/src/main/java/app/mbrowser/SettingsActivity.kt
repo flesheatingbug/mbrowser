@@ -665,11 +665,16 @@ class SettingsActivity : BaseActivity() {
                 if (prefs.cloudBackend == "gdrive" && Cloud.googleSecret(prefs).isEmpty())
                     textRow("Google client secret", "Paste it once. It stays on this phone.", { prefs.cloudGSecret }, { prefs.cloudGSecret = it }, "GOCSPX-…")
                 actionRow("Sign in to $name", "Opens another browser app so you can allow access") {
-                    Cloud.beginAuth(this, prefs.cloudBackend, { u -> startActivity(Intent(this, MainActivity::class.java).setAction(Intent.ACTION_VIEW).setData(android.net.Uri.parse(u))) }) { err -> ui.post { toast(err ?: "Signed in"); build() } }
+                    Cloud.beginAuth(this, prefs.cloudBackend, { u -> startActivity(Intent(this, MainActivity::class.java).setAction(Intent.ACTION_VIEW).setData(android.net.Uri.parse(u))) }) { err -> ui.post {
+                        toast(err ?: "Signed in")
+                        // the sign-in happened in a browser tab: come back here and ask for the passphrase straight away
+                        startActivity(Intent(this, SettingsActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_SINGLE_TOP))
+                        build(); if (err == null) promptPassphrase()
+                    } }
                     toast("Sign in on the page that opened, then come back")
                 }
             }
-            !prefs.cloudReady -> actionRow("Set the sync passphrase", "Use the same one on all your devices") { promptPassphrase() }
+            !prefs.cloudReady -> actionRow("Step 2: enter your sync passphrase", "Sync will not start until you do. Tap here") { promptPassphrase() }
             else -> actionRow("$name sync is on", "Everything is encrypted on this phone before it is uploaded") { }
         }
         if (prefs.cloudSignedIn) actionRow("Sign out of $name", "Stops syncing. Bookmarks and history stay on this phone.") {
@@ -681,10 +686,11 @@ class SettingsActivity : BaseActivity() {
         val et = EditText(this)
         et.hint = "At least 8 characters"
         et.inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
-        AlertDialog.Builder(this).setTitle("Sync passphrase")
-            .setMessage("Choose one passphrase and use the same on every device. It never leaves your devices, so if you forget it your synced data cannot be recovered.")
+        et.hint = "Sync passphrase (8+ characters)"
+        AlertDialog.Builder(this).setTitle("One more step: sync passphrase")
+            .setMessage("Everything is encrypted with this passphrase before it is uploaded.\n\nFirst device: make up a new passphrase.\nAlready syncing another device: type the same one you used there.\n\nWrite it down. It is never uploaded, so if you forget it your synced data cannot be recovered.")
             .setView(et)
-            .setPositiveButton("Save") { _, _ ->
+            .setCancelable(false).setPositiveButton("Continue") { _, _ ->
                 val pass = et.text.toString()
                 toast("Checking…")
                 Executors.newSingleThreadExecutor().execute {

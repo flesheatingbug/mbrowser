@@ -15,7 +15,14 @@ object Dials {
 
     private fun norm(f: String) = Store.cleanPath(f)
     private fun clean(n: String, fb: String) = n.replace("/", "-").trim().ifEmpty { fb }.take(60)
-    private fun groupPath(groups: JSONArray, i: Int) = ROOT + "/" + clean(groups.getJSONObject(i).optString("name"), "Page ${i + 1}")
+    /** The folder for a page: an existing one that differs only in capitals (the desktop says "Speed dial", the phone "Speed Dial") is reused. */
+    private fun canon(p: String): String {
+        if (!Store.ready()) return p
+        val lp = p.lowercase()
+        for (b in Store.liveBookmarks()) { val f = norm(b.folder); if (f.lowercase() == lp) return f }
+        return p
+    }
+    private fun groupPath(groups: JSONArray, i: Int) = canon(ROOT + "/" + clean(groups.getJSONObject(i).optString("name"), "Page ${i + 1}"))
     private fun lk(path: String) = path.split('/').joinToString(" / ")     // layout key, as written by the desktop
     private fun isFolder(o: JSONObject) = o.optString("url").isEmpty() && (o.has("dials") || o.has("items") || o.optString("type") == "folder")
     private fun kids(o: JSONObject): JSONArray = o.optJSONArray("dials") ?: o.optJSONArray("items") ?: JSONArray()

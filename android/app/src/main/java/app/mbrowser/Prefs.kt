@@ -255,6 +255,13 @@ class Prefs(ctx: Context) {
         get() = str("cloudGSecret", "")
         set(v) = put("cloudGSecret", v.trim())
     /** "gdrive", "onedrive", or "" when syncing with the server. */
+    /** Which profile of the drive this phone syncs: "" is the main one, otherwise a slug (files are named p-<slug>-bookmarks.enc, ...). */
+    var cloudProfile: String
+        get() = str("cloudProfile", "")
+        set(v) = put("cloudProfile", v)
+    var cloudProfileNames: String
+        get() = str("cloudProfileNames", "{}")
+        set(v) = put("cloudProfileNames", v)
     val cloudBackend: String get() = if (syncBackend == "gdrive" || syncBackend == "onedrive") syncBackend else ""
     val cloudSignedIn: Boolean get() = cloudBackend.isNotEmpty() && cloudProvider == cloudBackend && cloudRefresh.isNotEmpty()
     val cloudReady: Boolean get() = cloudSignedIn && cloudKey.isNotEmpty()

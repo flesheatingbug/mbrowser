@@ -2173,6 +2173,41 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
         }.start()
     }
 
+    /** Profiles of a Google Drive / OneDrive account: tap to switch, or make a new one. */
+    private fun showCloudProfiles() {
+        if (!prefs.cloudReady) { startActivity(Intent(this, SettingsActivity::class.java)); return }
+        Toast.makeText(this, "Looking for profiles…", Toast.LENGTH_SHORT).show()
+        Thread {
+            val list = try { Cloud.listProfiles(prefs) } catch (e: Exception) { null }
+            ui.post {
+                if (list == null) { Toast.makeText(this, "Could not reach ${Cloud.label(prefs.cloudBackend)}", Toast.LENGTH_LONG).show(); return@post }
+                val slugs = list.keys.toList()
+                val labels = slugs.map { (list[it] ?: it) + if (it == prefs.cloudProfile) "  (current)" else "" } + "New profile…"
+                androidx.appcompat.app.AlertDialog.Builder(this).setTitle("Profiles").setItems(labels.toTypedArray()) { _, w ->
+                    if (w == slugs.size) {
+                        promptFields(this, "New profile", listOf("Name"), listOf(""), "Create") { v ->
+                            val nm = v[0].trim(); val sl = Cloud.slug(nm)
+                            if (sl.isEmpty()) Toast.makeText(this, "Use letters or numbers in the name", Toast.LENGTH_LONG).show() else switchCloud(sl, nm)
+                        }
+                    } else if (slugs[w] != prefs.cloudProfile) switchCloud(slugs[w], list[slugs[w]] ?: slugs[w])
+                }.setNegativeButton("Close", null).show()
+            }
+        }.start()
+    }
+
+    private fun switchCloud(slug: String, name: String) {
+        val app = applicationContext
+        Toast.makeText(this, "Switching to $name…", Toast.LENGTH_SHORT).show()
+        Thread {
+            synchronized(Sync) {
+                Store.resetAll(); Settings.reset(); Vault.forgetLocal(app)
+                prefs.otherTabs = "[]"; prefs.lookHash = ""
+                Cloud.useProfile(prefs, slug, name)
+            }
+            ui.post { syncNow(true); recreate() }
+        }.start()
+    }
+
     private fun showMenu(anchor: View) {
         val t = cur()
         // remember what is selected on the page now: opening the menu can clear the selection
@@ -2216,15 +2251,15 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
             who.orientation = LinearLayout.HORIZONTAL; who.gravity = Gravity.CENTER_VERTICAL
             who.setPadding(dp(10), dp(4), dp(10), dp(8))
             who.foreground = TypedValueHolder.selectable(this)
-            val name = Cloud.label(prefs.cloudBackend)
+            val name = if (prefs.cloudProfile.isEmpty()) "Main" else prefs.profileName.ifBlank { prefs.cloudProfile }
             val av = ImageView(this); av.setImageDrawable(Avatars.make(this, name, prefs.profileColor, prefs.profileAvatar, dp(40)))
             who.addView(av, LinearLayout.LayoutParams(dp(40), dp(40)))
             val col = LinearLayout(this); col.orientation = LinearLayout.VERTICAL; col.setPadding(dp(12), 0, 0, 0)
             val n1 = TextView(this); n1.text = name; n1.textSize = 16f; n1.setTextColor(tc(R.attr.mbText)); n1.setTypeface(null, android.graphics.Typeface.BOLD)
-            val n2 = TextView(this); n2.text = if (prefs.cloudReady) "Syncing. Tap for sync settings" else "Finish setting up sync"; n2.textSize = 13f; n2.setTextColor(tc(R.attr.mbMuted))
+            val n2 = TextView(this); n2.text = if (prefs.cloudReady) "Switch profile · " + Cloud.label(prefs.cloudBackend) else "Finish setting up sync"; n2.textSize = 13f; n2.setTextColor(tc(R.attr.mbMuted))
             col.addView(n1); col.addView(n2)
             who.addView(col, LinearLayout.LayoutParams(0, -2, 1f))
-            who.setOnClickListener { pop.dismiss(); startActivity(Intent(this, SettingsActivity::class.java)) }
+            who.setOnClickListener { pop.dismiss(); showCloudProfiles() }
             card.addView(who, LinearLayout.LayoutParams(-1, -2))
         }
 

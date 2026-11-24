@@ -53,7 +53,7 @@ object Cloud {
     }
 
     fun disconnect(prefs: Prefs) {
-        prefs.cloudProvider = ""; prefs.cloudAccess = ""; prefs.cloudRefresh = ""; prefs.cloudExpires = 0L; prefs.cloudKey = ""
+        prefs.cloudProfile = ""; prefs.cloudProvider = ""; prefs.cloudAccess = ""; prefs.cloudRefresh = ""; prefs.cloudExpires = 0L; prefs.cloudKey = ""
         prefs.syncBackend = "server"
         synchronized(lock) { driveIds.clear() }
     }
@@ -179,6 +179,38 @@ object Cloud {
     // ---------------- the server API, rebuilt on encrypted files ----------------
     private val FILES = mapOf("bookmarks" to "bookmarks.enc", "history" to "history.enc", "tabs" to "tabs.enc", "vault" to "vault.enc", "settings" to "settings.enc", "wallpaper" to "wallpaper.enc")
 
+    private fun fname(prefs: Prefs, kind: String) = (if (prefs.cloudProfile.isEmpty()) "" else "p-" + prefs.cloudProfile + "-") + FILES.getValue(kind)
+
+    fun slug(name: String) = name.lowercase().replace(Regex("[^a-z0-9]+"), "-").trim('-').take(24)
+
+    /** Profiles found in the drive: slug to the display name this phone knows (the slug when it has none). Main is "". Call off the main thread. */
+    fun listProfiles(prefs: Prefs): LinkedHashMap<String, String> {
+        val names = try { JSONObject(prefs.cloudProfileNames) } catch (_: Exception) { JSONObject() }
+        val out = LinkedHashMap<String, String>()
+        out[""] = "Main"
+        val files = ArrayList<String>()
+        if (prefs.cloudProvider == "gdrive") {
+            val r = authed(prefs, "GET", "https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&fields=files(name)&pageSize=200")
+            if (r.code in 200..299) { val a = JSONObject(r.text).optJSONArray("files") ?: JSONArray(); for (i in 0 until a.length()) files.add(a.getJSONObject(i).optString("name")) }
+        } else {
+            val r = authed(prefs, "GET", "https://graph.microsoft.com/v1.0/me/drive/special/approot/children?\$select=name&\$top=200")
+            if (r.code in 200..299) { val a = JSONObject(r.text).optJSONArray("value") ?: JSONArray(); for (i in 0 until a.length()) files.add(a.getJSONObject(i).optString("name")) }
+        }
+        for (f in files) { val m = Regex("^p-(.+)-(bookmarks|history|tabs|vault|settings|wallpaper)\\.enc$").find(f) ?: continue; val s = m.groupValues[1]; if (s !in out) out[s] = names.optString(s, s) }
+        for (k in names.keys()) if (k !in out) out[k] = names.optString(k, k)
+        return out
+    }
+
+    /** Moves this phone to another profile of the drive (a new slug starts an empty one). The caller clears the local data first. */
+    fun useProfile(prefs: Prefs, slug: String, name: String) {
+        val names = try { JSONObject(prefs.cloudProfileNames) } catch (_: Exception) { JSONObject() }
+        if (slug.isNotEmpty()) names.put(slug, name)
+        prefs.cloudProfileNames = names.toString()
+        prefs.cloudProfile = slug
+        prefs.profileName = if (slug.isEmpty()) "Main" else name
+        prefs.bmRev = 0; prefs.histRev = 0
+    }
+
     private fun empty(kind: String): JSONObject = when (kind) {
         "bookmarks" -> JSONObject().put("rev", 0).put("items", JSONObject())
         "history" -> JSONObject().put("rev", 0).put("items", JSONArray())
@@ -194,13 +226,13 @@ object Cloud {
     }
 
     private fun readFile(prefs: Prefs, kind: String): JSONObject {
-        val text = driveRead(prefs, FILES.getValue(kind)) ?: return empty(kind)
+        val text = driveRead(prefs, fname(prefs, kind)) ?: return empty(kind)
         return try { open(key(prefs), text) } catch (e: ApiException) { throw e } catch (_: Exception) {
-            throw ApiException(400, "Could not decrypt ${FILES[kind]}: the sync passphrase on this phone does not match the one used by your other devices.")
+            throw ApiException(400, "Could not decrypt ${fname(prefs, kind)}: the sync passphrase on this phone does not match the one used by your other devices.")
         }
     }
 
-    private fun writeFile(prefs: Prefs, kind: String, d: JSONObject) = driveWrite(prefs, FILES.getValue(kind), seal(key(prefs), d))
+    private fun writeFile(prefs: Prefs, kind: String, d: JSONObject) = driveWrite(prefs, fname(prefs, kind), seal(key(prefs), d))
 
     private fun good(u: String) = u.length <= 8000 && (u.startsWith("http://", true) || u.startsWith("https://", true))
     private fun clip(s: String?, n: Int = 900) = (s ?: "").take(n)
