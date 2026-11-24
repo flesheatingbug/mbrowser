@@ -207,6 +207,7 @@ object Cloud {
         if (slug.isNotEmpty()) names.put(slug, name)
         prefs.cloudProfileNames = names.toString()
         prefs.cloudProfile = slug
+        prefs.dataOwner = "cloud|" + prefs.cloudProvider + "|" + slug
         prefs.profileName = if (slug.isEmpty()) "Main" else name
         prefs.bmRev = 0; prefs.histRev = 0
     }
@@ -368,7 +369,12 @@ object Cloud {
                     prefs.cloudKey = hex(key)
                 }
                 prefs.bmRev = 0; prefs.histRev = 0
-                Store.markAllDirty()
+                val owner = "cloud|" + prefs.cloudProvider + "|" + prefs.cloudProfile
+                if (prefs.dataOwner.isNotEmpty() && prefs.dataOwner != owner) {
+                    // what is on the phone belongs to another account or profile (your own server, say): never mix it into the drive
+                    synchronized(Sync) { Store.resetAll(); Settings.reset(); Vault.forgetLocal(ctx.applicationContext); prefs.otherTabs = "[]"; prefs.lookHash = ""; prefs.vaultVer = 0; prefs.vaultHash = "" }
+                } else Store.markAllDirty()
+                prefs.dataOwner = owner; prefs.verifiedToken = ""
                 null
             }
         } catch (e: Exception) { "Could not reach ${label(prefs.cloudProvider)}: ${e.message}" }
