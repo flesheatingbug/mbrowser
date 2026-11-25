@@ -394,14 +394,35 @@
       }
       return r;
     };
-    const h1 = document.createElement('h4'); h1.textContent = 'Open tabs'; body.append(h1);
+    // each section folds away; the choice is remembered. With several windows the open tabs are grouped per window.
+    const folded = (k) => { try { return localStorage.getItem('tl-fold-' + k) === '1'; } catch { return false; } };
+    const toggle = (k) => { try { localStorage.setItem('tl-fold-' + k, folded(k) ? '0' : '1'); } catch { /* ignore */ } renderTabList(); };
+    const head = (k, text, n) => {
+      const h = document.createElement('h4'); h.style.cssText = 'cursor:pointer;user-select:none;display:flex;gap:6px;align-items:center';
+      const off = folded(k) && !q.length;
+      h.textContent = (off ? '▸ ' : '▾ ') + text + (n != null ? ' (' + n + ')' : '');
+      h.onclick = () => toggle(k); body.append(h);
+      return off;
+    };
     const open = TL.open.filter(ok);
-    open.forEach((t) => body.append(row(t, 'open')));
-    if (!open.length) { const e = document.createElement('div'); e.className = 'tempty'; e.textContent = 'No matching tabs'; body.append(e); }
-    const h2 = document.createElement('h4'); h2.textContent = 'Recently closed'; body.append(h2);
+    if (!head('open', 'Open tabs', open.length)) {
+      const wins = [...new Set(open.map((t) => t.window))];
+      if (wins.length > 1) {
+        for (const w of wins) {
+          const items = open.filter((t) => t.window === w);
+          const h = document.createElement('h4'); h.style.cssText = 'cursor:pointer;user-select:none;margin-left:10px;font-weight:500';
+          const off = folded('win' + w) && !q.length;
+          h.textContent = (off ? '▸ ' : '▾ ') + 'Window ' + w + ' (' + items.length + ')'; h.onclick = () => toggle('win' + w); body.append(h);
+          if (!off) items.forEach((t) => body.append(row(t, 'open')));
+        }
+      } else open.forEach((t) => body.append(row(t, 'open')));
+      if (!open.length) { const e = document.createElement('div'); e.className = 'tempty'; e.textContent = 'No matching tabs'; body.append(e); }
+    }
     const closed = TL.closed.filter(ok);
-    closed.forEach((t) => body.append(row(t, 'closed')));
-    if (!closed.length) { const e = document.createElement('div'); e.className = 'tempty'; e.textContent = q.length ? 'No matches' : 'Nothing closed recently'; body.append(e); }
+    if (!head('closed', 'Recently closed', closed.length)) {
+      closed.forEach((t) => body.append(row(t, 'closed')));
+      if (!closed.length) { const e = document.createElement('div'); e.className = 'tempty'; e.textContent = q.length ? 'No matches' : 'Nothing closed recently'; body.append(e); }
+    }
   }
   $('tlq').addEventListener('input', renderTabList);
   $('tlq').addEventListener('keydown', (e) => { if (e.key === 'Escape') api.closeOverlay(); });

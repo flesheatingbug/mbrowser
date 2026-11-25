@@ -158,6 +158,8 @@ let vaultSyncInfo = { state: 'idle', message: 'Not synced yet' };
 let settingsSyncNote = '';
 let nextId = 1;
 const closedTabs = [];
+let closedTimer = null;
+function saveClosedSoon() { clearTimeout(closedTimer); closedTimer = setTimeout(() => { try { save('closed.json', closedTabs.slice(-50)); } catch { /* ignore */ } }, 500); }
 const blockedCounts = new Map(); // webContents id -> count
 const blockedHostsLog = new Map(); // webContents id -> Map(host -> { n, type })
 const chromeIds = new Set();
@@ -1233,7 +1235,8 @@ function closeTab(id) {
     const u = t.wc.getURL();
     if (u && u !== 'about:blank') {
       closedTabs.push({ url: u, title: t.wc.getTitle(), pinned: t.pinned });
-      if (closedTabs.length > 25) closedTabs.shift();
+      if (closedTabs.length > 50) closedTabs.shift();
+      saveClosedSoon();
     }
   }
   if (cur.split && cur.split.ids.includes(id)) { try { cur.win.contentView.removeChildView(t.view); } catch { /* not shown */ } cur.split.ids = cur.split.ids.filter((i) => i !== id); cur.split.fr = null; if (cur.split.ids.length < 2) cur.split = null; }
@@ -1267,7 +1270,7 @@ function closeTab(id) {
 }
 
 function reopenTab() {
-  const c = closedTabs.pop();
+  const c = closedTabs.pop(); saveClosedSoon();
   if (c) newTab(c.url, { pinned: c.pinned });
 }
 
@@ -3072,7 +3075,7 @@ function setupIpc() {
     if (cur.overlayMode === 'tablist') cur.overlay.webContents.send('tablist:data', tablistData());
   });
   on('tablist:reopen', (_e, idx) => {
-    const c = closedTabs.splice(idx, 1)[0];
+    const c = closedTabs.splice(idx, 1)[0]; saveClosedSoon();
     hideOverlay(false);
     if (c) newTab(c.url, { pinned: c.pinned });
   });
@@ -4113,7 +4116,7 @@ function setupIpc() {
     setImmediate(async () => {
       const dir = profiles.dirFor(profileId);
       for (const f of ['bookmarks.json', 'history.json', 'history-bin.json', 'notes.json', 'bookmark-folders.json',
-                        'settings.json', 'vault.json', 'session.json', 'syncstate.json',
+                        'settings.json', 'vault.json', 'session.json', 'closed.json', 'syncstate.json',
                         'vault-remember.key', 'vault-device.key', 'dialicons']) {
         try { fs.rmSync(path.join(dir, f), { recursive: true, force: true }); } catch {}
       }
@@ -4190,7 +4193,7 @@ function setupIpc() {
       // Delete our own data files from the active profile dir
       // (Chromium's LevelDB files may be locked on Windows — clearStorageData clears them in-process)
       for (const f of ['bookmarks.json', 'history.json', 'history-bin.json', 'notes.json', 'bookmark-folders.json',
-                        'settings.json', 'vault.json', 'session.json', 'syncstate.json',
+                        'settings.json', 'vault.json', 'session.json', 'closed.json', 'syncstate.json',
                         'vault-remember.key', 'vault-device.key', 'dialicons']) {
         try { fs.rmSync(path.join(baseDir, f), { recursive: true, force: true }); } catch {}
       }
@@ -4679,6 +4682,8 @@ function addCurrentToSpeedDial() {
 // ---------- windows ----------
 function startupTabs() {
   const g = S().general;
+  // recently closed tabs survive a restart
+  if (!closedTabs.length) { const old = load('closed.json', []); if (Array.isArray(old)) closedTabs.push(...old.filter((c) => c && typeof c.url === 'string').slice(-50)); }
   const given = launchUrls(process.argv);
   if (given.length && g.startup !== 'restore') { given.forEach((u) => newTab(u)); return; }
   if (g.startup === 'restore') {
@@ -4812,6 +4817,7 @@ function onWindowClosed(w) {
       if (closedTabs.length > 50) closedTabs.shift();
     }
   }
+  try { save('closed.json', closedTabs.slice(-50)); } catch { /* ignore */ }
   for (const t of [...w.tabs.values()]) {
     const id = t.wc.id;
     tabByWc.delete(id); tabById.delete(t.id); blockedCounts.delete(id);
