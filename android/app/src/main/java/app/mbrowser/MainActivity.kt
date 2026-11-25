@@ -751,6 +751,7 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
         fun add(l: String, a: () -> Unit) { labels.add(l); acts.add(a) }
         if (!link.isNullOrEmpty()) {
             add("Open in new tab") { newTab(link, tab.priv) }
+            add("Open in background tab") { newTab(link, tab.priv, true); Toast.makeText(this, "Opened in background", Toast.LENGTH_SHORT).show() }
             if (!tab.priv) add("Open in private tab") { newTab(link, true) }
             add("Copy link address") { copyText("link", link) }
             val t = text?.trim().orEmpty()
@@ -888,7 +889,7 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
         if (::startPage.isInitialized) startPage.refresh()
     }
 
-    private fun newTab(url: String?, priv: Boolean = false): Tab {
+    private fun newTab(url: String?, priv: Boolean = false, background: Boolean = false): Tab {
         val w = object : WebView(this) {
             // adds "Web search" to the text-selection toolbar (Copy, Select all, Share ...)
             override fun startActionMode(cb: android.view.ActionMode.Callback?, type: Int): android.view.ActionMode? =
@@ -1127,6 +1128,14 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
             true
         }
         tabs.add(tab)
+        if (background && url != null) {
+            // opened behind the current tab: the page you are reading stays on screen
+            val u = toUrl(url)
+            tab.home = false; tab.url = u
+            if (prefs.lazyTabs) tab.pending = u else tab.web.loadUrl(u)
+            render()
+            return tab
+        }
         switchTo(tabs.size - 1)
         if (url != null) navigate(url)
         return tab
