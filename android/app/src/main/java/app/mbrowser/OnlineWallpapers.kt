@@ -71,14 +71,20 @@ object OnlineWallpapers {
         }
         val j = JSONObject(String(get("https://www.bing.com/HPImageArchive.aspx?format=js&idx=${page * 8}&n=8&mkt=en-GB")))
         val arr = j.optJSONArray("images") ?: JSONArray()
-        val items = (0 until arr.length()).map { arr.getJSONObject(it) }.filter { Regex("^/th\\?id=[\\w.\\-]+_$").matches(it.optString("urlbase")) }.map {
+        val items = (0 until arr.length()).map { arr.getJSONObject(it) }.filter { Regex("^/th\\?id=[\\w.\\-]+$").matches(it.optString("urlbase")) }.map {
             val b = "https://www.bing.com" + it.getString("urlbase")
-            Item(b + "480x800.jpg", b + "1080x1920.jpg", it.optString("title", it.optString("copyright", "Bing")).take(80))
+            Item(b + "_480x800.jpg", b + "_1080x1920.jpg", it.optString("title", it.optString("copyright", "Bing")).take(80))
         }
-        return Page(items, page < 12)
+        return Page(items, page < 1)
     }
 
-    fun thumb(url: String): Bitmap? = try { val b = get(url, 4 * 1024 * 1024); BitmapFactory.decodeByteArray(b, 0, b.size) } catch (_: Exception) { null }
+    fun thumb(url: String): Bitmap? = try {
+        val b = get(url, 40 * 1024 * 1024)
+        val o = BitmapFactory.Options(); o.inJustDecodeBounds = true; BitmapFactory.decodeByteArray(b, 0, b.size, o)
+        var n = 1; while (o.outWidth / (n * 2) >= 400) n *= 2
+        val o2 = BitmapFactory.Options(); o2.inSampleSize = n
+        BitmapFactory.decodeByteArray(b, 0, b.size, o2)
+    } catch (_: Exception) { null }
 
     /** Downloads the picture and makes it the wallpaper. Returns an error message, or null when it worked. */
     fun use(ctx: Context, url: String): String? = try {

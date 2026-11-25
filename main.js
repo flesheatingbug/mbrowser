@@ -3991,10 +3991,24 @@ function setupIpc() {
       // Bing keeps the last 8 days per request; idx steps back through older ones
       const j = await wpJson('https://www.bing.com/HPImageArchive.aspx?format=js&idx=' + (pg * 8) + '&n=8&mkt=en-GB');
       const size = w >= 2600 ? 'UHD' : '1920x1080';
-      return { items: (j.images || []).filter((x) => /^\/th\?id=[\w.\-]+_$/.test(String(x.urlbase))).map((x) => ({
-        thumb: 'https://www.bing.com' + x.urlbase + '320x180.jpg', full: 'https://www.bing.com' + x.urlbase + size + '.jpg',
-        label: String(x.title || x.copyright || 'Bing').slice(0, 80) })), more: pg < 12 };
+      return { items: (j.images || []).filter((x) => /^\/th\?id=[\w.\-]+$/.test(String(x.urlbase))).map((x) => ({
+        thumb: 'https://www.bing.com' + x.urlbase + '_400x240.jpg', full: 'https://www.bing.com' + x.urlbase + '_' + size + '.jpg',
+        label: String(x.title || x.copyright || 'Bing').slice(0, 80) })), more: pg < 1 };
     } catch (e) { return { error: 'Could not reach the picture service: ' + e.message }; }
+  }, PAGE_ONLY);
+  // previews come through here: the page cannot load them itself (some servers refuse its referrer), and big originals are shrunk first
+  handle('wallpaper:online-thumb', async (_e, url) => {
+    if (typeof url !== 'string' || !wpOk(url)) return '';
+    try {
+      const r = await net.fetch(url, { headers: { 'user-agent': WP_UA } });
+      if (!r.ok) return '';
+      const b = Buffer.from(await r.arrayBuffer());
+      if (b.length > 40 * 1024 * 1024 || !sniffMime(b)) return '';
+      const img = nativeImage.createFromBuffer(b);
+      if (img.isEmpty()) return '';
+      const small = img.getSize().width > 360 ? img.resize({ width: 360, quality: 'good' }) : img;
+      return 'data:image/jpeg;base64,' + small.toJPEG(72).toString('base64');
+    } catch { return ''; }
   }, PAGE_ONLY);
   handle('wallpaper:online-set', async (_e, url) => {
     if (typeof url !== 'string' || !wpOk(url)) return { error: 'That address is not an allowed picture source.' };

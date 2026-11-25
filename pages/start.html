@@ -271,7 +271,14 @@ function refreshThumbs() {
   }
 }
 
-const save = () => browser.setSetting('startPage', SP);
+// this page keeps its own copy of the start page settings, and saves all of it: the wallpaper may have been changed elsewhere
+// (the settings page, online wallpapers) since it loaded, so keep the stored one unless this page just changed it
+let wpTouched = false;
+const save = async () => {
+  if (!wpTouched) { try { const st = await browser.getSettings(); SP.wallpaper = st.startPage.wallpaper; SP.wallpaperRev = st.startPage.wallpaperRev; } catch { /* keep ours */ } }
+  wpTouched = false;
+  return browser.setSetting('startPage', SP);
+};
 const isWeb = (u) => /^https?:\/\//i.test(u);
 const activeIdx = () => Math.max(0, SP.groups.findIndex((g) => g.id === SP.activeGroup));
 const currentItems = () => folderPath.length
@@ -1022,7 +1029,7 @@ function renderPanel() {
   const wpNone = document.createElement('button');
   wpNone.className = 'wp-sw wp-none' + (curWp === 'none' ? ' on' : '');
   wpNone.textContent = 'None';
-  wpNone.onclick = () => { SP.wallpaper = 'none'; save(); applyLook(); renderPanel(); };
+  wpNone.onclick = () => { wpTouched = true; SP.wallpaper = 'none'; save(); applyLook(); renderPanel(); };
   wpGrid.append(wpNone);
 
   ['aurora','dusk','ocean','dunes','mist','forest','ember','orchid','slate','nebula','peaks','grey','paper','sunrise','lagoon','midnight','blossom','glacier','canyon','meadow','neon','tide','graphite'].forEach((id) => {
@@ -1030,7 +1037,7 @@ function renderPanel() {
     s.className = 'wp-sw' + (curWp === id ? ' on' : '');
     s.title = id.charAt(0).toUpperCase() + id.slice(1);
     s.style.backgroundImage = `url("my://wallpaper/${id}")`;
-    s.onclick = () => { SP.wallpaper = id; save(); applyLook(); renderPanel(); };
+    s.onclick = () => { wpTouched = true; SP.wallpaper = id; save(); applyLook(); renderPanel(); };
     wpGrid.append(s);
   });
 
@@ -1038,7 +1045,7 @@ function renderPanel() {
   wpUp.textContent = curWp === 'custom' ? '✓ Custom — upload new…' : '+ Upload wallpaper…';
   wpUp.onclick = async () => {
     const r = await browser.wallpaperPick();
-    if (r && r.ok) { SP.wallpaper = 'custom'; SP.wallpaperRev = (SP.wallpaperRev || 0) + 1; save(); applyLook(); renderPanel(); }
+    if (r && r.ok) { wpTouched = true; SP.wallpaper = 'custom'; SP.wallpaperRev = (SP.wallpaperRev || 0) + 1; save(); applyLook(); renderPanel(); }
     else if (r && r.error) alert(r.error);
   };
   wpGrid.append(wpUp);
@@ -1092,7 +1099,8 @@ document.addEventListener('click', (e) => {
 // the tiles are bookmarks: pick up changes made in the bookmark manager or by sync when you come back to this tab
 document.addEventListener('visibilitychange', async () => {
   if (document.hidden || !SP) return;
-  try { const st = await browser.getSettings(); const cur = JSON.stringify(SP.groups.map((g) => g.dials)); const nw = JSON.stringify(st.startPage.groups.map((g) => g.dials)); if (cur !== nw && document.getElementById('panel-open') == null) { SP.groups = st.startPage.groups; render(); } } catch { /* ignore */ }
+  try { const st = await browser.getSettings(); const cur = JSON.stringify(SP.groups.map((g) => g.dials)); const nw = JSON.stringify(st.startPage.groups.map((g) => g.dials)); if (cur !== nw && document.getElementById('panel-open') == null) { SP.groups = st.startPage.groups; render(); }
+    if (st.startPage.wallpaper !== SP.wallpaper || st.startPage.wallpaperRev !== SP.wallpaperRev) { SP.wallpaper = st.startPage.wallpaper; SP.wallpaperRev = st.startPage.wallpaperRev; applyLook(); } } catch { /* ignore */ }
 });
 
 // --- init ---

@@ -115,6 +115,7 @@ if (location.protocol === 'my:') {
     wallpaperPick: invoke('wallpaper:pick'),
     wallpaperOnlineList: invoke('wallpaper:online-list'),
     wallpaperOnline: invoke('wallpaper:online-set'),
+    wallpaperOnlineThumb: invoke('wallpaper:online-thumb'),
     pickFolder: invoke('folder:pick'),
     downloadDir: invoke('downloads:dir'),
     vaultOpen: invoke('vault:open'),
