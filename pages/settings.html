@@ -370,6 +370,37 @@
         grid.append(b);
       }
       row.append(grid);
+      // pictures from the internet, sized for this screen
+      const more = el('button', 'btn', 'Browse online wallpapers…'); more.type = 'button'; more.style.marginTop = '12px';
+      const panel = el('div'); panel.style.cssText = 'display:none;margin-top:12px';
+      more.onclick = () => { panel.style.display = panel.style.display === 'none' ? 'block' : 'none'; if (panel.style.display === 'block' && !panel.dataset.ready) { panel.dataset.ready = '1'; load(); } };
+      const bar = el('div'); bar.style.cssText = 'display:flex;gap:8px;align-items:center;flex-wrap:wrap';
+      const src = el('select'); for (const [v, n] of [['bing', 'Bing daily pictures'], ['picsum', 'Picsum photo library']]) { const o = el('option', null, n); o.value = v; src.append(o); }
+      const note = el('span', null, ''); note.style.cssText = 'color:var(--muted);font-size:12px';
+      const tiles = el('div'); tiles.style.cssText = 'display:flex;gap:10px;flex-wrap:wrap;margin-top:10px';
+      const next = el('button', 'btn', 'Load more'); next.type = 'button'; next.style.marginTop = '10px';
+      let pg = 0;
+      async function load(reset = true) {
+        if (reset) { pg = 0; tiles.textContent = ''; }
+        note.textContent = 'Loading…';
+        const r = await browser.wallpaperOnlineList(src.value, pg);
+        if (r.error) { note.textContent = r.error; next.style.display = 'none'; return; }
+        note.textContent = 'Click a picture to use it. It is saved on this computer and sized for this screen.';
+        for (const it of r.items) {
+          const b = el('button'); b.type = 'button'; b.title = it.label;
+          b.style.cssText = 'width:160px;height:92px;padding:0;border-radius:10px;overflow:hidden;position:relative;cursor:pointer;border:1px solid var(--line);background:var(--tab)';
+          const im = el('img'); im.src = it.thumb; im.loading = 'lazy'; im.style.cssText = 'width:100%;height:100%;object-fit:cover;display:block';
+          const lab = el('span', null, it.label); lab.style.cssText = 'position:absolute;left:0;right:0;bottom:0;padding:2px 6px;font-size:10px;color:#fff;background:linear-gradient(transparent,rgba(0,0,0,.7));text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis';
+          b.append(im, lab);
+          b.onclick = async () => { note.textContent = 'Downloading…'; const x = await browser.wallpaperOnline(it.full); if (x.error) { note.textContent = x.error; return; } S = await browser.getSettings(); render(); };
+          tiles.append(b);
+        }
+        next.style.display = r.more && r.items.length ? '' : 'none';
+      }
+      src.onchange = () => load(true);
+      next.onclick = () => { pg++; load(false); };
+      bar.append(src, note); panel.append(bar, tiles, next);
+      row.append(more, panel);
       return row;
     } else if (def.type === 'lines') {
       input = el('textarea'); input.value = (val || []).join('\n');

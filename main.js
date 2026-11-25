@@ -3945,6 +3945,44 @@ function setupIpc() {
       return { ok: true };
     } catch (e) { return { error: e.message }; }
   }, PAGE_ONLY);
+  // pictures from the internet, sized for this screen: Bing's daily pictures and Picsum's photo library (no account or key)
+  const WP_HOSTS = ['www.bing.com', 'picsum.photos', 'fastly.picsum.photos'];
+  const wpOk = (u) => { try { const x = new URL(u); return x.protocol === 'https:' && WP_HOSTS.includes(x.hostname); } catch { return false; } };
+  const wpScreen = () => { try { const d = screen.getPrimaryDisplay(); return { w: Math.round(d.size.width * d.scaleFactor), h: Math.round(d.size.height * d.scaleFactor) }; } catch { return { w: 1920, h: 1080 }; } };
+  const wpJson = async (u) => { const r = await net.fetch(u, { headers: { 'user-agent': 'mbrowser' } }); if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); };
+  handle('wallpaper:online-list', async (_e, source, page) => {
+    const { w, h } = wpScreen();
+    const pg = Math.max(0, Math.min(40, Number(page) || 0));
+    try {
+      if (source === 'picsum') {
+        const list = await wpJson('https://picsum.photos/v2/list?page=' + (pg + 1) + '&limit=18');
+        return { items: list.filter((x) => /^\d+$/.test(String(x.id))).map((x) => ({
+          thumb: `https://picsum.photos/id/${x.id}/320/${Math.round(320 * h / w)}.jpg`,
+          full: `https://picsum.photos/id/${x.id}/${Math.min(w, 3840)}/${Math.min(h, 2160)}.jpg`,
+          label: x.author || 'Picsum' })), more: true };
+      }
+      // Bing keeps the last 8 days per request; idx steps back through older ones
+      const j = await wpJson('https://www.bing.com/HPImageArchive.aspx?format=js&idx=' + (pg * 8) + '&n=8&mkt=en-GB');
+      const size = w >= 2600 ? 'UHD' : '1920x1080';
+      return { items: (j.images || []).filter((x) => /^\/th\?id=[\w.\-]+_$/.test(String(x.urlbase))).map((x) => ({
+        thumb: 'https://www.bing.com' + x.urlbase + '320x180.jpg', full: 'https://www.bing.com' + x.urlbase + size + '.jpg',
+        label: String(x.title || x.copyright || 'Bing').slice(0, 80) })), more: pg < 12 };
+    } catch (e) { return { error: 'Could not reach the picture service: ' + e.message }; }
+  }, PAGE_ONLY);
+  handle('wallpaper:online-set', async (_e, url) => {
+    if (typeof url !== 'string' || !wpOk(url)) return { error: 'That address is not an allowed picture source.' };
+    try {
+      const r = await net.fetch(url, { headers: { 'user-agent': 'mbrowser' } });
+      if (!r.ok) return { error: 'The picture service answered HTTP ' + r.status + '.' };
+      const b = Buffer.from(await r.arrayBuffer());
+      if (b.length > 30 * 1024 * 1024) return { error: 'That picture is larger than 30 MB.' };
+      if (!sniffMime(b)) return { error: 'That was not a JPEG, PNG or WebP picture.' };
+      fs.writeFileSync(file('wallpaper-custom'), b);
+      applySetting('startPage.wallpaper', 'custom');
+      applySetting('startPage.wallpaperRev', Date.now());
+      return { ok: true };
+    } catch (e) { return { error: e.message }; }
+  }, PAGE_ONLY);
   handle('thumb:refresh', (_e, urls) => {
     if (!Array.isArray(urls)) return false;
     const valid = urls.filter((u) => typeof u === 'string' && isWeb(u)).slice(0, 15);

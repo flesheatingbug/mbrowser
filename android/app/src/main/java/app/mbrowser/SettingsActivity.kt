@@ -248,8 +248,61 @@ class SettingsActivity : BaseActivity() {
             }
             tile("none", "Theme colours", null) { prefs.wallpaper = "none"; build() }
             tile("custom", "Your photo", if (Wallpapers.hasCustom(this)) Wallpapers.thumb(this, "custom") else null) { wpPicker.launch("image/*") }
+            tile("online", "From the internet", null) { onlineWallpapers() }
             for ((id, name) in Wallpapers.LIST) tile(id, name, Wallpapers.thumb(this, id)) { prefs.wallpaper = id; build() }
         }
+    }
+
+    /** A dialog with pictures from the internet sized for this phone; tap one to use it. */
+    private fun onlineWallpapers() {
+        val root = LinearLayout(this); root.orientation = LinearLayout.VERTICAL; root.setPadding(dp(12), dp(8), dp(12), 0)
+        var source = OnlineWallpapers.SOURCES[0].first; var page = 0
+        val status = TextView(this); status.textSize = 13f; status.setTextColor(tc(R.attr.mbMuted)); status.setPadding(dp(4), dp(6), dp(4), dp(6))
+        val grid = android.widget.GridLayout(this); grid.columnCount = 3
+        val more = android.widget.Button(this); more.text = "Load more"; more.visibility = View.GONE
+        val tabs = LinearLayout(this)
+        val sv = android.widget.ScrollView(this)
+        val col = LinearLayout(this); col.orientation = LinearLayout.VERTICAL
+        col.addView(grid); col.addView(more); sv.addView(col)
+        root.addView(tabs); root.addView(status); root.addView(sv, LinearLayout.LayoutParams(-1, dp(420)))
+        val dlg = AlertDialog.Builder(this).setTitle("Wallpapers from the internet").setView(root).setNegativeButton("Close", null).create()
+        val cell = (resources.displayMetrics.widthPixels - dp(24 + 24)) / 3
+        fun load(reset: Boolean) {
+            if (reset) { page = 0; grid.removeAllViews() }
+            status.text = "Loading…"; more.visibility = View.GONE
+            val src = source; val pg = page
+            Thread {
+                try {
+                    val r = OnlineWallpapers.list(this, src, pg)
+                    runOnUiThread {
+                        if (!dlg.isShowing || src != source) return@runOnUiThread
+                        status.text = if (r.items.isEmpty()) "Nothing more to show." else "Tap a picture to use it. Sized for this screen."
+                        more.visibility = if (r.more && r.items.isNotEmpty()) View.VISIBLE else View.GONE
+                        for (it in r.items) {
+                            val iv = ImageView(this); iv.scaleType = ImageView.ScaleType.CENTER_CROP; iv.background = filled(10, tc(R.attr.mbCard))
+                            val lp = android.widget.GridLayout.LayoutParams(); lp.width = cell; lp.height = cell * 16 / 9; lp.setMargins(dp(3), dp(3), dp(3), dp(3))
+                            grid.addView(iv, lp)
+                            roundClip(iv, 10)
+                            Thread { val b = OnlineWallpapers.thumb(it.thumb); if (b != null) runOnUiThread { iv.setImageBitmap(b) } }.start()
+                            iv.setOnClickListener {_ ->
+                                status.text = "Downloading…"
+                                Thread {
+                                    val err = OnlineWallpapers.use(this, it.full)
+                                    runOnUiThread { if (err == null) { toast("Wallpaper set"); dlg.dismiss(); build() } else status.text = err }
+                                }.start()
+                            }
+                        }
+                    }
+                } catch (e: Exception) { runOnUiThread { status.text = "Could not reach the picture service: " + e.message } }
+            }.start()
+        }
+        for ((id, name) in OnlineWallpapers.SOURCES) {
+            val b = android.widget.Button(this); b.text = name; b.isAllCaps = false
+            b.setOnClickListener { source = id; load(true) }
+            tabs.addView(b, LinearLayout.LayoutParams(0, -2, 1f))
+        }
+        more.setOnClickListener { page++; load(false) }
+        dlg.show(); load(true)
     }
 
     private fun buttonStyleSection() {

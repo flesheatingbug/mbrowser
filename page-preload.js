@@ -113,6 +113,8 @@ if (location.protocol === 'my:') {
     onBookmarksChanged: (cb) => ipcRenderer.on('bookmarks:changed', () => cb()),
     vaultStatus: invoke('vault:status'),
     wallpaperPick: invoke('wallpaper:pick'),
+    wallpaperOnlineList: invoke('wallpaper:online-list'),
+    wallpaperOnline: invoke('wallpaper:online-set'),
     pickFolder: invoke('folder:pick'),
     downloadDir: invoke('downloads:dir'),
     vaultOpen: invoke('vault:open'),

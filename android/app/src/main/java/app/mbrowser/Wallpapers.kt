@@ -65,6 +65,17 @@ object Wallpapers {
         val f = customFile(ctx); f.writeBytes(bytes); f.setLastModified(updated); cacheKey = ""
     }
 
+    /** Stores downloaded picture bytes, scaled down like a picked photo. */
+    fun saveBytes(ctx: Context, bytes: ByteArray): Boolean = try {
+        val o = BitmapFactory.Options(); o.inJustDecodeBounds = true
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, o)
+        var n = 1
+        while (o.outWidth / (n * 2) >= 1080 && o.outHeight / (n * 2) >= 2400) n *= 2
+        val o2 = BitmapFactory.Options(); o2.inSampleSize = n
+        val b = BitmapFactory.decodeByteArray(bytes, 0, bytes.size, o2)
+        if (b == null) false else { customFile(ctx).outputStream().use { b.compress(Bitmap.CompressFormat.JPEG, 85, it) }; cacheKey = ""; true }
+    } catch (e: Exception) { false }
+
     /** Copies a picked photo, scaled down, so it keeps working if the original is moved. */
     fun saveCustom(ctx: Context, uri: Uri): Boolean {
         return try {
