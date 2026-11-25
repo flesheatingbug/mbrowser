@@ -256,7 +256,10 @@ class SettingsActivity : BaseActivity() {
     /** A dialog with pictures from the internet sized for this phone; tap one to use it. */
     private fun onlineWallpapers() {
         val root = LinearLayout(this); root.orientation = LinearLayout.VERTICAL; root.setPadding(dp(12), dp(8), dp(12), 0)
-        var source = OnlineWallpapers.SOURCES[0].first; var page = 0
+        var source = OnlineWallpapers.SOURCES[0].first; var page = 0; var category = OnlineWallpapers.CATEGORIES[0].lowercase()
+        val catSpin = android.widget.Spinner(this)
+        catSpin.adapter = android.widget.ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, OnlineWallpapers.CATEGORIES)
+        catSpin.visibility = View.GONE
         val status = TextView(this); status.textSize = 13f; status.setTextColor(tc(R.attr.mbMuted)); status.setPadding(dp(4), dp(6), dp(4), dp(6))
         val grid = android.widget.GridLayout(this); grid.columnCount = 3
         val more = android.widget.Button(this); more.text = "Load more"; more.visibility = View.GONE
@@ -264,7 +267,7 @@ class SettingsActivity : BaseActivity() {
         val sv = android.widget.ScrollView(this)
         val col = LinearLayout(this); col.orientation = LinearLayout.VERTICAL
         col.addView(grid); col.addView(more); sv.addView(col)
-        root.addView(tabs); root.addView(status); root.addView(sv, LinearLayout.LayoutParams(-1, dp(420)))
+        root.addView(tabs); root.addView(catSpin); root.addView(status); root.addView(sv, LinearLayout.LayoutParams(-1, dp(420)))
         val dlg = AlertDialog.Builder(this).setTitle("Wallpapers from the internet").setView(root).setNegativeButton("Close", null).create()
         val cell = (resources.displayMetrics.widthPixels - dp(24 + 24)) / 3
         fun load(reset: Boolean) {
@@ -273,7 +276,7 @@ class SettingsActivity : BaseActivity() {
             val src = source; val pg = page
             Thread {
                 try {
-                    val r = OnlineWallpapers.list(this, src, pg)
+                    val r = OnlineWallpapers.list(this, src, pg, category)
                     runOnUiThread {
                         if (!dlg.isShowing || src != source) return@runOnUiThread
                         status.text = if (r.items.isEmpty()) "Nothing more to show." else "Tap a picture to use it. Sized for this screen."
@@ -297,9 +300,16 @@ class SettingsActivity : BaseActivity() {
             }.start()
         }
         for ((id, name) in OnlineWallpapers.SOURCES) {
-            val b = android.widget.Button(this); b.text = name; b.isAllCaps = false
-            b.setOnClickListener { source = id; load(true) }
+            val b = android.widget.Button(this); b.text = name; b.isAllCaps = false; b.textSize = 12f; b.setPadding(0, 0, 0, 0)
+            b.setOnClickListener { source = id; catSpin.visibility = if (id == "wiki") View.VISIBLE else View.GONE; load(true) }
             tabs.addView(b, LinearLayout.LayoutParams(0, -2, 1f))
+        }
+        catSpin.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(p: android.widget.AdapterView<*>?, v: View?, i: Int, id: Long) {
+                val c = OnlineWallpapers.CATEGORIES[i].lowercase()
+                if (c != category) { category = c; if (source == "wiki") load(true) }
+            }
+            override fun onNothingSelected(p: android.widget.AdapterView<*>?) {}
         }
         more.setOnClickListener { page++; load(false) }
         dlg.show(); load(true)

@@ -3946,11 +3946,14 @@ function setupIpc() {
     } catch (e) { return { error: e.message }; }
   }, PAGE_ONLY);
   // pictures from the internet, sized for this screen: Bing's daily pictures and Picsum's photo library (no account or key)
-  const WP_HOSTS = ['www.bing.com', 'picsum.photos', 'fastly.picsum.photos'];
+  const WP_HOSTS = ['www.bing.com', 'picsum.photos', 'fastly.picsum.photos', 'upload.wikimedia.org', 'apod.nasa.gov'];
+  const WP_UA = 'mbrowser/1.0 (https://github.com/flesheatingbug/mbrowser)';
+  const WIKI_STEPS = [330, 500, 960, 1280, 1920, 2560, 3840];
+  const wikiThumb = (url, w) => { const m = /^(https:\/\/upload\.wikimedia\.org\/wikipedia\/commons)\/(.+)\/([^/]+)$/.exec(url); return m ? `${m[1]}/thumb/${m[2]}/${m[3]}/${w}px-${m[3]}${/\.(svg|tif|tiff)$/i.test(m[3]) ? '.png' : ''}` : null; };
   const wpOk = (u) => { try { const x = new URL(u); return x.protocol === 'https:' && WP_HOSTS.includes(x.hostname); } catch { return false; } };
   const wpScreen = () => { try { const d = screen.getPrimaryDisplay(); return { w: Math.round(d.size.width * d.scaleFactor), h: Math.round(d.size.height * d.scaleFactor) }; } catch { return { w: 1920, h: 1080 }; } };
-  const wpJson = async (u) => { const r = await net.fetch(u, { headers: { 'user-agent': 'mbrowser' } }); if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); };
-  handle('wallpaper:online-list', async (_e, source, page) => {
+  const wpJson = async (u) => { const r = await net.fetch(u, { headers: { 'user-agent': WP_UA } }); if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); };
+  handle('wallpaper:online-list', async (_e, source, page, category) => {
     const { w, h } = wpScreen();
     const pg = Math.max(0, Math.min(40, Number(page) || 0));
     try {
@@ -3960,6 +3963,30 @@ function setupIpc() {
           thumb: `https://picsum.photos/id/${x.id}/320/${Math.round(320 * h / w)}.jpg`,
           full: `https://picsum.photos/id/${x.id}/${Math.min(w, 3840)}/${Math.min(h, 2160)}.jpg`,
           label: x.author || 'Picsum' })), more: true };
+      }
+      if (source === 'nasa') {
+        // NASA's Astronomy Picture of the Day: 12 days per page, pictures only (some days are videos)
+        const day = (n) => new Date(Date.now() - n * 86400000).toISOString().slice(0, 10);
+        const j = await wpJson(`https://api.nasa.gov/planetary/apod?api_key=DEMO_KEY&start_date=${day(pg * 12 + 11)}&end_date=${day(pg * 12)}`);
+        const ok = (u) => typeof u === 'string' && /^https:\/\/apod\.nasa\.gov\//.test(u);
+        return { items: (Array.isArray(j) ? j : []).reverse().filter((x) => x.media_type === 'image' && ok(x.url)).map((x) => ({
+          thumb: x.url, full: ok(x.hdurl) && w > 1920 ? x.hdurl : x.url, label: String(x.title || 'NASA').slice(0, 80) })), more: pg < 40 };
+      }
+      if (source === 'wiki') {
+        // featured pictures on Wikimedia Commons, searched by a topic word
+        const term = String(category || 'nature').replace(/[^a-z ]/gi, '').slice(0, 30);
+        const q = encodeURIComponent(`incategory:"Featured pictures on Wikimedia Commons" ${term} filetype:bitmap`);
+        const j = await wpJson(`https://commons.wikimedia.org/w/api.php?action=query&format=json&generator=search&gsrnamespace=6&gsrlimit=18&gsroffset=${pg * 18}&gsrsearch=${q}&prop=imageinfo&iiprop=url|size&iiurlwidth=330`);
+        const pages = Object.values((j.query && j.query.pages) || {}).sort((a, b) => (a.index || 0) - (b.index || 0));
+        const items = [];
+        for (const p of pages) {
+          const ii = p.imageinfo && p.imageinfo[0]; if (!ii || !ii.width || !ii.height || ii.width < w * 0.8) continue;
+          const need = Math.min(3840, Math.max(w, Math.ceil(h * ii.width / ii.height)));
+          const step = WIKI_STEPS.find((s) => s >= need) || 3840;
+          const full = ii.width > step ? wikiThumb(ii.url, step) : ii.url;
+          if (full && ii.thumburl) items.push({ thumb: ii.thumburl, full, label: String(p.title || '').replace(/^File:/, '').replace(/\.[a-z]+$/i, '').slice(0, 80) });
+        }
+        return { items, more: pages.length >= 18 && pg < 30 };
       }
       // Bing keeps the last 8 days per request; idx steps back through older ones
       const j = await wpJson('https://www.bing.com/HPImageArchive.aspx?format=js&idx=' + (pg * 8) + '&n=8&mkt=en-GB');
@@ -3972,7 +3999,7 @@ function setupIpc() {
   handle('wallpaper:online-set', async (_e, url) => {
     if (typeof url !== 'string' || !wpOk(url)) return { error: 'That address is not an allowed picture source.' };
     try {
-      const r = await net.fetch(url, { headers: { 'user-agent': 'mbrowser' } });
+      const r = await net.fetch(url, { headers: { 'user-agent': WP_UA } });
       if (!r.ok) return { error: 'The picture service answered HTTP ' + r.status + '.' };
       const b = Buffer.from(await r.arrayBuffer());
       if (b.length > 30 * 1024 * 1024) return { error: 'That picture is larger than 30 MB.' };

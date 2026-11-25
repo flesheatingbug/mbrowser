@@ -375,7 +375,9 @@
       const panel = el('div'); panel.style.cssText = 'display:none;margin-top:12px';
       more.onclick = () => { panel.style.display = panel.style.display === 'none' ? 'block' : 'none'; if (panel.style.display === 'block' && !panel.dataset.ready) { panel.dataset.ready = '1'; load(); } };
       const bar = el('div'); bar.style.cssText = 'display:flex;gap:8px;align-items:center;flex-wrap:wrap';
-      const src = el('select'); for (const [v, n] of [['bing', 'Bing daily pictures'], ['picsum', 'Picsum photo library']]) { const o = el('option', null, n); o.value = v; src.append(o); }
+      const src = el('select'); for (const [v, n] of [['bing', 'Bing daily pictures'], ['nasa', 'NASA picture of the day'], ['wiki', 'Wikimedia featured photos'], ['picsum', 'Picsum photo library']]) { const o = el('option', null, n); o.value = v; src.append(o); }
+      const cat = el('select'); for (const n of ['Nature', 'Landscapes', 'Mountains', 'Ocean', 'Space', 'Cities', 'Animals', 'Flowers', 'Abstract']) { const o = el('option', null, n); o.value = n.toLowerCase(); cat.append(o); }
+      cat.style.display = 'none';
       const note = el('span', null, ''); note.style.cssText = 'color:var(--muted);font-size:12px';
       const tiles = el('div'); tiles.style.cssText = 'display:flex;gap:10px;flex-wrap:wrap;margin-top:10px';
       const next = el('button', 'btn', 'Load more'); next.type = 'button'; next.style.marginTop = '10px';
@@ -383,7 +385,7 @@
       async function load(reset = true) {
         if (reset) { pg = 0; tiles.textContent = ''; }
         note.textContent = 'Loading…';
-        const r = await browser.wallpaperOnlineList(src.value, pg);
+        const r = await browser.wallpaperOnlineList(src.value, pg, cat.value);
         if (r.error) { note.textContent = r.error; next.style.display = 'none'; return; }
         note.textContent = 'Click a picture to use it. It is saved on this computer and sized for this screen.';
         for (const it of r.items) {
@@ -397,9 +399,10 @@
         }
         next.style.display = r.more && r.items.length ? '' : 'none';
       }
-      src.onchange = () => load(true);
+      src.onchange = () => { cat.style.display = src.value === 'wiki' ? '' : 'none'; load(true); };
+      cat.onchange = () => load(true);
       next.onclick = () => { pg++; load(false); };
-      bar.append(src, note); panel.append(bar, tiles, next);
+      bar.append(src, cat, note); panel.append(bar, tiles, next);
       row.append(more, panel);
       return row;
     } else if (def.type === 'lines') {
