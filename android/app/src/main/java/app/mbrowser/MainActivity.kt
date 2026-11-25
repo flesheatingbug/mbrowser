@@ -889,7 +889,7 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
         if (::startPage.isInitialized) startPage.refresh()
     }
 
-    private fun newTab(url: String?, priv: Boolean = false, background: Boolean = false): Tab {
+    private fun newTab(url: String?, priv: Boolean = false, behind: Boolean = false): Tab {
         val w = object : WebView(this) {
             // adds "Web search" to the text-selection toolbar (Copy, Select all, Share ...)
             override fun startActionMode(cb: android.view.ActionMode.Callback?, type: Int): android.view.ActionMode? =
@@ -1128,7 +1128,7 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
             true
         }
         tabs.add(tab)
-        if (background && url != null) {
+        if (behind && url != null) {
             // opened behind the current tab: the page you are reading stays on screen
             val u = toUrl(url)
             tab.home = false; tab.url = u
