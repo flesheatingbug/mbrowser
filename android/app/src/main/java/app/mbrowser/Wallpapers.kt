@@ -58,6 +58,27 @@ object Wallpapers {
         return if (r == 0) null else sampled({ ctx.resources.openRawResource(r) }, 160, 280)
     }
 
+    private fun libDir(ctx: Context) = File(ctx.applicationContext.filesDir, "wallpapers").also { it.mkdirs() }
+
+    /** Keeps a copy of the current custom picture so you can come back to it. Newest first, at most 40. */
+    fun keepCurrent(ctx: Context) {
+        try {
+            val f = customFile(ctx); if (!f.exists()) return
+            val md = java.security.MessageDigest.getInstance("SHA-1").digest(f.readBytes()).joinToString("") { "%02x".format(it) }.take(10)
+            val dst = File(libDir(ctx), "s-$md.jpg")
+            if (!dst.exists()) f.copyTo(dst) else dst.setLastModified(System.currentTimeMillis())
+            libDir(ctx).listFiles()?.sortedByDescending { it.lastModified() }?.drop(40)?.forEach { it.delete() }
+        } catch (_: Exception) { }
+    }
+
+    fun saved(ctx: Context): List<File> = libDir(ctx).listFiles()?.filter { it.name.startsWith("s-") }?.sortedByDescending { it.lastModified() } ?: emptyList()
+
+    fun useSaved(ctx: Context, f: File): Boolean = try {
+        f.copyTo(customFile(ctx), overwrite = true); f.setLastModified(System.currentTimeMillis()); cacheKey = ""; true
+    } catch (_: Exception) { false }
+
+    fun savedThumb(f: File): Bitmap? = sampled({ f.inputStream() }, 160, 280)
+
     fun hasCustom(ctx: Context) = customFile(ctx).exists()
 
     /** A photo that came down from the server; its file time is set to the server's change time so both sides agree. */
@@ -73,7 +94,7 @@ object Wallpapers {
         while (o.outWidth / (n * 2) >= 1080 && o.outHeight / (n * 2) >= 2400) n *= 2
         val o2 = BitmapFactory.Options(); o2.inSampleSize = n
         val b = BitmapFactory.decodeByteArray(bytes, 0, bytes.size, o2)
-        if (b == null) false else { customFile(ctx).outputStream().use { b.compress(Bitmap.CompressFormat.JPEG, 85, it) }; cacheKey = ""; true }
+        if (b == null) false else { customFile(ctx).outputStream().use { b.compress(Bitmap.CompressFormat.JPEG, 85, it) }; cacheKey = ""; keepCurrent(ctx); true }
     } catch (e: Exception) { false }
 
     /** Copies a picked photo, scaled down, so it keeps working if the original is moved. */
@@ -82,6 +103,7 @@ object Wallpapers {
             val b = sampled({ ctx.contentResolver.openInputStream(uri) }, 1080, 2400) ?: return false
             customFile(ctx).outputStream().use { b.compress(Bitmap.CompressFormat.JPEG, 85, it) }
             cacheKey = ""
+            keepCurrent(ctx)
             true
         } catch (e: Exception) { false }
     }

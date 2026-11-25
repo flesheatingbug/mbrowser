@@ -249,6 +249,14 @@ class SettingsActivity : BaseActivity() {
             tile("none", "Theme colours", null) { prefs.wallpaper = "none"; build() }
             tile("custom", "Your photo", if (Wallpapers.hasCustom(this)) Wallpapers.thumb(this, "custom") else null) { wpPicker.launch("image/*") }
             tile("online", "From the internet", null) { onlineWallpapers() }
+            for (f in Wallpapers.saved(this)) {
+                val th = Wallpapers.savedThumb(f)
+                tile("saved:" + f.name, "Saved", th) { if (Wallpapers.useSaved(this, f)) { prefs.wallpaper = "custom"; toast("Wallpaper set") }; build() }
+                // long-press a saved picture to remove it from the list
+                (row.getChildAt(row.childCount - 1)).setOnLongClickListener {
+                    AlertDialog.Builder(this).setMessage("Remove this picture from your saved wallpapers?").setPositiveButton("Remove") { _, _ -> f.delete(); build() }.setNegativeButton("Cancel", null).show(); true
+                }
+            }
             for ((id, name) in Wallpapers.LIST) tile(id, name, Wallpapers.thumb(this, id)) { prefs.wallpaper = id; build() }
         }
     }

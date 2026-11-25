@@ -3931,6 +3931,32 @@ function setupIpc() {
     const r = await dialog.showOpenDialog({ title: 'Choose a download folder', defaultPath: (typeof start === 'string' && start) || downloadDir(), properties: ['openDirectory', 'createDirectory'] });
     return r.canceled || !r.filePaths[0] ? { canceled: true } : { path: r.filePaths[0] };
   }, PAGE_ONLY);
+  // every picture you pick or download is kept here, so you can switch back to it later
+  const wpDir = () => { const d = file('wallpapers'); fs.mkdirSync(d, { recursive: true }); return d; };
+  const wpKeep = (buf) => {
+    try {
+      const id = 's-' + crypto.createHash('sha1').update(buf).digest('hex').slice(0, 10);
+      const f = path.join(wpDir(), id + '.img');
+      if (!fs.existsSync(f)) fs.writeFileSync(f, buf); else fs.utimesSync(f, new Date(), new Date());
+      const all = fs.readdirSync(wpDir()).filter((n) => /^s-[0-9a-f]{10}\.img$/.test(n)).map((n) => ({ n, t: fs.statSync(path.join(wpDir(), n)).mtimeMs })).sort((a, b) => b.t - a.t);
+      for (const o of all.slice(40)) { try { fs.unlinkSync(path.join(wpDir(), o.n)); } catch { /* in use */ } }
+      return id;
+    } catch { return null; }
+  };
+  const wpValidId = (id) => typeof id === 'string' && /^s-[0-9a-f]{10}$/.test(id);
+  handle('wallpaper:saved-list', () => {
+    try { return fs.readdirSync(wpDir()).filter((n) => /^s-[0-9a-f]{10}\.img$/.test(n)).map((n) => ({ id: n.slice(0, -4), t: fs.statSync(path.join(wpDir(), n)).mtimeMs })).sort((a, b) => b.t - a.t).map((x) => x.id); } catch { return []; }
+  }, PAGE_ONLY);
+  handle('wallpaper:saved-use', (_e, id) => {
+    if (!wpValidId(id)) return { error: 'Unknown wallpaper.' };
+    try {
+      const f = path.join(wpDir(), id + '.img');
+      fs.copyFileSync(f, file('wallpaper-custom')); fs.utimesSync(f, new Date(), new Date());
+      applySetting('startPage.wallpaper', 'custom'); applySetting('startPage.wallpaperRev', Date.now());
+      return { ok: true };
+    } catch (e) { return { error: e.message }; }
+  }, PAGE_ONLY);
+  handle('wallpaper:saved-remove', (_e, id) => { if (!wpValidId(id)) return false; try { fs.unlinkSync(path.join(wpDir(), id + '.img')); return true; } catch { return false; } }, PAGE_ONLY);
   handle('wallpaper:pick', async () => {
     const r = await dialog.showOpenDialog({ title: 'Choose a wallpaper', properties: ['openFile'], filters: [{ name: 'Pictures', extensions: ['jpg', 'jpeg', 'png', 'webp'] }] });
     if (r.canceled || !r.filePaths[0]) return { canceled: true };
@@ -3940,6 +3966,7 @@ function setupIpc() {
       const b = fs.readFileSync(src);
       if (!sniffMime(b)) return { error: 'That is not a JPEG, PNG or WebP picture.' };
       fs.copyFileSync(src, file('wallpaper-custom'));
+      wpKeep(b);
       applySetting('startPage.wallpaper', 'custom');
       applySetting('startPage.wallpaperRev', Date.now());
       return { ok: true };
@@ -4019,6 +4046,7 @@ function setupIpc() {
       if (b.length > 30 * 1024 * 1024) return { error: 'That picture is larger than 30 MB.' };
       if (!sniffMime(b)) return { error: 'That was not a JPEG, PNG or WebP picture.' };
       fs.writeFileSync(file('wallpaper-custom'), b);
+      wpKeep(b);
       applySetting('startPage.wallpaper', 'custom');
       applySetting('startPage.wallpaperRev', Date.now());
       return { ok: true };
@@ -4305,7 +4333,7 @@ function handleMy(req) {
   const u = new URL(req.url);
   if (u.host === 'wallpaper') {
     const id = u.pathname.replace(/^\//, '');
-    const p = id === 'custom' ? file('wallpaper-custom') : (WALLPAPER_IDS.includes(id) ? path.join(ASSETS, 'wallpapers', id + '.jpg') : null);
+    const p = /^s-[0-9a-f]{10}$/.test(id) ? path.join(file('wallpapers'), id + '.img') : id === 'custom' ? file('wallpaper-custom') : (WALLPAPER_IDS.includes(id) ? path.join(ASSETS, 'wallpapers', id + '.jpg') : null);
     if (p && fs.existsSync(p)) {
       const b = fs.readFileSync(p);
       return new Response(b, { headers: { 'content-type': sniffMime(b) || 'image/jpeg', 'cache-control': 'no-cache', ...CORS } });
