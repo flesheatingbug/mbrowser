@@ -1103,6 +1103,15 @@ document.addEventListener('visibilitychange', async () => {
     if (st.startPage.wallpaper !== SP.wallpaper || st.startPage.wallpaperRev !== SP.wallpaperRev) { SP.wallpaper = st.startPage.wallpaper; SP.wallpaperRev = st.startPage.wallpaperRev; applyLook(); } } catch { /* ignore */ }
 });
 
+// the wallpaper (and the theme, which page-preload reloads) follow changes made in settings without a refresh
+browser.onSettingsChanged(async () => {
+  if (!SP) return;
+  try {
+    const st = await browser.getSettings();
+    if (st.startPage.wallpaper !== SP.wallpaper || st.startPage.wallpaperRev !== SP.wallpaperRev) { SP.wallpaper = st.startPage.wallpaper; SP.wallpaperRev = st.startPage.wallpaperRev; applyLook(); }
+  } catch { /* ignore */ }
+});
+
 // --- init ---
 (async () => {
   try {

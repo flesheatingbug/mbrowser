@@ -111,6 +111,7 @@ if (location.protocol === 'my:') {
     openUrl: (url, mode) => ipcRenderer.send('panel:open', url, mode),
     onPanelChanged: (cb) => ipcRenderer.on('panel:changed', () => cb()),
     onBookmarksChanged: (cb) => ipcRenderer.on('bookmarks:changed', () => cb()),
+    onSettingsChanged: (cb) => ipcRenderer.on('settings:changed', (_e, p) => cb(p)),
     vaultStatus: invoke('vault:status'),
     wallpaperPick: invoke('wallpaper:pick'),
     wallpaperOnlineList: invoke('wallpaper:online-list'),
@@ -432,3 +433,11 @@ if (/^https?:$/.test(location.protocol)) {
     if (d.email) fill('email', d.email);
   });
 }
+
+// the theme stylesheet is reloaded here for every internal page when the look changes; pages that show the wallpaper listen too
+ipcRenderer.on('settings:changed', (_e, p) => {
+  if (p && !String(p).startsWith('appearance')) return;
+  for (const l of document.querySelectorAll('link[rel="stylesheet"][href*="theme.css"]')) {
+    l.href = 'my://assets/theme.css?' + Date.now();
+  }
+});

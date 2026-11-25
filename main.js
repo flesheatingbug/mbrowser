@@ -2808,6 +2808,19 @@ function afterSettingsChange(p) {
   }
   pushAll(true);
   if (p && p.startsWith('sync')) syncSoon();
+  notifyPages(p);
+}
+
+// Open my:// pages (start page, settings, ...) pick up theme and wallpaper changes without a refresh.
+let notifyTimer = null;
+function notifyPages(p) {
+  if (p && !/^(appearance|startPage\.wallpaper)/.test(p)) return;
+  clearTimeout(notifyTimer);
+  notifyTimer = setTimeout(() => {
+    for (const tb of tabByWc.values()) {
+      try { if (!tb.wc.isDestroyed() && /^my:/i.test(tb.wc.getURL())) tb.wc.send('settings:changed', p || ''); } catch { /* gone */ }
+    }
+  }, 150);
 }
 
 // ---------- IPC ----------
