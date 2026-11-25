@@ -967,6 +967,7 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
 
             override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
                 loginPopup?.dismiss()
+                if (tab === cur()) clearStuckPull()
                 tab.blocked.clear(); tab.hiddenCss = ""
                 tab.readable = false; tab.readerOn = false; if (tab === cur()) updateReaderBtn()
                 if (tabs.getOrNull(current)?.web === view) setBars(true)
@@ -1273,6 +1274,7 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
     private fun render() {
         loginPopup?.dismiss()
         swipe.isRefreshing = false
+        clearStuckPull()
         container.removeAllViews()
         val t = cur() ?: return
         if (t.home && t.priv) {
@@ -1401,7 +1403,20 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
     override fun dispatchTouchEvent(ev: android.view.MotionEvent): Boolean {
         if (::switcher.isInitialized && switcher.visibility == View.VISIBLE) switcherSwipes.onTouchEvent(ev)
         if (ev.actionMasked == MotionEvent.ACTION_DOWN) fsWake?.invoke()
-        return super.dispatchTouchEvent(ev)
+        val r = super.dispatchTouchEvent(ev)
+        // a pull that was cut short (page changed, touch taken over) can leave the little refresh circle parked on the page
+        if (::swipe.isInitialized && (ev.actionMasked == MotionEvent.ACTION_UP || ev.actionMasked == MotionEvent.ACTION_CANCEL)) {
+            swipe.postDelayed({ clearStuckPull() }, 450)
+        }
+        return r
+    }
+
+    /** Removes a pull circle that is showing without a refresh running. Disabling the layout resets its pull state. */
+    private fun clearStuckPull() {
+        if (!::swipe.isInitialized || swipe.isRefreshing) return
+        val on = swipe.isEnabled
+        swipe.isEnabled = false
+        swipe.isEnabled = on && prefs.pullRefresh
     }
 
     private fun refreshSwitcher() {
