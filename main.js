@@ -671,8 +671,10 @@ function pushState() {
   }, 70 - (now - w._lastPush));
 }
 function pushStateNow() {
-  if (!cur || !cur.toolbarView) return;
-  const s = stateFor();
+  // a window that is closing can still get late events (a live stream going quiet, say): its objects are already destroyed
+  if (!cur || !cur.toolbarView || !cur.win || cur.win.isDestroyed()) return;
+  let s;
+  try { s = stateFor(); } catch { return; }
   for (const v of [cur.toolbarView, cur.tabbarView, cur.statusView, cur.panelResizer, cur.overlay]) {
     if (v && !v.webContents.isDestroyed()) v.webContents.send('state', s);
   }
@@ -688,7 +690,7 @@ function pushSoon() {
 // refresh the chrome of every window (optionally re-running layout first)
 function pushAll(relayout = false) {
   const keep = cur;
-  for (const w of windows) { use(w); if (relayout) layout(); pushState(); }
+  for (const w of windows) { if (w.win && w.win.isDestroyed()) continue; use(w); if (relayout) layout(); pushState(); }
   use(keep);
 }
 
