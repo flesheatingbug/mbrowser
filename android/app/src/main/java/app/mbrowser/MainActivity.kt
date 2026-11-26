@@ -999,6 +999,7 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
                 detectReadable(tab)
                 view.evaluateJavascript(LOGIN_CAPTURE_JS, null)   // also in private tabs: filling works there, saving does not (see offerSaveLogin)
                 if (prefs.blockTrackers) view.evaluateJavascript(HIDE_JS, null)
+                if (prefs.hideCookies && cookieJs.isNotEmpty() && url.startsWith("http")) view.evaluateJavascript(cookieJs, null)
                 if (prefs.beta && caster?.available != false) view.evaluateJavascript(CAST_JS, null)
                 tab.url = url
                 tab.title = view.title ?: ""
@@ -1304,6 +1305,7 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
     }
 
     // ---------- reader view (assets/reader.js, shared with the desktop app) ----------
+    private val cookieJs: String by lazy { try { assets.open("cookiehide.js").bufferedReader().use { it.readText() } } catch (_: Exception) { "" } }
     private val readerJs: String by lazy { try { assets.open("reader.js").bufferedReader().use { it.readText() } } catch (_: Exception) { "" } }
 
     private fun updateReaderBtn() {

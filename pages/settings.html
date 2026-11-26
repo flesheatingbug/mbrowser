@@ -109,6 +109,7 @@
       { path: 'tabs.pauseBackgroundVideo', label: 'Pause videos in background tabs', type: 'toggle', help: 'A video that plays in a tab you are not looking at is paused, and carries on when you switch back to it.' },
     ],
     privacy: [
+      { path: 'privacy.hideCookieBanners', label: 'Hide cookie pop-ups', type: 'toggle', help: 'Clicks "Reject" or "Only necessary" on cookie banners where there is one, hides the rest and lets the page scroll again. Applies to pages you open or reload after changing it. Turn it off if a site stops working.' },
       { path: 'privacy.blockTrackers', label: 'Block ads and trackers', type: 'toggle', help: 'Blocks third-party requests to a built-in list of known ad and tracking domains. Click the shield in the toolbar to allow a single site.' },
       { path: 'privacy.doNotTrack', label: 'Send “Do Not Track” and Global Privacy Control', type: 'toggle' },
       { path: 'privacy.passkeys', label: 'Allow passkeys and security keys', type: 'toggle', help: 'Off by default: sites fall back to a password, so Windows does not pop up a passkey or security key window while you sign in. Turn on if you sign in with a passkey. Applies to tabs you open afterwards.' },

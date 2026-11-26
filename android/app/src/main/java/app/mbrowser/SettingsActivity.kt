@@ -649,6 +649,7 @@ class SettingsActivity : BaseActivity() {
 
     private fun privacyPage() {
         switchRow("Block ads and trackers", "Uses the EasyList, EasyPrivacy and uBlock filter lists", { prefs.blockTrackers }, { prefs.blockTrackers = it })
+        switchRow("Hide cookie pop-ups", "Taps Reject or Only necessary where a banner has it, hides the rest and lets the page scroll again", { prefs.hideCookies }, { prefs.hideCookies = it })
         actionRow("Filter lists", AdBlock.status + "\nTap to update now") {
             toast("Updating the filter lists…")
             Thread { val m = AdBlock.download(this); runOnUiThread { toast(m); build() } }.start()

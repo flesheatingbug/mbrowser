@@ -222,6 +222,10 @@ class Prefs(ctx: Context) {
     var textZoom: Int
         get() = int("textZoom", 100)
         set(v) = putI("textZoom", v)
+    var hideCookies: Boolean
+        get() = bool("hideCookies", true)
+        set(v) = putB("hideCookies", v)
+
     var blockTrackers: Boolean
         get() = bool("blockTrackers", true)
         set(v) = putB("blockTrackers", v)

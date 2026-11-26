@@ -845,6 +845,13 @@ function insertOrder(id, tab, opts) {
 function followPrivate() { try { return !!(cur && activeTab() && activeTab().private); } catch { return false; } }
 
 // reader view: assets/reader.js is injected on demand; a page that looks like an article gets a button in the address bar
+const COOKIE_JS = (() => { try { return fs.readFileSync(path.join(__dirname, 'assets', 'cookiehide.js'), 'utf8'); } catch { return ''; } })();
+function hideCookieBanners(tab) {
+  if (!COOKIE_JS || S().privacy.hideCookieBanners === false || !tab || tab.wc.isDestroyed()) return;
+  const u = tab.wc.getURL();
+  if (!/^https?:/i.test(u)) return;
+  tab.wc.executeJavaScript(COOKIE_JS, true).catch(() => {});
+}
 const READER_JS = (() => { try { return fs.readFileSync(path.join(__dirname, 'assets', 'reader.js'), 'utf8'); } catch { return ''; } })();
 function detectReadable(tab) {
   if (!READER_JS || tab.readerOn) return;
@@ -1129,6 +1136,7 @@ function wire(tab) {
   wc.on('did-start-navigation', (_e, _u, inPage, isMain) => { if (isMain && !inPage) tab.darkKey = null; });
   wc.on('dom-ready', () => {
     applyDark(tab);
+    hideCookieBanners(tab);
     use(tab.owner);
     tab.status = 'Loading resources…';
     pushState();
