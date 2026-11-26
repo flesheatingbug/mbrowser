@@ -390,15 +390,17 @@ function setDefaultLinux() {
   try {
     const f = linuxDesktopFile();
     let txt = ''; try { txt = fs.readFileSync(f, 'utf8'); } catch { /* none yet */ }
-    if (!/application\/xhtml\+xml/.test(txt) || !/x-scheme-handler\/https/.test(txt)) {
+    const iconPng = path.join(os.homedir(), '.local', 'share', 'icons', 'hicolor', '512x512', 'apps', 'mbrowser.png');
+    if (!txt.includes('# mbrowser-launcher-v2')) {   // our own file: rewrite it once with the icon path and every web type
       const exec = process.env.APPIMAGE ? `"${process.env.APPIMAGE}"` : `"${process.execPath}" "${app.getAppPath()}"`;
       fs.mkdirSync(path.dirname(f), { recursive: true });
       fs.writeFileSync(f, ['[Desktop Entry]', 'Type=Application', 'Name=mbrowser', 'GenericName=Web Browser',
-        'Comment=Browse your way. Your data. Your server.', `Exec=${exec} %U`, 'Icon=mbrowser', 'Terminal=false',
+        'Comment=Browse your way. Your data. Your server.', `Exec=${exec} %U`, `Icon=${iconPng}`, 'Terminal=false',
         'Categories=Network;WebBrowser;', 'StartupWMClass=mbrowser',
-        'MimeType=text/html;application/xhtml+xml;x-scheme-handler/http;x-scheme-handler/https;', ''].join('\n'));
+        'MimeType=text/html;application/xhtml+xml;x-scheme-handler/http;x-scheme-handler/https;', '# mbrowser-launcher-v2', ''].join('\n'));
       try { spawn('update-desktop-database', [path.dirname(f)], { stdio: 'ignore' }).on('error', () => {}); } catch { /* optional */ }
     }
+    updateLauncherIcon(S().appearance.icon);   // the launcher names an icon file, so put the picture where it points
     const run = (cmd, args) => { try { require('child_process').execFileSync(cmd, args, { stdio: 'ignore', timeout: 5000 }); return true; } catch { return false; } };
     let ok = run('xdg-settings', ['set', 'default-web-browser', 'mbrowser.desktop']);
     // links, but also local .html files and the other web types, which Vivaldi keeps if they are left out
