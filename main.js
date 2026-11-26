@@ -4460,6 +4460,16 @@ function chromePlatformVersion() {
 // Sites that refuse an embedded Chromium but accept Firefox (Google sign-in, Gmail, YouTube).
 const GOOGLE_HOST = /(^|\.)(google\.[a-z.]{2,}|gmail\.com|googleapis\.com|gstatic\.com|googleusercontent\.com|youtube\.com|ytimg\.com|ggpht\.com)$/i;
 const isGoogleUrl = (u) => { try { return GOOGLE_HOST.test(new URL(u).hostname); } catch { return false; } };
+// Other sites that block the Chrome identity (Cloudflare rules) but accept Firefox: built in plus the user's own list (Settings > General)
+const FIREFOX_SITES = ['elevenforum.com'];
+const isFirefoxSite = (u) => {
+  try {
+    const h = new URL(u).hostname.toLowerCase();
+    if (GOOGLE_HOST.test(h)) return true;
+    const mine = String(S().general.firefoxSites || '').split(/[\s,]+/).map((x) => x.trim().toLowerCase().replace(/^\*?\./, '')).filter(Boolean);
+    return FIREFOX_SITES.concat(mine).some((d) => h === d || h.endsWith('.' + d));
+  } catch { return false; }
+};
 const FIREFOX_UA = process.platform === 'win32'
   ? 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0'
   : 'Mozilla/5.0 (X11; Linux x86_64; rv:140.0) Gecko/20100101 Firefox/140.0';
@@ -4472,7 +4482,7 @@ function applyAutoIdentity(wc) {
   if (S().general.browserId !== 'auto') return;
   const chromeUA = uaForMode('chrome');
   let last = FIREFOX_UA;   // what the process says by default
-  const set = (url) => { const ua = isGoogleUrl(url) ? FIREFOX_UA : chromeUA; if (ua !== last) { last = ua; try { wc.setUserAgent(ua); } catch { /* closed */ } return true; } return false; };
+  const set = (url) => { const ua = isFirefoxSite(url) ? FIREFOX_UA : chromeUA; if (ua !== last) { last = ua; try { wc.setUserAgent(ua); } catch { /* closed */ } return true; } return false; };
   const orig = wc.loadURL.bind(wc);
   let reloading = false;
   wc.loadURL = (url, opts) => { set(url); return orig(url, opts); };   // the address bar loads pages this way
@@ -4559,7 +4569,7 @@ function setupSession(ses) {
     // Google/Gmail: always masquerade as Chrome on Google domains so Gmail and
     // sign-in work regardless of the user's browserId setting. The JS-side
     // Emulation.setUserAgentOverride already reports Chrome; HTTP headers must match.
-    if (S().general.browserId === 'auto' && isGoogleUrl(details.url)) {
+    if (S().general.browserId === 'auto' && isFirefoxSite(details.url)) {
       // Google's own sites see a plain Firefox: its user agent, and none of the Chrome-only hint headers
       Object.keys(h).filter((k) => /^(sec-ch-ua|user-agent$)/i.test(k)).forEach((k) => delete h[k]);
       h['User-Agent'] = FIREFOX_UA;

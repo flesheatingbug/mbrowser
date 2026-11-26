@@ -2,6 +2,7 @@
  {
   "date": "2026-11-26",
   "items": [
+   "Sites that block the Chrome identity (elevenforum.com) now get the Firefox identity in Automatic mode, and you can add your own sites in Settings > General.",
    "Speed dial: long names scroll when you hover over a tile.",
    "Deleting history now stays deleted: removals sync to your other devices and an older synced copy can no longer bring them back (update the sync server to spread deletions between devices).",
    "Android: a new private tab shows your speed dial, with a slim private-tab note at the bottom.",
