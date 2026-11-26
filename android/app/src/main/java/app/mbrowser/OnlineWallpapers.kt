@@ -21,7 +21,7 @@ object OnlineWallpapers {
         val u = URL(url)
         require(u.protocol == "https" && u.host in HOSTS) { "not an allowed picture source" }
         val c = u.openConnection() as HttpURLConnection
-        c.connectTimeout = 10000; c.readTimeout = 20000; c.setRequestProperty("User-Agent", "mbrowser/1.0 (https://github.com/flesheatingbug/mbrowser)")
+        c.connectTimeout = 10000; c.readTimeout = 45000; c.setRequestProperty("User-Agent", "mbrowser/1.0 (https://github.com/flesheatingbug/mbrowser)")
         try {
             if (c.responseCode !in 200..299) throw java.io.IOException("HTTP " + c.responseCode)
             val out = java.io.ByteArrayOutputStream(); val buf = ByteArray(16384)
@@ -69,15 +69,21 @@ object OnlineWallpapers {
         return Page(items, page < 1)
     }
 
-    fun thumb(url: String): Bitmap? = thumbOnce(url) ?: run { Thread.sleep(800); thumbOnce(url) }
+    @Volatile var lastError = ""
+
+    /** Wikimedia makes a thumbnail the first time it is asked for, which can be slow or refused: try three times. */
+    fun thumb(url: String): Bitmap? {
+        for (i in 0 until 3) { val b = thumbOnce(url); if (b != null) return b; try { Thread.sleep(1200L * (i + 1)) } catch (_: InterruptedException) { return null } }
+        return null
+    }
 
     private fun thumbOnce(url: String): Bitmap? = try {
         val b = get(url, 40 * 1024 * 1024)
         val o = BitmapFactory.Options(); o.inJustDecodeBounds = true; BitmapFactory.decodeByteArray(b, 0, b.size, o)
         var n = 1; while (o.outWidth / (n * 2) >= 400) n *= 2
         val o2 = BitmapFactory.Options(); o2.inSampleSize = n
-        BitmapFactory.decodeByteArray(b, 0, b.size, o2)
-    } catch (_: Exception) { null }
+        BitmapFactory.decodeByteArray(b, 0, b.size, o2) ?: run { lastError = "not a picture (" + b.size + " bytes)"; null }
+    } catch (e: Exception) { lastError = e.message ?: e.javaClass.simpleName; null }
 
     /** Downloads the picture and makes it the wallpaper. Returns an error message, or null when it worked. */
     fun use(ctx: Context, url: String): String? = try {

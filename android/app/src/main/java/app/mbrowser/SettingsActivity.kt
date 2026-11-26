@@ -277,7 +277,8 @@ class SettingsActivity : BaseActivity() {
         col.addView(grid); col.addView(more); sv.addView(col)
         root.addView(tabs); root.addView(catSpin); root.addView(status); root.addView(sv, LinearLayout.LayoutParams(-1, dp(420)))
         val dlg = AlertDialog.Builder(this).setTitle("Wallpapers from the internet").setView(root).setNegativeButton("Close", null).create()
-        val cell = (resources.displayMetrics.widthPixels - dp(24 + 24)) / 3
+        var cell = (resources.displayMetrics.widthPixels * 0.8f).toInt() / 3 - dp(8)   // measured properly once the dialog is on screen
+        var failed = 0
         // two previews at a time: Wikimedia refuses a burst of requests
         val thumbPool = java.util.concurrent.Executors.newFixedThreadPool(2)
         dlg.setOnDismissListener { thumbPool.shutdownNow() }
@@ -293,12 +294,24 @@ class SettingsActivity : BaseActivity() {
                         status.text = if (r.items.isEmpty()) "Nothing more to show." else "Tap a picture to use it. Sized for this screen."
                         more.visibility = if (r.more && r.items.isNotEmpty()) View.VISIBLE else View.GONE
                         for (it in r.items) {
-                            val iv = ImageView(this); iv.scaleType = ImageView.ScaleType.CENTER_CROP; iv.background = filled(10, tc(R.attr.mbCard))
+                            val tile = android.widget.FrameLayout(this); tile.background = filled(10, tc(R.attr.mbCard))
+                            val iv = ImageView(this); iv.scaleType = ImageView.ScaleType.CENTER_CROP
+                            tile.addView(iv, android.widget.FrameLayout.LayoutParams(-1, -1))
+                            // the title is always shown, so a picture whose preview fails can still be chosen
+                            val cap = TextView(this); cap.text = it.label; cap.textSize = 10.5f; cap.maxLines = 2; cap.ellipsize = android.text.TextUtils.TruncateAt.END
+                            cap.setTextColor(0xFFFFFFFF.toInt()); cap.setBackgroundColor(0x99000000.toInt()); cap.setPadding(dp(6), dp(3), dp(6), dp(3))
+                            tile.addView(cap, android.widget.FrameLayout.LayoutParams(-1, -2, android.view.Gravity.BOTTOM))
                             val lp = android.widget.GridLayout.LayoutParams(); lp.width = cell; lp.height = cell * 16 / 9; lp.setMargins(dp(3), dp(3), dp(3), dp(3))
-                            grid.addView(iv, lp)
-                            roundClip(iv, 10)
-                            thumbPool.execute { val b = OnlineWallpapers.thumb(it.thumb); if (b != null) runOnUiThread { iv.setImageBitmap(b) } }
-                            iv.setOnClickListener {_ ->
+                            grid.addView(tile, lp)
+                            roundClip(tile, 10)
+                            thumbPool.execute {
+                                val b = OnlineWallpapers.thumb(it.thumb)
+                                runOnUiThread {
+                                    if (b != null) iv.setImageBitmap(b)
+                                    else if (dlg.isShowing) { failed++; status.text = "Tap a picture to use it. $failed preview(s) did not load (" + OnlineWallpapers.lastError + "), but you can still pick them by title." }
+                                }
+                            }
+                            tile.setOnClickListener {_ ->
                                 status.text = "Downloading…"
                                 Thread {
                                     val err = OnlineWallpapers.use(this, it.full)
@@ -323,7 +336,8 @@ class SettingsActivity : BaseActivity() {
             override fun onNothingSelected(p: android.widget.AdapterView<*>?) {}
         }
         more.setOnClickListener { page++; load(false) }
-        dlg.show(); load(true)
+        dlg.show()
+        root.post { val w = root.width - root.paddingLeft - root.paddingRight; if (w > 0) cell = w / 3 - dp(6); load(true) }
     }
 
     private fun buttonStyleSection() {
