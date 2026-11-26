@@ -279,11 +279,12 @@ class SettingsActivity : BaseActivity() {
         val dlg = AlertDialog.Builder(this).setTitle("Wallpapers from the internet").setView(root).setNegativeButton("Close", null).create()
         var cell = (resources.displayMetrics.widthPixels * 0.8f).toInt() / 3 - dp(8)   // measured properly once the dialog is on screen
         var failed = 0
+        var gen = 0   // bumped whenever the list is replaced, so previews still queued for the old list are dropped
         // two previews at a time: Wikimedia refuses a burst of requests
-        val thumbPool = java.util.concurrent.Executors.newFixedThreadPool(2)
+        val thumbPool = java.util.concurrent.Executors.newFixedThreadPool(3)
         dlg.setOnDismissListener { thumbPool.shutdownNow() }
         fun load(reset: Boolean) {
-            if (reset) { page = 0; grid.removeAllViews() }
+            if (reset) { page = 0; grid.removeAllViews(); gen++; failed = 0 }
             status.text = "Loading…"; more.visibility = View.GONE
             val src = source; val pg = page
             Thread {
@@ -304,9 +305,12 @@ class SettingsActivity : BaseActivity() {
                             val lp = android.widget.GridLayout.LayoutParams(); lp.width = cell; lp.height = cell * 16 / 9; lp.setMargins(dp(3), dp(3), dp(3), dp(3))
                             grid.addView(tile, lp)
                             roundClip(tile, 10)
+                            val g = gen
                             thumbPool.execute {
-                                val b = OnlineWallpapers.thumb(it.thumb)
+                                if (g != gen) return@execute
+                                val b = OnlineWallpapers.thumb(it.thumb) { g == gen }
                                 runOnUiThread {
+                                    if (g != gen) return@runOnUiThread
                                     if (b != null) iv.setImageBitmap(b)
                                     else if (dlg.isShowing) { failed++; status.text = "Tap a picture to use it. $failed preview(s) did not load (" + OnlineWallpapers.lastError + "), but you can still pick them by title." }
                                 }
