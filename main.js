@@ -277,6 +277,25 @@ const flushSaves = () => { for (const n of [...pendingSaves.keys()]) flushSave(n
 
 let bookmarks = [];  // { url, title, added, updated, deleted }
 let history = [];    // { url, title, time }
+// history entries removed on this device, kept so the removal reaches the sync server and a synced copy cannot bring them back
+let historyDel = []; // { url, time, at, del, sent }
+const hkey = (h) => h.url + '|' + h.time;
+function noteHistoryRemoved(gone) {
+  if (!gone || !gone.length) return;
+  const have = new Map(historyDel.map((e) => [hkey(e), e]));
+  const now = Date.now();
+  for (const h of gone) {
+    const e = have.get(hkey(h));
+    if (e) { e.del = true; e.sent = false; e.at = now; } else { const n = { url: h.url, time: h.time, at: now, del: true, sent: false }; historyDel.push(n); have.set(hkey(n), n); }
+  }
+  if (historyDel.length > 30000) historyDel = historyDel.slice(-30000);
+  save('history-del.json', historyDel);
+}
+function noteHistoryRestored(back) {
+  const keys = new Set(back.map(hkey));
+  for (const e of historyDel) if (keys.has(hkey(e)) && e.del) { e.del = false; e.sent = false; e.at = Date.now(); }
+  save('history-del.json', historyDel);
+}
 let historyBin = []; // removed history, kept 30 days: { url, title, time, binTime }
 let remoteTabs = [];
 let notes = [];     // { id, title, text, updated }
@@ -2353,13 +2372,25 @@ function mergeBookmarks(remote) {
 }
 
 function mergeHistory(remote) {
-  const seen = new Set(history.map((h) => h.url + '|' + h.time));
+  const seen = new Set(history.map(hkey));
+  const mine = new Map(historyDel.map((e) => [hkey(e), e]));
+  let removed = false;
   for (const r of remote) {
-    if (!isWeb(r.url) || seen.has(r.url + '|' + r.time)) continue;
-    history.push(r);
+    if (!isWeb(r.url)) continue;
+    const k = hkey(r);
+    if (r.deleted) { // removed on another device (or by us earlier)
+      if (seen.has(k)) { history = history.filter((h) => hkey(h) !== k); seen.delete(k); removed = true; }
+      if (!mine.has(k)) { const n = { url: r.url, time: r.time, at: Date.now(), del: true, sent: true }; historyDel.push(n); mine.set(k, n); removed = true; }
+      continue;
+    }
+    if (seen.has(k)) continue;
+    const e = mine.get(k);
+    if (e && e.del) continue; // we removed it: an older server copy must not bring it back
+    history.push({ url: r.url, title: r.title, time: r.time });
   }
   history.sort((a, b) => a.time - b.time);
   if (history.length > 5000) history = history.slice(-5000);
+  if (removed) save('history-del.json', historyDel);
 }
 
 async function syncAll() {
@@ -2385,10 +2416,15 @@ async function syncAll() {
       .filter((h) => h.time > syncState.hPushed && isWeb(h.url) && h.url.length <= 8000)
       .slice(-5000)
       .map((h) => ({ url: h.url, title: String(h.title || '').slice(0, 900), time: Math.round(h.time) }));
+    // removals and restores travel as explicit state changes so every device hears about them
+    const changes = historyDel.filter((e) => !e.sent && isWeb(e.url)).slice(0, 5000);
+    for (const e of changes) pending.push({ url: e.url, title: '', time: Math.round(e.time), deleted: !!e.del });
     r = await call('POST', '/api/history', { since: syncState.hRev, items: pending });
+    for (const e of changes) e.sent = true;
+    if (changes.length) save('history-del.json', historyDel);
     mergeHistory(r.items);
     syncState.hRev = r.rev;
-    if (pending.length) syncState.hPushed = Math.max(...pending.map((h) => h.time));
+    { const fresh = pending.filter((h) => !('deleted' in h)); if (fresh.length) syncState.hPushed = Math.max(...fresh.map((h) => h.time)); }
 
     const mine = [...tabById.values()]
       .filter((t) => !t.private && isWeb(t.wc.getURL()))
@@ -2742,7 +2778,7 @@ function saveExt() { try { save('extensions.json', extList.map((e) => ({ path: e
 // ---------- clearing data ----------
 async function clearData(what) {
   const ses = session.defaultSession;
-  if (what === 'history' || what === 'all') { history = []; save('history.json', history); }
+  if (what === 'history' || what === 'all') { noteHistoryRemoved(history); history = []; save('history.json', history); }
   if (what === 'cookies' || what === 'all') await ses.clearStorageData();
   if (what === 'cache' || what === 'all') await ses.clearCache();
   return true;
@@ -3118,6 +3154,7 @@ function setupIpc() {
     const now = Date.now();
     historyBin.push(...gone.map((h) => ({ url: h.url, title: h.title, time: h.time, binTime: now })));
     if (historyBin.length > 5000) historyBin = historyBin.slice(-5000);
+    noteHistoryRemoved(gone);
     save('history.json', history); save('history-bin.json', historyBin);
     const sg = cur.suggest;
     if (!sg || cur.overlayMode !== 'suggest') return;
@@ -3742,6 +3779,7 @@ function setupIpc() {
     const now = Date.now();
     historyBin.push(...gone.map((h) => ({ url: h.url, title: h.title, time: h.time, binTime: now })));
     if (historyBin.length > 5000) historyBin = historyBin.slice(-5000);
+    noteHistoryRemoved(gone);
     save('history.json', history);
     save('history-bin.json', historyBin);
     return before - history.length;
@@ -3757,6 +3795,7 @@ function setupIpc() {
     const seen = new Set(history.map((h) => h.url + '|' + h.time));
     for (const h of back) if (!seen.has(h.url + '|' + h.time)) history.push({ url: h.url, title: h.title, time: h.time });
     history.sort((a, b) => a.time - b.time);
+    noteHistoryRestored(back);
     save('history.json', history);
     save('history-bin.json', historyBin);
     return back.length;
@@ -4117,7 +4156,7 @@ function setupIpc() {
     // Chromium's LevelDB files may be locked on Windows — clearStorageData clears them in-process.
     setImmediate(async () => {
       const dir = profiles.dirFor(profileId);
-      for (const f of ['bookmarks.json', 'history.json', 'history-bin.json', 'notes.json', 'bookmark-folders.json',
+      for (const f of ['bookmarks.json', 'history.json', 'history-bin.json', 'history-del.json', 'notes.json', 'bookmark-folders.json',
                         'settings.json', 'vault.json', 'session.json', 'closed.json', 'syncstate.json',
                         'vault-remember.key', 'vault-device.key', 'dialicons']) {
         try { fs.rmSync(path.join(dir, f), { recursive: true, force: true }); } catch {}
@@ -4195,7 +4234,7 @@ function setupIpc() {
       } catch {}
       // Delete our own data files from the active profile dir
       // (Chromium's LevelDB files may be locked on Windows — clearStorageData clears them in-process)
-      for (const f of ['bookmarks.json', 'history.json', 'history-bin.json', 'notes.json', 'bookmark-folders.json',
+      for (const f of ['bookmarks.json', 'history.json', 'history-bin.json', 'history-del.json', 'notes.json', 'bookmark-folders.json',
                         'settings.json', 'vault.json', 'session.json', 'closed.json', 'syncstate.json',
                         'vault-remember.key', 'vault-device.key', 'dialicons']) {
         try { fs.rmSync(path.join(baseDir, f), { recursive: true, force: true }); } catch {}
@@ -5311,6 +5350,7 @@ app.whenReady().then(async () => {
 
   bookmarks = load('bookmarks.json', []).map((b) => ({ deleted: false, updated: b.added || Date.now(), ...b }));
   history = load('history.json', []);
+  historyDel = load('history-del.json', []).filter((e) => e && typeof e.url === 'string' && (!e.sent || Date.now() - (e.at || 0) < 90 * 864e5));
   historyBin = load('history-bin.json', []).filter((h) => Date.now() - (h.binTime || 0) < 30 * 864e5);
   notes = load('notes.json', []);
   bookmarkFolders = load('bookmark-folders.json', []);

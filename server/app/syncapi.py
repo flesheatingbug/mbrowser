@@ -65,13 +65,28 @@ def history_sync(c, body):
     for it in _items(body):
         if not _good_url(it.get('url')) or 'time' not in it:
             continue
-        c.execute('INSERT OR IGNORE INTO history(url, time, title, rev) VALUES(?,?,?,?)',
-                  (str(it['url']).strip(), _num(it.get('time')), _clip(it.get('title')), _next_rev(c)))
-    rows = c.execute('SELECT url, title, time, rev FROM history WHERE rev > ? ORDER BY rev LIMIT ?', (since, MAX_ITEMS)).fetchall()
+        url, t = str(it['url']).strip(), _num(it.get('time'))
+        if 'deleted' in it:
+            # an explicit delete (or a restore from the bin): the entry changes state and every other device hears about it
+            flag = 1 if it.get('deleted') else 0
+            row = c.execute('SELECT deleted FROM history WHERE url=? AND time=?', (url, t)).fetchone()
+            if row is None:
+                c.execute('INSERT INTO history(url, time, title, rev, deleted) VALUES(?,?,?,?,?)', (url, t, _clip(it.get('title')), _next_rev(c), flag))
+            elif (row['deleted'] or 0) != flag:
+                c.execute('UPDATE history SET deleted=?, rev=? WHERE url=? AND time=?', (flag, _next_rev(c), url, t))
+        else:
+            c.execute('INSERT OR IGNORE INTO history(url, time, title, rev) VALUES(?,?,?,?)', (url, t, _clip(it.get('title')), _next_rev(c)))
+    rows = c.execute('SELECT url, title, time, rev, deleted FROM history WHERE rev > ? ORDER BY rev LIMIT ?', (since, MAX_ITEMS)).fetchall()
     rev = _cur_rev(c)
     if len(rows) == MAX_ITEMS:
         rev = rows[-1]['rev']  # more to come: only advance as far as we actually sent
-    return {'rev': rev, 'items': [{'url': r['url'], 'title': r['title'], 'time': r['time']} for r in rows]}
+    out = []
+    for r in rows:
+        o = {'url': r['url'], 'title': r['title'], 'time': r['time']}
+        if r['deleted']:
+            o['deleted'] = True
+        out.append(o)
+    return {'rev': rev, 'items': out}
 
 
 def tabs_put(c, body):

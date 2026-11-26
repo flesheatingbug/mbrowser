@@ -49,13 +49,16 @@ object Sync {
         val sentH = Store.dirtyHistory()
         val hItems = JSONArray()
         for (v in sentH) hItems.put(JSONObject().put("url", v.url).put("title", v.title).put("time", v.time))
+        // removals and restores travel as explicit state changes so every device hears about them
+        val changes = Store.historyChanges()
+        for (t in changes) hItems.put(JSONObject().put("url", t.url).put("title", "").put("time", t.time).put("deleted", t.del))
         var body = JSONObject().put("since", prefs.histRev).put("items", hItems)
         for (round in 0 until 20) {
             val rh = api.request("POST", "/api/history", body)
             val got = rh.optJSONArray("items") ?: JSONArray()
             Store.mergeHistory(got)
             prefs.histRev = rh.optLong("rev", prefs.histRev)
-            if (round == 0) Store.markHistorySent(sentH)
+            if (round == 0) { Store.markHistorySent(sentH); Store.markChangesSent(changes) }
             if (got.length() < PAGE) break
             body = JSONObject().put("since", prefs.histRev).put("items", JSONArray())
         }

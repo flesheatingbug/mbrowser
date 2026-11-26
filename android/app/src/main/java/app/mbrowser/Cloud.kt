@@ -267,17 +267,33 @@ object Cloud {
         val since = body.optLong("since")
         var rev = d.optLong("rev")
         var items = d.getJSONArray("items")
-        val seen = HashSet<String>()
-        for (i in 0 until items.length()) { val h = items.getJSONObject(i); seen.add(h.optString("url") + "|" + h.optLong("time")) }
+        val index = HashMap<String, JSONObject>()
+        for (i in 0 until items.length()) { val h = items.getJSONObject(i); index[h.optString("url") + "|" + h.optLong("time")] = h }
         val arr = body.optJSONArray("items") ?: JSONArray()
         for (i in 0 until arr.length()) {
             val it = arr.optJSONObject(i) ?: continue
             val url = it.optString("url").trim()
             if (!good(url) || !it.has("time")) continue
             val k = url + "|" + it.optLong("time")
-            if (!seen.add(k)) continue
+            val have = index[k]
+            if (it.has("deleted")) { // an explicit delete or restore: the entry changes state and other devices hear about it
+                val flag = it.optBoolean("deleted")
+                if (have == null) {
+                    rev++
+                    val h = JSONObject().put("url", url).put("title", clip(it.optString("title"))).put("time", it.optLong("time")).put("rev", rev)
+                    if (flag) h.put("deleted", true)
+                    items.put(h); index[k] = h
+                } else if (have.optBoolean("deleted") != flag) {
+                    rev++
+                    if (flag) have.put("deleted", true) else have.remove("deleted")
+                    have.put("rev", rev)
+                }
+                continue
+            }
+            if (have != null) continue
             rev++
-            items.put(JSONObject().put("url", url).put("title", clip(it.optString("title"))).put("time", it.optLong("time")).put("rev", rev))
+            val h = JSONObject().put("url", url).put("title", clip(it.optString("title"))).put("time", it.optLong("time")).put("rev", rev)
+            items.put(h); index[k] = h
         }
         if (items.length() > MAX_HISTORY) {
             val cut = JSONArray()
@@ -289,7 +305,11 @@ object Cloud {
         for (i in 0 until items.length()) { val h = items.getJSONObject(i); if (h.optLong("rev") > since && rows.size < PAGE) rows.add(h) }
         val outRev = if (rows.size == PAGE) rows.last().optLong("rev") else rev
         val out = JSONArray()
-        for (h in rows) out.put(JSONObject().put("url", h.optString("url")).put("title", h.optString("title")).put("time", h.optLong("time")))
+        for (h in rows) {
+            val o = JSONObject().put("url", h.optString("url")).put("title", h.optString("title")).put("time", h.optLong("time"))
+            if (h.optBoolean("deleted")) o.put("deleted", true)
+            out.put(o)
+        }
         return JSONObject().put("rev", outRev).put("items", out)
     }
 

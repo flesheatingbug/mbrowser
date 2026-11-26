@@ -92,6 +92,10 @@ class Store:
                         c.execute("ALTER TABLE bookmarks ADD COLUMN folder TEXT DEFAULT ''")
                     except sqlite3.OperationalError:
                         pass  # already there
+                    try:
+                        c.execute("ALTER TABLE history ADD COLUMN deleted INTEGER DEFAULT 0")
+                    except sqlite3.OperationalError:
+                        pass  # already there
                     self._ready.add(path)
             yield c
             c.commit()

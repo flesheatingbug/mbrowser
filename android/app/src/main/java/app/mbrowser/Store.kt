@@ -27,6 +27,30 @@ object Store {
     private val bookmarks = LinkedHashMap<String, Bookmark>()
     private val history = ArrayList<Visit>()
     private val historyBin = ArrayList<BinVisit>()
+
+    /** Visits removed on this phone, kept so the removal reaches the sync server and an older synced copy cannot bring them back. */
+    class Tomb(val url: String, val time: Long, var at: Long, var del: Boolean, var sent: Boolean)
+    private val tombs = LinkedHashMap<String, Tomb>()
+    private fun saveTombs() {
+        try {
+            val a = JSONArray()
+            for (t in tombs.values) a.put(JSONObject().put("url", t.url).put("time", t.time).put("at", t.at).put("del", t.del).put("sent", t.sent))
+            File(dir, "history-del.json").writeText(a.toString())
+        } catch (_: Exception) { }
+    }
+    private fun noteRemoved(v: Visit) {
+        val k = v.url + "|" + v.time
+        val t = tombs[k]
+        if (t != null) { t.del = true; t.sent = false; t.at = System.currentTimeMillis() } else tombs[k] = Tomb(v.url, v.time, System.currentTimeMillis(), true, false)
+        if (tombs.size > 30000) { val it = tombs.keys.iterator(); var n = tombs.size - 30000; while (n-- > 0 && it.hasNext()) { it.next(); it.remove() } }
+    }
+    private fun noteRestored(v: Visit) { tombs[v.url + "|" + v.time]?.let { if (it.del) { it.del = false; it.sent = false; it.at = System.currentTimeMillis() } } }
+    /** Removals and restores not yet sent, as explicit state changes. */
+    @Synchronized fun historyChanges(): List<Tomb> = tombs.values.filter { !it.sent }.take(5000).map { Tomb(it.url, it.time, it.at, it.del, false) }
+    @Synchronized fun markChangesSent(sent: List<Tomb>) {
+        for (s in sent) tombs[s.url + "|" + s.time]?.let { if (it.del == s.del) it.sent = true }
+        saveTombs()
+    }
     private var loaded = false
     private const val MAX_HISTORY = 20000
 
@@ -44,6 +68,14 @@ object Store {
                         o.getString("url"), o.optString("title"), cleanPath(o.optString("folder")),
                         o.optLong("added"), o.optLong("updated"), o.optBoolean("deleted"), o.optBoolean("dirty"), o.optBoolean("bin"),
                     )
+                }
+            }
+            val ht = File(dir, "history-del.json")
+            if (ht.exists()) {
+                val a = JSONArray(ht.readText()); val cut = System.currentTimeMillis() - 90L * 86_400_000L
+                for (i in 0 until a.length()) {
+                    val o = a.getJSONObject(i)
+                    if (!o.optBoolean("sent") || o.optLong("at") > cut) tombs[o.getString("url") + "|" + o.optLong("time")] = Tomb(o.getString("url"), o.optLong("time"), o.optLong("at"), o.optBoolean("del", true), o.optBoolean("sent"))
                 }
             }
             val hb = File(dir, "history-bin.json")
@@ -150,9 +182,9 @@ object Store {
         if (gone.isEmpty()) return 0
         history.removeAll(gone.toSet())
         val now = System.currentTimeMillis()
-        for (v in gone) historyBin.add(BinVisit(v.copy(dirty = false), now))
+        for (v in gone) { historyBin.add(BinVisit(v.copy(dirty = false), now)); noteRemoved(v) }
         if (historyBin.size > 5000) historyBin.subList(0, historyBin.size - 5000).clear()
-        saveHistory(); saveHistoryBin()
+        saveHistory(); saveHistoryBin(); saveTombs()
         return gone.size
     }
 
@@ -161,9 +193,9 @@ object Store {
         if (back.isEmpty()) return 0
         historyBin.removeAll(back.toSet())
         val have = history.map { vkey(it) }.toHashSet()
-        for (b in back) if (have.add(vkey(b.visit))) history.add(b.visit.copy(dirty = false))
+        for (b in back) { noteRestored(b.visit); if (have.add(vkey(b.visit))) history.add(b.visit.copy(dirty = false)) }
         history.sortBy { it.time }
-        saveHistory(); saveHistoryBin()
+        saveHistory(); saveHistoryBin(); saveTombs()
         return back.size
     }
 
@@ -171,7 +203,7 @@ object Store {
 
     @Synchronized fun historyList(): List<Visit> = history.sortedByDescending { it.time }
 
-    @Synchronized fun clearHistory() { history.clear(); saveHistory() }
+    @Synchronized fun clearHistory() { for (v in history) noteRemoved(v); history.clear(); saveHistory(); saveTombs() }
     fun visitKey(v: Visit) = v.url + "|" + v.time
 
     /** Everything is sent again (the sync backend changed, so the new place starts empty). */
@@ -316,15 +348,26 @@ object Store {
 
     @Synchronized fun mergeHistory(items: JSONArray) {
         val have = history.map { it.url + "|" + it.time }.toHashSet()
+        var removedAny = false
         for (i in 0 until items.length()) {
             val o = items.getJSONObject(i)
             val url = o.optString("url")
             val time = o.optLong("time")
-            if (url.isEmpty() || !have.add("$url|$time")) continue
+            if (url.isEmpty()) continue
+            val k = "$url|$time"
+            if (o.optBoolean("deleted")) { // removed on another device (or by us earlier)
+                if (have.remove(k)) { history.removeAll { it.url == url && it.time == time }; removedAny = true }
+                if (tombs[k] == null) { tombs[k] = Tomb(url, time, System.currentTimeMillis(), true, true); removedAny = true }
+                continue
+            }
+            if (k in have) continue
+            if (tombs[k]?.del == true) continue   // we removed it: an older server copy must not bring it back
+            have.add(k)
             history.add(Visit(url, o.optString("title"), time, false))
         }
         history.sortBy { it.time }
         if (history.size > MAX_HISTORY) history.subList(0, history.size - MAX_HISTORY).clear()
         saveHistory()
+        if (removedAny) saveTombs()
     }
 }
