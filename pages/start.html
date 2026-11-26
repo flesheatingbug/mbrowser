@@ -66,6 +66,10 @@
     padding: 2px 6px; border-radius: 6px;
     background: color-mix(in srgb, var(--bg) 70%, transparent); backdrop-filter: blur(4px); }
   .nm svg { flex: none; opacity: .6; }
+  .nm .nmt { white-space: nowrap; }
+  .nm.roll { justify-content: flex-start; text-overflow: clip; }
+  .nm.roll .nmt { animation: nmroll var(--t, 4s) ease-in-out infinite alternate; }
+  @keyframes nmroll { 0%, 15% { transform: translateX(0); } 85%, 100% { transform: translateX(var(--d)); } }
   body.hide-titles .nm { display: none; }
 
   /* wallpaper behind the page */
@@ -649,8 +653,19 @@ function buildTile(d, idx, items, inFolder) {
   })();
 
   const nm = document.createElement('div'); nm.className = 'nm';
-  nm.textContent = d.title || (isFolder ? 'Folder' : d.url);
+  const nmt = document.createElement('span'); nmt.className = 'nmt';
+  nmt.textContent = d.title || (isFolder ? 'Folder' : d.url);
+  nm.append(nmt);
   tile.append(th, nm);
+  // long names scroll to the end and back while the pointer is over the tile
+  tile.addEventListener('mouseenter', () => {
+    const over = nmt.scrollWidth - nm.clientWidth + 12;
+    if (over <= 0) return;
+    nmt.style.setProperty('--d', '-' + over + 'px');
+    nmt.style.setProperty('--t', Math.max(2, over / 30 + 1.5) + 's');
+    nm.classList.add('roll');
+  });
+  tile.addEventListener('mouseleave', () => nm.classList.remove('roll'));
 
   tile.ondragstart = (e) => e.preventDefault();
   tile.onpointerdown = (e) => armDrag(e, tile, grid2(tile), items, inFolder);

@@ -2,6 +2,7 @@
  {
   "date": "2026-11-26",
   "items": [
+   "Speed dial: long names scroll when you hover over a tile.",
    "Deleting history now stays deleted: removals sync to your other devices and an older synced copy can no longer bring them back (update the sync server to spread deletions between devices).",
    "Android: a new private tab shows your speed dial, with a slim private-tab note at the bottom.",
    "Hide cookie pop-ups: clicks Reject or Only necessary where a banner has it, hides the rest and lets the page scroll again (Privacy settings; desktop and Android).",
