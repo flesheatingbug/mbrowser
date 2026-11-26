@@ -13,9 +13,9 @@ object OnlineWallpapers {
     class Item(val thumb: String, val full: String, val label: String)
     class Page(val items: List<Item>, val more: Boolean)
 
-    val SOURCES = listOf("bing" to "Bing daily", "nasa" to "NASA", "wiki" to "Wikimedia", "picsum" to "Picsum")
+    val SOURCES = listOf("bing" to "Bing daily", "wiki" to "Wikimedia", "picsum" to "Picsum")
     val CATEGORIES = listOf("Nature", "Landscapes", "Mountains", "Ocean", "Space", "Cities", "Animals", "Flowers", "Abstract")
-    private val HOSTS = setOf("www.bing.com", "picsum.photos", "fastly.picsum.photos", "upload.wikimedia.org", "apod.nasa.gov", "api.nasa.gov", "commons.wikimedia.org")
+    private val HOSTS = setOf("www.bing.com", "picsum.photos", "fastly.picsum.photos", "upload.wikimedia.org", "commons.wikimedia.org")
 
     private fun get(url: String, max: Int = 30 * 1024 * 1024): ByteArray {
         val u = URL(url)
@@ -40,15 +40,6 @@ object OnlineWallpapers {
                 Item("https://picsum.photos/id/$id/240/${240 * h / w}.jpg", "https://picsum.photos/id/$id/$w/$h.jpg", it.optString("author", "Picsum"))
             }
             return Page(items, true)
-        }
-        if (source == "nasa") {
-            fun day(n: Int) = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).apply { timeZone = java.util.TimeZone.getTimeZone("UTC") }.format(java.util.Date(System.currentTimeMillis() - n * 86400000L))
-            val arr = JSONArray(String(get("https://api.nasa.gov/planetary/apod?api_key=DEMO_KEY&start_date=${day(page * 12 + 11)}&end_date=${day(page * 12)}")))
-            val items = (0 until arr.length()).map { arr.getJSONObject(it) }.reversed().filter { it.optString("media_type") == "image" && it.optString("url").startsWith("https://apod.nasa.gov/") }.map {
-                val hd = it.optString("hdurl")
-                Item(it.getString("url"), if (hd.startsWith("https://apod.nasa.gov/")) hd else it.getString("url"), it.optString("title", "NASA").take(80))
-            }
-            return Page(items, page < 40)
         }
         if (source == "wiki") {
             val term = category.filter { it.isLetter() || it == ' ' }.take(30).ifEmpty { "nature" }
@@ -78,7 +69,9 @@ object OnlineWallpapers {
         return Page(items, page < 1)
     }
 
-    fun thumb(url: String): Bitmap? = try {
+    fun thumb(url: String): Bitmap? = thumbOnce(url) ?: run { Thread.sleep(800); thumbOnce(url) }
+
+    private fun thumbOnce(url: String): Bitmap? = try {
         val b = get(url, 40 * 1024 * 1024)
         val o = BitmapFactory.Options(); o.inJustDecodeBounds = true; BitmapFactory.decodeByteArray(b, 0, b.size, o)
         var n = 1; while (o.outWidth / (n * 2) >= 400) n *= 2

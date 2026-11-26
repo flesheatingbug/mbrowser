@@ -3999,7 +3999,7 @@ function setupIpc() {
     } catch (e) { return { error: e.message }; }
   }, PAGE_ONLY);
   // pictures from the internet, sized for this screen: Bing's daily pictures and Picsum's photo library (no account or key)
-  const WP_HOSTS = ['www.bing.com', 'picsum.photos', 'fastly.picsum.photos', 'upload.wikimedia.org', 'apod.nasa.gov'];
+  const WP_HOSTS = ['www.bing.com', 'picsum.photos', 'fastly.picsum.photos', 'upload.wikimedia.org'];
   const WP_UA = 'mbrowser/1.0 (https://github.com/flesheatingbug/mbrowser)';
   const WIKI_STEPS = [330, 500, 960, 1280, 1920, 2560, 3840];
   const wikiThumb = (url, w) => { const m = /^(https:\/\/upload\.wikimedia\.org\/wikipedia\/commons)\/(.+)\/([^/]+)$/.exec(url); return m ? `${m[1]}/thumb/${m[2]}/${m[3]}/${w}px-${m[3]}${/\.(svg|tif|tiff)$/i.test(m[3]) ? '.png' : ''}` : null; };
@@ -4016,14 +4016,6 @@ function setupIpc() {
           thumb: `https://picsum.photos/id/${x.id}/320/${Math.round(320 * h / w)}.jpg`,
           full: `https://picsum.photos/id/${x.id}/${Math.min(w, 3840)}/${Math.min(h, 2160)}.jpg`,
           label: x.author || 'Picsum' })), more: true };
-      }
-      if (source === 'nasa') {
-        // NASA's Astronomy Picture of the Day: 12 days per page, pictures only (some days are videos)
-        const day = (n) => new Date(Date.now() - n * 86400000).toISOString().slice(0, 10);
-        const j = await wpJson(`https://api.nasa.gov/planetary/apod?api_key=DEMO_KEY&start_date=${day(pg * 12 + 11)}&end_date=${day(pg * 12)}`);
-        const ok = (u) => typeof u === 'string' && /^https:\/\/apod\.nasa\.gov\//.test(u);
-        return { items: (Array.isArray(j) ? j : []).reverse().filter((x) => x.media_type === 'image' && ok(x.url)).map((x) => ({
-          thumb: x.url, full: ok(x.hdurl) && w > 1920 ? x.hdurl : x.url, label: String(x.title || 'NASA').slice(0, 80) })), more: pg < 40 };
       }
       if (source === 'wiki') {
         // featured pictures on Wikimedia Commons, searched by a topic word

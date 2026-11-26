@@ -394,12 +394,21 @@
       const panel = el('div'); panel.style.cssText = 'display:none;margin-top:12px';
       more.onclick = () => { panel.style.display = panel.style.display === 'none' ? 'block' : 'none'; if (panel.style.display === 'block' && !panel.dataset.ready) { panel.dataset.ready = '1'; load(); } };
       const bar = el('div'); bar.style.cssText = 'display:flex;gap:8px;align-items:center;flex-wrap:wrap';
-      const src = el('select'); for (const [v, n] of [['bing', 'Bing daily pictures'], ['nasa', 'NASA picture of the day'], ['wiki', 'Wikimedia featured photos'], ['picsum', 'Picsum photo library']]) { const o = el('option', null, n); o.value = v; src.append(o); }
+      const src = el('select'); for (const [v, n] of [['bing', 'Bing daily pictures'], ['wiki', 'Wikimedia featured photos'], ['picsum', 'Picsum photo library']]) { const o = el('option', null, n); o.value = v; src.append(o); }
       const cat = el('select'); for (const n of ['Nature', 'Landscapes', 'Mountains', 'Ocean', 'Space', 'Cities', 'Animals', 'Flowers', 'Abstract']) { const o = el('option', null, n); o.value = n.toLowerCase(); cat.append(o); }
       cat.style.display = 'none';
       const note = el('span', null, ''); note.style.cssText = 'color:var(--muted);font-size:12px';
       const tiles = el('div'); tiles.style.cssText = 'display:flex;gap:10px;flex-wrap:wrap;margin-top:10px';
       const next = el('button', 'btn', 'Load more'); next.type = 'button'; next.style.marginTop = '10px';
+      // a few previews at a time (and one retry): Wikimedia refuses a burst of requests
+      let running = 0; const waiting = [];
+      const thumbQ = (u) => new Promise((res) => { waiting.push({ u, res }); pump(); });
+      function pump() {
+        while (running < 3 && waiting.length) {
+          const j = waiting.shift(); running++;
+          (async () => { let d = await browser.wallpaperOnlineThumb(j.u); if (!d) { await new Promise((r) => setTimeout(r, 800)); d = await browser.wallpaperOnlineThumb(j.u); } j.res(d); running--; pump(); })();
+        }
+      }
       let pg = 0;
       async function load(reset = true) {
         if (reset) { pg = 0; tiles.textContent = ''; }
@@ -410,7 +419,7 @@
         for (const it of r.items) {
           const b = el('button'); b.type = 'button'; b.title = it.label;
           b.style.cssText = 'width:160px;height:92px;padding:0;border-radius:10px;overflow:hidden;position:relative;cursor:pointer;border:1px solid var(--line);background:var(--tab)';
-          const im = el('img'); browser.wallpaperOnlineThumb(it.thumb).then((d) => { if (d) im.src = d; else b.title = it.label + ' (no preview)'; }); im.style.cssText = 'width:100%;height:100%;object-fit:cover;display:block';
+          const im = el('img'); thumbQ(it.thumb).then((d) => { if (d) im.src = d; else b.title = it.label + ' (no preview)'; }); im.style.cssText = 'width:100%;height:100%;object-fit:cover;display:block';
           const lab = el('span', null, it.label); lab.style.cssText = 'position:absolute;left:0;right:0;bottom:0;padding:2px 6px;font-size:10px;color:#fff;background:linear-gradient(transparent,rgba(0,0,0,.7));text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis';
           b.append(im, lab);
           b.onclick = async () => { note.textContent = 'Downloading…'; const x = await browser.wallpaperOnline(it.full); if (x.error) { note.textContent = x.error; return; } S = await browser.getSettings(); render(); };

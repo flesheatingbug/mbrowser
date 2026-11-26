@@ -248,7 +248,7 @@ class SettingsActivity : BaseActivity() {
             }
             tile("none", "Theme colours", null) { prefs.wallpaper = "none"; build() }
             tile("custom", "Your photo", if (Wallpapers.hasCustom(this)) Wallpapers.thumb(this, "custom") else null) { wpPicker.launch("image/*") }
-            tile("online", "From the internet", null) { onlineWallpapers() }
+            tile("online", "Online", null) { onlineWallpapers() }
             for (f in Wallpapers.saved(this)) {
                 val th = Wallpapers.savedThumb(f)
                 tile("saved:" + f.name, "Saved", th) { if (Wallpapers.useSaved(this, f)) { prefs.wallpaper = "custom"; toast("Wallpaper set") }; build() }
@@ -278,6 +278,9 @@ class SettingsActivity : BaseActivity() {
         root.addView(tabs); root.addView(catSpin); root.addView(status); root.addView(sv, LinearLayout.LayoutParams(-1, dp(420)))
         val dlg = AlertDialog.Builder(this).setTitle("Wallpapers from the internet").setView(root).setNegativeButton("Close", null).create()
         val cell = (resources.displayMetrics.widthPixels - dp(24 + 24)) / 3
+        // two previews at a time: Wikimedia refuses a burst of requests
+        val thumbPool = java.util.concurrent.Executors.newFixedThreadPool(2)
+        dlg.setOnDismissListener { thumbPool.shutdownNow() }
         fun load(reset: Boolean) {
             if (reset) { page = 0; grid.removeAllViews() }
             status.text = "Loading…"; more.visibility = View.GONE
@@ -294,7 +297,7 @@ class SettingsActivity : BaseActivity() {
                             val lp = android.widget.GridLayout.LayoutParams(); lp.width = cell; lp.height = cell * 16 / 9; lp.setMargins(dp(3), dp(3), dp(3), dp(3))
                             grid.addView(iv, lp)
                             roundClip(iv, 10)
-                            Thread { val b = OnlineWallpapers.thumb(it.thumb); if (b != null) runOnUiThread { iv.setImageBitmap(b) } }.start()
+                            thumbPool.execute { val b = OnlineWallpapers.thumb(it.thumb); if (b != null) runOnUiThread { iv.setImageBitmap(b) } }
                             iv.setOnClickListener {_ ->
                                 status.text = "Downloading…"
                                 Thread {
