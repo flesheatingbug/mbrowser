@@ -390,18 +390,19 @@ function setDefaultLinux() {
   try {
     const f = linuxDesktopFile();
     let txt = ''; try { txt = fs.readFileSync(f, 'utf8'); } catch { /* none yet */ }
-    if (!/x-scheme-handler\/https/.test(txt)) {
+    if (!/application\/xhtml\+xml/.test(txt) || !/x-scheme-handler\/https/.test(txt)) {
       const exec = process.env.APPIMAGE ? `"${process.env.APPIMAGE}"` : `"${process.execPath}" "${app.getAppPath()}"`;
       fs.mkdirSync(path.dirname(f), { recursive: true });
       fs.writeFileSync(f, ['[Desktop Entry]', 'Type=Application', 'Name=mbrowser', 'GenericName=Web Browser',
         'Comment=Browse your way. Your data. Your server.', `Exec=${exec} %U`, 'Icon=mbrowser', 'Terminal=false',
         'Categories=Network;WebBrowser;', 'StartupWMClass=mbrowser',
-        'MimeType=text/html;x-scheme-handler/http;x-scheme-handler/https;', ''].join('\n'));
+        'MimeType=text/html;application/xhtml+xml;x-scheme-handler/http;x-scheme-handler/https;', ''].join('\n'));
       try { spawn('update-desktop-database', [path.dirname(f)], { stdio: 'ignore' }).on('error', () => {}); } catch { /* optional */ }
     }
     const run = (cmd, args) => { try { require('child_process').execFileSync(cmd, args, { stdio: 'ignore', timeout: 5000 }); return true; } catch { return false; } };
     let ok = run('xdg-settings', ['set', 'default-web-browser', 'mbrowser.desktop']);
-    ok = run('xdg-mime', ['default', 'mbrowser.desktop', 'x-scheme-handler/http', 'x-scheme-handler/https']) || ok;
+    // links, but also local .html files and the other web types, which Vivaldi keeps if they are left out
+    ok = run('xdg-mime', ['default', 'mbrowser.desktop', 'x-scheme-handler/http', 'x-scheme-handler/https', 'text/html', 'application/xhtml+xml']) || ok;
     _dfc.t = 0;
     return { ok };
   } catch (e) { return { ok: false, error: String(e && e.message || e) }; }
@@ -753,18 +754,10 @@ function isAuthHost(url) {
 }
 
 // ---------- tabs ----------
-function maskUserAgentData(wc) {
-  // Override navigator.userAgentData via CDP so Google sign-in doesn't see "Electron" in the brand list.
-  // ses.setUserAgent() patches navigator.userAgent but not the Client Hints API.
-  if (BIS.includes('cdp')) return;
-  if (S().general.browserId !== 'chrome') return;   // only the Chrome identity is faked; the others are left exactly as they are
-  // Don't bail on attach failure (e.g. debugger already attached by DevTools) — just send the command anyway.
-  try { wc.debugger.attach('1.3'); } catch { /* already attached is fine */ }
+function chromeIdentityParams() {
   const plat = process.platform === 'win32' ? 'Windows' : 'Linux';
-  const ua = `Mozilla/5.0 ${plat === 'Windows' ? '(Windows NT 10.0; Win64; x64)' : '(X11; Linux x86_64)'} AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${CHROME_VER} Safari/537.36`;
-  const platVer = chromePlatformVersion();
-  wc.debugger.sendCommand('Emulation.setUserAgentOverride', {
-    userAgent: ua,
+  return {
+    userAgent: `Mozilla/5.0 ${plat === 'Windows' ? '(Windows NT 10.0; Win64; x64)' : '(X11; Linux x86_64)'} AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${CHROME_VER} Safari/537.36`,
     userAgentMetadata: {
       brands: [
         { brand: 'Not?A_Brand', version: '8' },
@@ -777,12 +770,24 @@ function maskUserAgentData(wc) {
         { brand: 'Google Chrome', version: CHROME_VER },
       ],
       platform: plat,
-      platformVersion: platVer,
+      platformVersion: chromePlatformVersion(),
       architecture: 'x86',
       model: '',
       mobile: false,
     },
-  }).catch(() => {});
+  };
+}
+function maskUserAgentData(wc) {
+  // Override navigator.userAgentData via CDP so Google sign-in doesn't see "Electron" in the brand list.
+  // ses.setUserAgent() patches navigator.userAgent but not the Client Hints API.
+  if (BIS.includes('cdp')) return;
+  if (S().general.browserId !== 'chrome') return;   // only the Chrome identity is faked; the others are left exactly as they are
+  // Don't bail on attach failure (e.g. debugger already attached by DevTools) — just send the command anyway.
+  try { wc.debugger.attach('1.3'); } catch { /* already attached is fine */ }
+  const plat = process.platform === 'win32' ? 'Windows' : 'Linux';
+  const ua = `Mozilla/5.0 ${plat === 'Windows' ? '(Windows NT 10.0; Win64; x64)' : '(X11; Linux x86_64)'} AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${CHROME_VER} Safari/537.36`;
+  const platVer = chromePlatformVersion();
+  wc.debugger.sendCommand('Emulation.setUserAgentOverride', chromeIdentityParams()).catch(() => {});
   // Inject window.chrome shim before any page scripts. Real Chrome exposes
   // window.chrome.runtime (a stub) even in non-extension tabs; Google sign-in
   // checks for its presence. Page.addScriptToEvaluateOnNewDocument runs in
@@ -2038,6 +2043,7 @@ function showContextMenu(tab, params) {
   add('Bookmark This Page', toggleBookmark);
   add('Add Page to Speed Dial', () => runCommand('page-add-speeddial'));
   add('Translate Page', () => translateTab(tab));
+  { const im = identityMenu(wc); if (im) m.push(im); }
   add('View Page Source', () => runCommand('page-source'));
   add('Inspect Element', () => wc.inspectElement(params.x, params.y));
   popup(Menu.buildFromTemplate(m));
@@ -2121,6 +2127,7 @@ function mainMenu() {
       enabled: !!(host && blockerOn),
       click: toggleSiteBlocking,
     },
+    ...(identityMenu(wc) ? [identityMenu(wc)] : []),
     { type: 'separator' },
     {
       label: 'More Tools',
@@ -4470,6 +4477,38 @@ const isFirefoxSite = (u) => {
     return FIREFOX_SITES.concat(mine).some((d) => h === d || h.endsWith('.' + d));
   } catch { return false; }
 };
+const SAFARI_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.6 Safari/605.1.15';
+// "Identify this page as": a choice remembered per site (host), local to this computer (site-identity.json)
+let _siteId = null;
+const siteIdMap = () => (_siteId = _siteId || load('site-identity.json', {}));
+const siteIdFor = (u) => { try { return siteIdMap()[new URL(u).hostname.toLowerCase()] || null; } catch { return null; } };
+const idUA = (id) => (id === 'firefox' ? FIREFOX_UA : id === 'safari' ? SAFARI_UA : uaForMode('chrome'));
+function setSiteIdentity(wc, id) {
+  let host = '';
+  try { host = new URL(wc.getURL()).hostname.toLowerCase(); } catch { /* not a page */ }
+  if (!host) return;
+  const map = siteIdMap();
+  if (id) map[host] = id; else delete map[host];
+  save('site-identity.json', map);
+  for (const tb of tabByWc.values()) {
+    try {
+      if (tb.wc.isDestroyed() || new URL(tb.wc.getURL()).hostname.toLowerCase() !== host) continue;
+      if (tb.wc._idSet) tb.wc._idSet(tb.wc.getURL());
+      tb.wc.reloadIgnoringCache();
+    } catch { /* tab closed */ }
+  }
+}
+function identityMenu(wc) {
+  const url = wc ? wc.getURL() : '';
+  if (!isWeb(url)) return null;
+  const cur_ = siteIdFor(url);
+  const radio = (label, id) => ({ label, type: 'radio', checked: cur_ === id, click: () => setSiteIdentity(wc, id) });
+  return { label: 'Identify This Page As', submenu: [
+    radio('Browser setting (default)', null), { type: 'separator' },
+    radio('Chrome', 'chrome'), radio('Firefox', 'firefox'), radio('Safari', 'safari'),
+    { type: 'separator' }, { label: 'Applies to ' + hostOf(url) + ' and is remembered', enabled: false },
+  ] };
+}
 const FIREFOX_UA = process.platform === 'win32'
   ? 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0'
   : 'Mozilla/5.0 (X11; Linux x86_64; rv:140.0) Gecko/20100101 Firefox/140.0';
@@ -4479,10 +4518,24 @@ const FIREFOX_UA = process.platform === 'win32'
 // because the identity a page sees is fixed when its navigation starts.
 function applyAutoIdentity(wc) {
   if (BIS.includes('ua')) return;
-  if (S().general.browserId !== 'auto') return;
-  const chromeUA = uaForMode('chrome');
-  let last = FIREFOX_UA;   // what the process says by default
-  const set = (url) => { const ua = isFirefoxSite(url) ? FIREFOX_UA : chromeUA; if (ua !== last) { last = ua; try { wc.setUserAgent(ua); } catch { /* closed */ } return true; } return false; };
+  const mode = () => S().general.browserId;
+  const base = () => uaForMode(mode());   // what the process / session says by default
+  const wanted = (url) => {
+    const id = siteIdFor(url) || (mode() === 'auto' ? (isFirefoxSite(url) ? 'firefox' : 'chrome') : null);
+    return { id, ua: id ? idUA(id) : base() };
+  };
+  let last = base();
+  const set = (url) => {
+    const w = wanted(url);
+    if (w.ua === last) return false;
+    last = w.ua;
+    try { wc.setUserAgent(w.ua); } catch { /* closed */ }
+    if (mode() === 'chrome') {   // the Chrome identity also overrides the UA through the debugger: keep it in step
+      try { wc.debugger.sendCommand('Emulation.setUserAgentOverride', w.id && w.id !== 'chrome' ? { userAgent: w.ua } : chromeIdentityParams()).catch(() => {}); } catch { /* not attached */ }
+    }
+    return true;
+  };
+  wc._idSet = set;
   const orig = wc.loadURL.bind(wc);
   let reloading = false;
   wc.loadURL = (url, opts) => { set(url); return orig(url, opts); };   // the address bar loads pages this way
@@ -4592,6 +4645,16 @@ function setupSession(ses) {
       h['sec-ch-ua-bitness'] = '"64"';
       h['sec-ch-ua-model'] = '""';
       if (process.platform === 'win32') h['sec-ch-ua-wow64'] = '?0';
+    }
+    const sid = siteIdFor(details.url);   // "Identify this page as" for this site
+    if (sid) {
+      Object.keys(h).filter((k) => /^(sec-ch-ua|user-agent$)/i.test(k)).forEach((k) => delete h[k]);
+      h['User-Agent'] = idUA(sid);
+      if (sid === 'chrome') {
+        h['sec-ch-ua'] = `"Chromium";v="${CHROME_MAJOR}", "Google Chrome";v="${CHROME_MAJOR}", "Not?A_Brand";v="8"`;
+        h['sec-ch-ua-mobile'] = '?0';
+        h['sec-ch-ua-platform'] = process.platform === 'win32' ? '"Windows"' : '"Linux"';
+      }
     }
     callback({ requestHeaders: h });
   });
