@@ -669,12 +669,31 @@ class SettingsActivity : BaseActivity() {
             try { startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://github.com/" + prefs.updateRepo))) }
             catch (e: Exception) { toast("No app can open the link") }
         }
+        actionRow("What's new", "The latest changes") { whatsNew() }
         actionRow("Check for updates", "Looks for a newer build now") { Updater.checkAndPrompt(this, true) }
         switchRow("Check for updates automatically", "Notifies you when a new build is ready", { prefs.updateAuto }, { prefs.updateAuto = it })
         actionRow("Update source", prefs.updateRepo + (if (prefs.updateToken.isEmpty()) "" else "  ·  access token set")) {
             promptFields(this, "Update source", listOf("GitHub repository (owner/name)", "Access token (only for a private repository)"),
                 listOf(prefs.updateRepo, prefs.updateToken)) { v -> prefs.updateRepo = v[0]; prefs.updateToken = v[1]; build() }
         }
+    }
+
+    /** The list of recent changes (assets/changelog.json, shared with the desktop app). */
+    private fun whatsNew() {
+        val sb = StringBuilder()
+        try {
+            val arr = org.json.JSONArray(assets.open("changelog.json").bufferedReader().use { it.readText() })
+            for (i in 0 until arr.length()) {
+                val e = arr.getJSONObject(i)
+                sb.append(e.getString("date")).append("\n")
+                val items = e.getJSONArray("items")
+                for (j in 0 until items.length()) sb.append("•  ").append(items.getString(j)).append("\n")
+                sb.append("\n")
+            }
+        } catch (_: Exception) { sb.append("The list of changes could not be loaded.") }
+        val tv = TextView(this); tv.text = sb.toString().trim(); tv.textSize = 14f; tv.setPadding(dp(20), dp(8), dp(20), dp(8))
+        val sv = android.widget.ScrollView(this); sv.addView(tv)
+        AlertDialog.Builder(this).setTitle("What's new").setView(sv).setPositiveButton("Close", null).show()
     }
 
     private val wpPicker = registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.GetContent()) { uri ->

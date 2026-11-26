@@ -4164,6 +4164,7 @@ function setupIpc() {
   }), BOTH);
   handle('default:set', () => setDefaultBrowser(), BOTH);
   handle('app:versions', () => ({ electron: process.versions.electron, chrome: process.versions.chrome }), BOTH);
+  handle('app:changelog', () => { try { return JSON.parse(fs.readFileSync(path.join(ASSETS, 'changelog.json'), 'utf8')); } catch { return []; } }, PAGE_ONLY);
   handle('app:update-info', async () => {
     if (!getAutoUpdater()) return { currentBuild: BUILD_NUMBER, releaseUrl: RELEASE_URL };
     if (_euInfo) return euToInfo(_euInfo, !_euDownloaded);

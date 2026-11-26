@@ -114,6 +114,7 @@ if (location.protocol === 'my:') {
     onSettingsChanged: (cb) => ipcRenderer.on('settings:changed', (_e, p) => cb(p)),
     vaultStatus: invoke('vault:status'),
     wallpaperPick: invoke('wallpaper:pick'),
+    appChangelog: invoke('app:changelog'),
     wallpaperOnlineList: invoke('wallpaper:online-list'),
     wallpaperOnline: invoke('wallpaper:online-set'),
     wallpaperOnlineThumb: invoke('wallpaper:online-thumb'),

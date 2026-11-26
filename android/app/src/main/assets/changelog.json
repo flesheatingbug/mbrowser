@@ -1,0 +1,38 @@
+[
+ {
+  "date": "2026-11-26",
+  "items": [
+   "Hide cookie pop-ups: clicks Reject or Only necessary where a banner has it, hides the rest and lets the page scroll again (Privacy settings; desktop and Android).",
+   "Desktop: the tab list sections and windows fold away, and recently closed tabs are remembered after a restart.",
+   "Desktop: fixed an error when closing a window that was still playing a live stream."
+  ]
+ },
+ {
+  "date": "2026-11-25",
+  "items": [
+   "Wallpapers from the internet, sized for your screen or phone: Bing daily, NASA picture of the day, Wikimedia featured photos (with topics) and Picsum.",
+   "Every wallpaper you pick or download is kept in a saved list for one-tap switching.",
+   "Desktop: theme and wallpaper changes show on open pages straight away, without a refresh.",
+   "Desktop: zoom is now per tab instead of shared by every tab of a site.",
+   "Android: long-press a link > Open in background tab.",
+   "Android: fixed the pull-to-refresh circle that could get stuck on a page."
+  ]
+ },
+ {
+  "date": "2026-11-24",
+  "items": [
+   "Google Drive and OneDrive appear in the setup wizard under the sync server options (desktop and Android).",
+   "Android: Drive and OneDrive profiles, so one drive can hold several separate sets of data.",
+   "Desktop: split view (tiling) is a beta feature again, with its own switch under Beta features.",
+   "Desktop: dragging a tab out of the window to make a new one works again."
+  ]
+ },
+ {
+  "date": "2026-11-23",
+  "items": [
+   "Google Drive and OneDrive sync, end-to-end encrypted with a passphrase only you know (desktop and Android).",
+   "Desktop: tab stacks, tab groups, Rename Tab, bookmarks bar, force dark mode and optional mouse gestures.",
+   "Desktop: a sign-in dialog for sites and proxies that ask for a username and password."
+  ]
+ }
+]

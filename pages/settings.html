@@ -915,6 +915,25 @@
         updateRow.append(ib);
       };
 
+      // what's new: the latest changes first, older ones fold away
+      const news = el('div'); news.style.marginTop = '24px';
+      const nh = el('h3', null, "What's new"); nh.style.cssText = 'font-size:16px;margin:0 0 8px'; news.append(nh);
+      try {
+        const log = await browser.appChangelog();
+        log.forEach((e, i) => {
+          const d = document.createElement('details'); if (i === 0) d.open = true; d.style.margin = '6px 0';
+          const sm = document.createElement('summary'); sm.textContent = new Date(e.date + 'T12:00:00').toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' }); sm.style.cssText = 'cursor:pointer;font-weight:600';
+          d.append(sm);
+          const ul = document.createElement('ul'); ul.style.cssText = 'margin:6px 0 4px;padding-left:20px;line-height:1.5';
+          for (const t of e.items) { const li = document.createElement('li'); li.textContent = t; ul.append(li); }
+          d.append(ul); news.append(d);
+        });
+        const all = document.createElement('a'); all.href = 'https://github.com/flesheatingbug/mbrowser/commits/master'; all.textContent = 'Every change on GitHub →'; all.style.fontSize = '13px';
+        all.onclick = (ev) => { ev.preventDefault(); browser.openUrl(all.href, 'tab'); };
+        news.append(all);
+      } catch { news.append(el('p', 'muted', 'The list of changes could not be loaded.')); }
+      m.append(news);
+
       const uaSep = el('div'); uaSep.style.cssText = 'border-top:1px solid var(--line);margin:24px 0;';
       m.append(uaSep);
       m.append(el('p', 'muted', navigator.userAgent));
