@@ -2,6 +2,7 @@
  {
   "date": "2026-11-26",
   "items": [
+   "Android: a new private tab shows your speed dial, with a slim private-tab note at the bottom.",
    "Hide cookie pop-ups: clicks Reject or Only necessary where a banner has it, hides the rest and lets the page scroll again (Privacy settings; desktop and Android).",
    "Desktop: the tab list sections and windows fold away, and recently closed tabs are remembered after a restart.",
    "Desktop: fixed an error when closing a window that was still playing a live stream."

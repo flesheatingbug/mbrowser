@@ -1279,14 +1279,27 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
         container.removeAllViews()
         val t = cur() ?: return
         if (t.home && t.priv) {
+            // a private tab shows the speed dial like any other; a slim note at the bottom says what private means here
             setBars(true)
-            (privateInfo.parent as? ViewGroup)?.removeView(privateInfo)
-            (privateInfo as TextView).text = "Private tab\n\nHistory, thumbnails and tab syncing are off for this tab. " +
-                (if (t.isolated) "Cookies and site data are kept apart from your normal tabs and are deleted when you close your private tabs."
-                else "This phone's browser engine can't keep private cookies separate, so sites you sign in to here share cookies with your normal tabs.")
-            container.addView(privateInfo, FrameLayout.LayoutParams(-1, -1))
+            (startPage.root.parent as? ViewGroup)?.removeView(startPage.root)
+            container.addView(startPage.root, FrameLayout.LayoutParams(-1, -1))
+            val note = TextView(this).also {
+                it.text = "👻  Private tab · history, thumbnails and syncing are off. Tap for details"
+                it.textSize = 12.5f; it.gravity = android.view.Gravity.CENTER
+                it.setTextColor(tc(R.attr.mbText)); it.setPadding(dp(14), dp(9), dp(14), dp(9))
+                it.setBackgroundColor(tc(R.attr.mbCard))
+                it.setOnClickListener { _ ->
+                    AlertDialog.Builder(this).setTitle("Private tab")
+                        .setMessage("History, thumbnails and tab syncing are off for this tab. " +
+                            (if (t.isolated) "Cookies and site data are kept apart from your normal tabs and are deleted when you close your private tabs."
+                            else "This phone's browser engine can't keep private cookies separate, so sites you sign in to here share cookies with your normal tabs."))
+                        .setPositiveButton("OK", null).show()
+                }
+            }
+            container.addView(note, FrameLayout.LayoutParams(-1, -2, android.view.Gravity.BOTTOM))
             urlBar.setText("")
             progress.visibility = View.INVISIBLE; pillFill.set(0)
+            startPage.refresh()
         } else if (t.home) {
             setBars(true)   // the speed dial has nothing to scroll, so the bars must be showing
             (startPage.root.parent as? ViewGroup)?.removeView(startPage.root)
