@@ -2989,6 +2989,8 @@ function setupIpc() {
     const wasZone = cur.overlayMode === 'dropzone', pending = cur.dragTab;
     cur.dragTab = null;
     if (wasZone) hideOverlay(false);
+    // a drop that some window of ours accepted (reordering in the strip, another window's strip) is never a tear-off, even where the system reports odd end coordinates (Wayland)
+    if (dropEffect === 'move' && !wasZone) { cur.splitHover = null; return; }
     // released outside this window: always a tear-off (or a move into another window), never a split pane, whatever side the drag last crossed
     let left = false;
     try {
