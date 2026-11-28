@@ -3667,6 +3667,7 @@ function setupIpc() {
   on('nav:back', () => goBackTab(activeTab()));
   on('nav:forward', () => activeWc()?.navigationHistory.goForward());
   on('nav:reload', () => activeWc()?.reload());
+  on('nav:stop', () => { const wc = activeWc(); if (wc) { wc.stop(); pushState(); } });
   on('bookmark:toggle', () => toggleBookmark());
   on('shield:toggle', () => toggleSiteBlocking());
   // never block this one domain again (found in the "blocked on this page" list), then reload

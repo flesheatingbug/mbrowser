@@ -876,6 +876,13 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
         findViewById<View>(R.id.bottomBar).visibility = v
     }
 
+    /** The reload button turns into a stop button (a cross) while a page is loading. */
+    private fun syncReloadIcon() {
+        val res = if (progress.visibility == View.VISIBLE) R.drawable.ic_close else R.drawable.ic_reload
+        btnReload.setImageResource(res)
+        findViewById<android.widget.ImageView?>(R.id.btnReloadBar)?.setImageResource(res)
+    }
+
     private fun onPageScroll(y: Int, oldY: Int) {
         if (!prefs.hideBarsOnScroll) { setBars(true); return }
         if (android.os.SystemClock.uptimeMillis() - barsToggledAt < 600) return   // ignore the page resizing as the bars move
@@ -996,7 +1003,7 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
                     tab.desktop = wantDesktop; applyUa(tab); ui.post { tab.web.reload() }
                 }
                 tab.url = url; tab.home = false; tab.returnUrl = ""; tab.icon = favicon ?: tab.icon
-                if (tab === cur()) { urlBar.setText(url); progress.visibility = View.VISIBLE; pillFill.setColor(tc(R.attr.mbAccent)); pillFill.set(5); updateChrome() }
+                if (tab === cur()) { urlBar.setText(url); progress.visibility = View.VISIBLE; syncReloadIcon(); pillFill.setColor(tc(R.attr.mbAccent)); pillFill.set(5); updateChrome() }
             }
 
             // redirects and in-page (single page app) navigation never reach onPageFinished: keep the address in step
@@ -1025,7 +1032,7 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
                 tab.url = url
                 tab.title = view.title ?: ""
                 if (!tab.priv) Store.addVisit(url, tab.title)
-                if (tab === cur()) { progress.visibility = View.INVISIBLE; pillFill.set(100); swipe.isRefreshing = false; updateChrome() }
+                if (tab === cur()) { progress.visibility = View.INVISIBLE; syncReloadIcon(); pillFill.set(100); swipe.isRefreshing = false; updateChrome() }
                 ui.postDelayed({ afterLoad(tab, url) }, 1500)
             }
         }
@@ -1319,14 +1326,14 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
             }
             container.addView(note, FrameLayout.LayoutParams(-1, -2, android.view.Gravity.BOTTOM))
             urlBar.setText("")
-            progress.visibility = View.INVISIBLE; pillFill.set(0)
+            progress.visibility = View.INVISIBLE; syncReloadIcon(); pillFill.set(0)
             startPage.refresh()
         } else if (t.home) {
             setBars(true)   // the speed dial has nothing to scroll, so the bars must be showing
             (startPage.root.parent as? ViewGroup)?.removeView(startPage.root)
             container.addView(startPage.root, FrameLayout.LayoutParams(-1, -1))
             urlBar.setText("")
-            progress.visibility = View.INVISIBLE; pillFill.set(0)
+            progress.visibility = View.INVISIBLE; syncReloadIcon(); pillFill.set(0)
             startPage.refresh()
             ui.postDelayed({ if (cur()?.home == true) fetchMissingThumbs() }, 1500)
         } else {

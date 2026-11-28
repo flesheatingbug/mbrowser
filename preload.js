@@ -66,6 +66,7 @@ contextBridge.exposeInMainWorld('api', {
   back: send('nav:back'),
   forward: send('nav:forward'),
   reload: send('nav:reload'),
+  stop: send('nav:stop'),
   toggleBookmark: send('bookmark:toggle'),
   toggleShield: send('shield:toggle'),
   allowHost: send('shield:allowHost'),

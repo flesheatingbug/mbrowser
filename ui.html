@@ -400,7 +400,12 @@
   $('tabs').addEventListener('dblclick', (e) => { if ((e.target.id === 'tabs' || e.target.id === 'tabs-wrap') && document.body.classList.contains('frameless')) api.winMax(); });
   $('back').onclick = () => api.back();
   $('fwd').onclick = () => api.forward();
-  $('reload').onclick = () => api.reload();
+  const RELOAD_SVG = $('reload').innerHTML;
+  const STOP_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+  let showingStop = false;
+  // the reload button turns into a stop button while the page is loading
+  const setStop = (on) => { if (on === showingStop) return; showingStop = on; $('reload').innerHTML = on ? STOP_SVG : RELOAD_SVG; $('reload').title = on ? 'Stop loading' : 'Reload'; };
+  $('reload').onclick = () => (showingStop ? api.stop() : api.reload());
   $('star').onclick = () => api.toggleBookmark();
   $('shield').onclick = () => api.toggleShield();
   $('profile').onclick = () => api.profileMenu();
@@ -775,6 +780,7 @@
 
     lastState = s;
     urlProgress(!!s.loading, s.activeId);
+    setStop(!!s.loading);
     const dls = s.downloads || [];
     const activeDl = dls.find((d) => d.state === 'progressing' || d.state === 'paused');
     const startedDl = !!activeDl && !_prevDlActive;
