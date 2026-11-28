@@ -67,7 +67,6 @@ not npm's. Browser version in package.json: 0.9.0. Server: 1.0.0 (stdlib-only Py
 - Build: CI only (`.github/workflows/rust-appimage.yml` makes an AppImage; the sandbox cannot fetch crates). Keep `use` of `RefCell` borrows short and never across GTK calls. Everything is untested on real hardware beyond the user's first look at the UI.
 
 ## Open items
-- All Tabs / recently closed including tabs from other synced sessions.
 - Google sign-in workaround. Translate on desktop (Android has it).
 - Re-test Amazon/eBay; redeploy the server for the backup/restore endpoints.
 - goloudplayer.com stopped after about a minute with the blocker on: the per-site "allow ads" switch avoids it; the exact blocked request was never found.

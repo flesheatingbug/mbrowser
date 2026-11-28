@@ -1951,7 +1951,10 @@ function tablistData() {
     }
   });
   const closed = closedTabs.map((c, i) => ({ idx: i, title: c.title || c.url, url: c.url })).reverse().slice(0, 20);
-  return { open, closed };
+  // tabs open in other synced browsers (this device is left out by the server)
+  const others = (remoteTabs || []).map((d) => ({ device: String(d.device || 'Other device'), updated: d.updated || 0,
+    tabs: (d.tabs || []).filter((t) => isWeb(t.url)).map((t) => ({ title: t.title || t.url, url: t.url })) })).filter((d) => d.tabs.length);
+  return { open, closed, others };
 }
 
 function securityInfo() {
@@ -3120,7 +3123,17 @@ function setupIpc() {
     cur.panelWidthLive = null;
     applySetting('panel.width', nw);
   });
-  on('tablist:show', () => { if (cur.overlayMode === 'tablist') hideOverlay(); else showOverlay('tablist', tablistData()); });
+  on('tablist:show', () => {
+    if (cur.overlayMode === 'tablist') { hideOverlay(); return; }
+    showOverlay('tablist', tablistData());
+    if (syncReady()) {   // fetch the other devices' tabs fresh, then update the open list
+      const device = S().sync.device || os.hostname(); const w = cur;
+      call('GET', '/api/tabs?exclude=' + encodeURIComponent(device)).then((r) => {
+        remoteTabs = r.devices || [];
+        if (w.overlayMode === 'tablist' && !w.overlay.webContents.isDestroyed()) w.overlay.webContents.send('tablist:data', tablistData());
+      }).catch(() => { /* offline: show what the last sync brought */ });
+    }
+  });
   on('tablist:switch', (_e, id) => {
     const t = tabById.get(id);
     if (!t) return;
@@ -3136,6 +3149,7 @@ function setupIpc() {
     use(t.owner); closeTab(id); use(w);
     if (cur.overlayMode === 'tablist') cur.overlay.webContents.send('tablist:data', tablistData());
   });
+  on('tablist:open', (_e, url) => { if (isWeb(String(url || ''))) { hideOverlay(false); newTab(String(url)); } });
   on('tablist:reopen', (_e, idx) => {
     const c = closedTabs.splice(idx, 1)[0]; saveClosedSoon();
     hideOverlay(false);

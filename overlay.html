@@ -134,7 +134,7 @@
   </div>
   <div id="pw"></div>
   <div id="tablist">
-    <input id="tlq" placeholder="Search open and recently closed tabs…" spellcheck="false">
+    <input id="tlq" placeholder="Search open, other-device and recently closed tabs…" spellcheck="false">
     <div id="tl-body"></div>
   </div>
   <div id="suggest"></div>
@@ -364,7 +364,7 @@
   }
 
   // ---- all tabs / recently closed ----
-  let TL = { open: [], closed: [] };
+  let TL = { open: [], closed: [], others: [] };
   function renderTabList() {
     const body = $('tl-body');
     body.textContent = '';
@@ -388,6 +388,9 @@
         const x = document.createElement('button'); x.className = 'x'; x.textContent = '×'; x.title = 'Close tab';
         x.onclick = (e) => { e.stopPropagation(); api.tablistClose(t.id); };
         r.append(x);
+      } else if (kind === 'other') {
+        r.onclick = () => api.tablistOpen(t.url);
+        const re = document.createElement('span'); re.className = 'win'; re.textContent = 'Open'; r.append(re);
       } else {
         r.onclick = () => api.tablistReopen(t.idx);
         const re = document.createElement('span'); re.className = 'win'; re.textContent = 'Reopen'; r.append(re);
@@ -417,6 +420,13 @@
         }
       } else open.forEach((t) => body.append(row(t, 'open')));
       if (!open.length) { const e = document.createElement('div'); e.className = 'tempty'; e.textContent = 'No matching tabs'; body.append(e); }
+    }
+    // tabs open on your other synced browsers and phones
+    for (const d of (TL.others || [])) {
+      const items = d.tabs.filter(ok);
+      if (q.length && !items.length) continue;
+      const k = 'dev-' + d.device;
+      if (!head(k, d.device + ' (other device)', items.length)) items.forEach((t) => body.append(row(t, 'other')));
     }
     const closed = TL.closed.filter(ok);
     if (!head('closed', 'Recently closed', closed.length)) {
