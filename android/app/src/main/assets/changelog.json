@@ -2,6 +2,7 @@
  {
   "date": "2026-11-26",
   "items": [
+   "Back (swipe, Back key or button) in a tab that a link opened now closes it and returns to the page it came from, in normal and private tabs, on desktop and Android.",
    "Identify This Page As (right-click menu and main menu): pick Chrome, Firefox or Safari for a site; it is remembered and the page reloads.",
    "Sites that block the Chrome identity (elevenforum.com) now get the Firefox identity in Automatic mode, and you can add your own sites in Settings > General.",
    "Speed dial: long names scroll when you hover over a tile.",

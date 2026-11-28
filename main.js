@@ -625,7 +625,7 @@ function stateFor() {
     activeId: cur.activeId,
     url,
     shown: (() => { if (/^my:\/\/error/i.test(url)) { try { return new URL(url).searchParams.get('url') || url; } catch { /* keep */ } } return url; })(),
-    canBack: wc ? wc.navigationHistory.canGoBack() : false,
+    canBack: wc ? (wc.navigationHistory.canGoBack() || (t.opener != null && cur.tabs.has(t.opener))) : false,
     canForward: wc ? wc.navigationHistory.canGoForward() : false,
     bookmarked: bookmarks.some((b) => b.url === url && !b.deleted && !b.recycleBin),
     tabBar: S().appearance.tabBar,
@@ -1036,7 +1036,7 @@ function newTab(target, opts = {}) {
   const id = nextId++;
   const view = createView(!!opts.private);
   const tab = {
-    id, view, wc: view.webContents, pinned: !!opts.pinned, private: !!opts.private, favicon: '', owner: cur, customTitle: opts.customTitle || '', group: opts.group || undefined,
+    id, view, wc: view.webContents, opener: opts.noOpener ? undefined : opts.after, pinned: !!opts.pinned, private: !!opts.private, favicon: '', owner: cur, customTitle: opts.customTitle || '', group: opts.group || undefined,
   };
   cur.tabs.set(id, tab);
   tabById.set(id, tab);
@@ -1261,6 +1261,13 @@ function switchTab(id) {
   pushState();
 }
 
+// Back in a tab that a link opened, with no history left: close it and return to the tab it came from
+function goBackTab(tab) {
+  if (!tab || !tab.wc || tab.wc.isDestroyed()) return;
+  if (tab.wc.navigationHistory.canGoBack()) { tab.wc.navigationHistory.goBack(); return; }
+  const o = tab.opener != null ? cur.tabs.get(tab.opener) : null;
+  if (o && o !== tab && !o.wc.isDestroyed() && o.private === tab.private) { const oid = o.id; closeTab(tab.id); if (cur.tabs.has(oid)) switchTab(oid); }
+}
 function closeTab(id) {
   const t = cur.tabs.get(id);
   if (!t) return;
@@ -1532,7 +1539,7 @@ const COMMANDS = [
   { id: 'tab-pin', label: 'Pin / Unpin Tab', keys: [], run: () => togglePin(cur.activeId) },
   { id: 'tab-mute', label: 'Mute / Unmute Tab', keys: [], run: () => toggleMute(cur.activeId) },
   { id: 'tab-close-others', label: 'Close Other Tabs', keys: [], run: () => closeOthers(cur.activeId) },
-  { id: 'nav-back', label: 'Back', keys: ['Alt+Left'], run: () => activeWc()?.navigationHistory.goBack() },
+  { id: 'nav-back', label: 'Back', keys: ['Alt+Left'], run: () => goBackTab(activeTab()) },
   { id: 'nav-forward', label: 'Forward', keys: ['Alt+Right'], run: () => activeWc()?.navigationHistory.goForward() },
   { id: 'nav-reload', label: 'Reload', keys: ['Ctrl+R', 'F5'], run: () => activeWc()?.reload() },
   { id: 'nav-reload-hard', label: 'Reload (Ignore Cache)', keys: ['Ctrl+Shift+R', 'Ctrl+F5'], run: () => activeWc()?.reloadIgnoringCache() },
@@ -2038,7 +2045,7 @@ function showContextMenu(tab, params) {
     add(`Translate “${t.length > 30 ? t.slice(0, 30) + '…' : t}”`, () => newTab('https://translate.google.com/?sl=auto&tl=' + encodeURIComponent(app.getLocale().split('-')[0]) + '&text=' + encodeURIComponent(t) + '&op=translate', { after: tab.id, private: tab.private }));
     sep();
   }
-  add('Back', () => wc.navigationHistory.goBack(), { enabled: wc.navigationHistory.canGoBack() });
+  add('Back', () => goBackTab(tab), { enabled: wc.navigationHistory.canGoBack() || tab.opener != null && cur.tabs.has(tab.opener) });
   add('Forward', () => wc.navigationHistory.goForward(), { enabled: wc.navigationHistory.canGoForward() });
   add('Reload', () => wc.reload());
   sep();
@@ -3641,7 +3648,7 @@ function setupIpc() {
       { label: 'Select All', click: () => ui.selectAll() },
     ]));
   }, BOTH);
-  on('nav:back', () => activeWc()?.navigationHistory.goBack());
+  on('nav:back', () => goBackTab(activeTab()));
   on('nav:forward', () => activeWc()?.navigationHistory.goForward());
   on('nav:reload', () => activeWc()?.reload());
   on('bookmark:toggle', () => toggleBookmark());
@@ -4892,6 +4899,9 @@ function createWindow(opts = {}) {
   w.win.on('enter-full-screen', () => { use(w); layout(); });
   w.win.on('leave-full-screen', () => { use(w); layout(); });
   w.win.on('focus', () => use(w));
+  // touchpad swipe / the Back key of some mice and keyboards
+  w.win.on('swipe', (_e, dir) => { if (dir === 'left') { use(w); goBackTab(activeTab()); } });
+  w.win.on('app-command', (e, c) => { if (c === 'browser-backward') { e.preventDefault(); use(w); goBackTab(activeTab()); } });
   w.win.on('maximize', () => { use(w); layout(); pushState(); });
   w.win.on('unmaximize', () => { use(w); layout(); pushState(); });
   w.win.on('closed', () => onWindowClosed(w));

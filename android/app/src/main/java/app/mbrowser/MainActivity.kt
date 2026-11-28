@@ -56,6 +56,7 @@ import java.io.ByteArrayInputStream
 class MainActivity : BaseActivity() {
 
     private class Tab(val web: WebView) {
+        var opener: Tab? = null         // the tab whose link opened this one: Back with no history returns there
         var title = ""
         @Volatile var url = ""
         var fresh = false               // the next page loaded is the first one after the speed dial: it starts a new history
@@ -370,6 +371,7 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
                     t != null && t.home && startPage.up() -> Unit
                     t != null && t.home && returnFromHome(t) -> Unit
                     t != null && !t.home && t.web.canGoBack() -> t.web.goBack()
+                    t != null && closeToOpener(t) -> Unit
                     t != null && !t.home -> { leaveToHome(t); render() }
                     tabs.size > 1 -> closeTab(current)
                     else -> { isEnabled = false; onBackPressedDispatcher.onBackPressed() }
@@ -750,8 +752,8 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
         val labels = ArrayList<String>(); val acts = ArrayList<() -> Unit>()
         fun add(l: String, a: () -> Unit) { labels.add(l); acts.add(a) }
         if (!link.isNullOrEmpty()) {
-            add("Open in new tab") { newTab(link, tab.priv) }
-            add("Open in background tab") { newTab(link, tab.priv, true); Toast.makeText(this, "Opened in background", Toast.LENGTH_SHORT).show() }
+            add("Open in new tab") { newTab(link, tab.priv, from = tab) }
+            add("Open in background tab") { newTab(link, tab.priv, true, tab); Toast.makeText(this, "Opened in background", Toast.LENGTH_SHORT).show() }
             if (!tab.priv) add("Open in private tab") { newTab(link, true) }
             add("Copy link address") { copyText("link", link) }
             val t = text?.trim().orEmpty()
@@ -759,7 +761,7 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
             add("Share link") { startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, link), "Share")) }
         }
         if (!img.isNullOrEmpty() && img.startsWith("http")) {
-            add("Open image in new tab") { newTab(img, tab.priv) }
+            add("Open image in new tab") { newTab(img, tab.priv, from = tab) }
             add("Copy image address") { copyText("image", img) }
             add("Download image") {
                 try {
@@ -889,7 +891,7 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
         if (::startPage.isInitialized) startPage.refresh()
     }
 
-    private fun newTab(url: String?, priv: Boolean = false, behind: Boolean = false): Tab {
+    private fun newTab(url: String?, priv: Boolean = false, behind: Boolean = false, from: Tab? = null): Tab {
         val w = object : WebView(this) {
             // adds "Web search" to the text-selection toolbar (Copy, Select all, Share ...)
             override fun startActionMode(cb: android.view.ActionMode.Callback?, type: Int): android.view.ActionMode? =
@@ -917,6 +919,7 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
         if (!priv) CookieManager.getInstance().setAcceptThirdPartyCookies(w, true)
         else if (isolated) try { ProfileStore.getInstance().getProfile(PRIVATE_PROFILE)?.cookieManager?.setAcceptThirdPartyCookies(w, true) } catch (_: Throwable) { }
         val tab = Tab(w)
+        tab.opener = from
         tab.priv = priv; tab.isolated = isolated
         tab.desktop = prefs.desktopSite
         applyUa(tab)
@@ -1032,11 +1035,11 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
                 val hit = view.hitTestResult
                 val link = hit.extra
                 if ((hit.type == WebView.HitTestResult.SRC_ANCHOR_TYPE || hit.type == WebView.HitTestResult.SRC_IMAGE_ANCHOR_TYPE) && link != null && link.startsWith("http")) {
-                    newTab(link, tab.priv)
+                    newTab(link, tab.priv, from = tab)
                     return false
                 }
                 // a script popup (Google / PayPal sign-in): a real tab that keeps its opener, so the page can hear back from it
-                val t = newTab(null, tab.priv)
+                val t = newTab(null, tab.priv, from = tab)
                 t.home = false
                 (resultMsg.obj as? WebView.WebViewTransport)?.webView = t.web
                 resultMsg.sendToTarget()
@@ -1652,7 +1655,19 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
         val t = cur() ?: return
         if (t.readerOn) { toggleReader(t); return }
         if (t.home) { returnFromHome(t); return }
-        if (t.web.canGoBack()) t.web.goBack() else { leaveToHome(t); render() }
+        if (t.web.canGoBack()) t.web.goBack() else if (!closeToOpener(t)) { leaveToHome(t); render() }
+    }
+
+    /** Back in a tab that a link opened, with nothing left to go back to: close it and return to the tab it came from. */
+    private fun closeToOpener(t: Tab): Boolean {
+        val o = t.opener ?: return false
+        val oi = tabs.indexOf(o)
+        val ti = tabs.indexOf(t)
+        if (oi < 0 || ti < 0 || t.web.canGoBack()) { t.opener = null; return false }
+        closeTab(ti)
+        val ni = tabs.indexOf(o)
+        if (ni >= 0) switchTo(ni)
+        return true
     }
 
     // ---------- bookmarks / menu ----------
