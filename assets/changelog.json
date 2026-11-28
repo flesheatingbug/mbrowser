@@ -2,6 +2,7 @@
  {
   "date": "2026-11-26",
   "items": [
+   "Desktop: renaming a tab can be cancelled with Escape or by clicking away, and no longer gets stuck.",
    "Desktop: dragging a tab to a new position in the tab strip no longer opens it in a new window.",
    "Desktop: the All Tabs / Recently closed list also shows tabs open in your other synced browsers and on your phone; click one to open it here.",
    "Android: a link opened from another app uses the empty start tab (no blank speed dial left behind), and Back at its first page returns to that app.",

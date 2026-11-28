@@ -559,7 +559,17 @@
     let done = false;
     const was = !!(lastState.tabs.find((t) => t.id === id) || {}).renamed;
     // leaving the page's own title unchanged keeps the tab following the page; clearing the box resets a custom name
-    const finish = (save) => { if (done) return; done = true; const v = inp.value.trim(); api.tabRename(id, !save ? (was ? cur : '') : (v === cur && !was) ? '' : v); };
+    const finish = (save) => {
+      if (done) return; done = true;
+      const v = inp.value.trim();
+      window.removeEventListener('blur', onWinBlur); document.removeEventListener('mousedown', onOutside, true);
+      api.tabRename(id, !save ? (was ? cur : '') : (v === cur && !was) ? '' : v);
+      // put the title back right away: when nothing changed the tab strip is not redrawn, and the box would stay
+      span.textContent = save && v ? v : cur; try { inp.replaceWith(span); } catch { /* already redrawn */ } el.draggable = true;
+    };
+    const onWinBlur = () => finish(true);                                   // focus went to the page or another window
+    const onOutside = (e) => { if (e.target !== inp) finish(true); };       // a click anywhere else in the strip or toolbar
+    window.addEventListener('blur', onWinBlur); document.addEventListener('mousedown', onOutside, true);
     inp.onkeydown = (e) => { if (e.key === 'Enter') finish(true); else if (e.key === 'Escape') finish(false); e.stopPropagation(); };
     inp.onblur = () => finish(true);
     inp.onclick = (e) => e.stopPropagation();
