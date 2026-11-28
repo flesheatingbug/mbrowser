@@ -56,6 +56,8 @@ import java.io.ByteArrayInputStream
 class MainActivity : BaseActivity() {
 
     private class Tab(val web: WebView) {
+        val scrolls = HashMap<String, Int>()   // how far each page of this tab was scrolled, so Back returns to the same spot
+        var restoreUrl = ""; var restoreY = -1
         var opener: Tab? = null         // the tab whose link opened this one: Back with no history returns there
         var title = ""
         @Volatile var url = ""
@@ -370,7 +372,7 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
                     t != null && t.readerOn -> toggleReader(t)
                     t != null && t.home && startPage.up() -> Unit
                     t != null && t.home && returnFromHome(t) -> Unit
-                    t != null && !t.home && t.web.canGoBack() -> t.web.goBack()
+                    t != null && !t.home && t.web.canGoBack() -> webBack(t)
                     t != null && closeToOpener(t) -> Unit
                     t != null && !t.home -> { leaveToHome(t); render() }
                     tabs.size > 1 -> closeTab(current)
@@ -897,7 +899,13 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
             override fun startActionMode(cb: android.view.ActionMode.Callback?, type: Int): android.view.ActionMode? =
                 super.startActionMode(if (cb == null) null else searchActionCallback(this, cb), type)
         }
-        w.setOnScrollChangeListener { v, _, y, _, oy -> if (tabs.getOrNull(current)?.web === v) onPageScroll(y, oy) }
+        w.setOnScrollChangeListener { v, _, y, _, oy ->
+            tabs.firstOrNull { it.web === v }?.let { t ->
+                // remember the position of the page being read; a jump to the top from far down is the page resetting itself, not the reader
+                if (t.url.isNotEmpty() && !(y == 0 && oy > 300)) t.scrolls[t.url.substringBefore('#')] = y
+            }
+            if (tabs.getOrNull(current)?.web === v) onPageScroll(y, oy)
+        }
         var isolated = false
         if (priv) {
             // a separate cookie jar and storage for private tabs, where this device's WebView supports it
@@ -988,15 +996,18 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
             override fun doUpdateVisitedHistory(view: WebView, url: String, isReload: Boolean) {
                 if (url.startsWith("about:") || tab.home) return
                 tab.url = url
+                restoreScroll(tab, url)
                 if (tab === cur() && !urlBar.hasFocus()) { urlBar.setText(url); updateChrome() }
             }
 
             override fun onPageCommitVisible(view: WebView, url: String) {
+                restoreScroll(tab, url)
                 if (prefs.blockTrackers && !url.startsWith("about:")) view.evaluateJavascript(HIDE_JS, null)
             }
 
             override fun onPageFinished(view: WebView, url: String) {
                 if (url.startsWith("about:")) return
+                restoreScroll(tab, url)
                 if (tab.fresh) { tab.fresh = false; view.clearHistory() }
                 view.evaluateJavascript(DRAG_GUARD_JS, null)
                 detectReadable(tab)
@@ -1026,7 +1037,7 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
                 } catch (_: Exception) { "" }
             }
         }, "mbNative")
-        w.setOnTouchListener { _, ev -> if (ev.actionMasked == MotionEvent.ACTION_DOWN) { refreshBlocked = false; refreshOutside = when (prefs.pullArea) { "top" -> ev.y > w.height / 3f; "bottom" -> ev.y < w.height * 2f / 3f; else -> false }; if (swipe.isRefreshing && w.progress >= 100) swipe.isRefreshing = false }; false }
+        w.setOnTouchListener { _, ev -> if (ev.actionMasked == MotionEvent.ACTION_DOWN) { tab.restoreY = -1; refreshBlocked = false; refreshOutside = when (prefs.pullArea) { "top" -> ev.y > w.height / 3f; "bottom" -> ev.y < w.height * 2f / 3f; else -> false }; if (swipe.isRefreshing && w.progress >= 100) swipe.isRefreshing = false }; false }
         w.webChromeClient = object : WebChromeClient() {
             // window.open from a tap (Google / PayPal sign-in popups): a real tab that keeps its opener, so the page can hear back from it
             override fun onCreateWindow(view: WebView, isDialog: Boolean, isUserGesture: Boolean, resultMsg: android.os.Message): Boolean {
@@ -1655,7 +1666,30 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
         val t = cur() ?: return
         if (t.readerOn) { toggleReader(t); return }
         if (t.home) { returnFromHome(t); return }
-        if (t.web.canGoBack()) t.web.goBack() else if (!closeToOpener(t)) { leaveToHome(t); render() }
+        if (t.web.canGoBack()) webBack(t) else if (!closeToOpener(t)) { leaveToHome(t); render() }
+    }
+
+    /** Goes back one page and puts the page back where it was scrolled to (sites that reload or rebuild the page start at the top). */
+    private fun webBack(t: Tab) {
+        try {
+            val l = t.web.copyBackForwardList()
+            val target = l.getItemAtIndex(l.currentIndex - 1)?.url?.substringBefore('#')
+            val y = if (target != null) t.scrolls[target] else null
+            if (target != null && y != null && y > 0) { t.restoreUrl = target; t.restoreY = y } else t.restoreY = -1
+        } catch (_: Exception) { t.restoreY = -1 }
+        t.web.goBack()
+    }
+
+    /** Scrolls a page back to the remembered spot; content that loads late is retried for a few seconds, and touching the page stops it. */
+    private fun restoreScroll(t: Tab, url: String) {
+        val y = t.restoreY
+        if (y <= 0 || url.substringBefore('#') != t.restoreUrl) return
+        for (d in longArrayOf(0, 250, 700, 1400, 2500, 4000)) {
+            ui.postDelayed({
+                if (t.restoreY == y && t.web.scrollY < y - 40) t.web.scrollTo(0, y)
+                if (d == 4000L) t.restoreY = -1
+            }, d)
+        }
     }
 
     /** Back in a tab that a link opened, with nothing left to go back to: close it and return to the tab it came from. */
