@@ -2,6 +2,7 @@
  {
   "date": "2026-11-26",
   "items": [
+   "Android: apps such as ChatGPT can now open their sign-in pages in mbrowser (it announces Custom Tabs support).",
    "Android: going Back returns to where you had scrolled on the page (Reddit and other sites that used to start at the top), in normal and private tabs.",
    "Back (swipe, Back key or button) in a tab that a link opened now closes it and returns to the page it came from, in normal and private tabs, on desktop and Android.",
    "Identify This Page As (right-click menu and main menu): pick Chrome, Firefox or Safari for a site; it is remembered and the page reloads.",

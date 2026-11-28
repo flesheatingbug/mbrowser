@@ -32,6 +32,9 @@
             <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/file_paths" />
         </provider>
 
+        <service android:name=".MbCustomTabsService" android:exported="true">
+            <intent-filter><action android:name="android.support.customtabs.action.CustomTabsService" /></intent-filter>
+        </service>
         <service android:name=".PlaybackService" android:exported="false" android:foregroundServiceType="mediaPlayback" />
 
         <activity
