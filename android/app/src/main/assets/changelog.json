@@ -2,6 +2,7 @@
  {
   "date": "2026-11-26",
   "items": [
+   "Android: a link opened from another app uses the empty start tab (no blank speed dial left behind), and Back at its first page returns to that app.",
    "Android: apps such as ChatGPT can now open their sign-in pages in mbrowser (it announces Custom Tabs support).",
    "Android: going Back returns to where you had scrolled on the page (Reddit and other sites that used to start at the top), in normal and private tabs.",
    "Back (swipe, Back key or button) in a tab that a link opened now closes it and returns to the page it came from, in normal and private tabs, on desktop and Android.",

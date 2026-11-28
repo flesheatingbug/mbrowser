@@ -58,6 +58,7 @@ class MainActivity : BaseActivity() {
     private class Tab(val web: WebView) {
         val scrolls = HashMap<String, Int>()   // how far each page of this tab was scrolled, so Back returns to the same spot
         var restoreUrl = ""; var restoreY = -1
+        var external = false            // opened by a link from another app: Back at its first page returns to that app
         var opener: Tab? = null         // the tab whose link opened this one: Back with no history returns there
         var title = ""
         @Volatile var url = ""
@@ -374,6 +375,7 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
                     t != null && t.home && returnFromHome(t) -> Unit
                     t != null && !t.home && t.web.canGoBack() -> webBack(t)
                     t != null && closeToOpener(t) -> Unit
+                    t != null && t.external && !t.home -> { t.external = false; moveTaskToBack(true) }
                     t != null && !t.home -> { leaveToHome(t); render() }
                     tabs.size > 1 -> closeTab(current)
                     else -> { isEnabled = false; onBackPressedDispatcher.onBackPressed() }
@@ -404,7 +406,12 @@ document.addEventListener('play',wake,true);document.addEventListener('pause',wa
 
     private fun handleIntent(i: Intent?) {
         val data = i?.data
-        if (i?.action == Intent.ACTION_VIEW && data != null) newTab(data.toString())
+        if (i?.action == Intent.ACTION_VIEW && data != null) {
+            // a link from another app: use the empty start tab instead of leaving a blank speed dial behind it
+            val c = cur()
+            val t = if (c != null && c.home && c.url.isEmpty() && !c.priv && c.pending == null) { navigate(data.toString()); c } else newTab(data.toString())
+            t.external = true
+        }
         // "Search" from another app (the Claude app's web search, the share/selection menus): look the text up with the default engine
         if (i?.action == Intent.ACTION_WEB_SEARCH || i?.action == Intent.ACTION_SEARCH) {
             val q = (i.getStringExtra(android.app.SearchManager.QUERY) ?: "").trim()
